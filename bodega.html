@@ -1,0 +1,692 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Bodega — Ruta Directa</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@300;400;500;600&display=swap');
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+:root{
+  --navy:#0f1f3d;--gold:#c8972a;--gold2:#e8b84b;
+  --red:#c0392b;--green:#1a7a4a;--orange:#d46a1a;
+  --bg:#f4f2ee;--bg2:#ffffff;--bg3:#eae8e3;
+  --text:#1a1a1a;--text2:#4a4a4a;--text3:#7a7a7a;
+  --border:#d8d4cc;--radius:10px;--radius2:14px;
+}
+body{font-family:'IBM Plex Sans',sans-serif;background:var(--bg);color:var(--text);font-size:15px;min-height:100vh}
+input,select,textarea,button{font-family:inherit;font-size:15px}
+
+/* LOGIN */
+#login-screen{min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;background:var(--navy);padding:24px}
+.login-box{background:#fff;border-radius:20px;padding:36px 28px;width:100%;max-width:340px;text-align:center}
+.login-logo{width:60px;height:60px;background:var(--navy);border-radius:16px;display:flex;align-items:center;justify-content:center;margin:0 auto 16px;font-size:28px}
+.login-title{font-size:20px;font-weight:600;color:var(--navy);margin-bottom:4px}
+.login-sub{font-size:13px;color:var(--text3);margin-bottom:28px}
+.pin-display{display:flex;gap:12px;justify-content:center;margin-bottom:24px}
+.pin-dot{width:18px;height:18px;border-radius:50%;background:var(--bg3);border:2px solid var(--border);transition:all .15s}
+.pin-dot.filled{background:var(--navy);border-color:var(--navy)}
+.numpad{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:16px}
+.numpad-btn{background:var(--bg3);border:none;border-radius:var(--radius);padding:18px;font-size:22px;font-weight:600;color:var(--navy);cursor:pointer;transition:all .1s;min-height:64px}
+.numpad-btn:active{background:var(--navy);color:#fff;transform:scale(.96)}
+.numpad-btn.del{font-size:18px;background:var(--bg3);color:var(--red)}
+.numpad-btn.del:active{background:var(--red);color:#fff}
+.login-err{color:var(--red);font-size:13px;margin-top:8px;min-height:20px}
+
+/* APP SHELL */
+#app{display:none;min-height:100vh;flex-direction:column}
+.topbar{background:var(--navy);color:#fff;padding:14px 16px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:50}
+.topbar-left{display:flex;flex-direction:column}
+.topbar-title{font-weight:600;font-size:15px}
+.topbar-sub{font-size:11px;color:rgba(255,255,255,.5);margin-top:1px}
+.sync-dot{width:8px;height:8px;border-radius:50%;background:var(--gold);margin-left:8px}
+.sync-dot.ok{background:#34d399}
+.sync-dot.err{background:var(--red)}
+.logout-btn{background:rgba(255,255,255,.12);border:none;color:rgba(255,255,255,.7);padding:7px 14px;border-radius:8px;cursor:pointer;font-size:12px;font-weight:500}
+
+/* TABS */
+.tabs{display:flex;background:var(--bg2);border-bottom:1px solid var(--border);position:sticky;top:57px;z-index:40}
+.tab{flex:1;padding:14px 8px;text-align:center;font-size:13px;font-weight:500;color:var(--text3);border-bottom:3px solid transparent;cursor:pointer;position:relative}
+.tab.active{color:var(--navy);border-bottom-color:var(--gold);font-weight:600}
+.tab-badge{position:absolute;top:8px;right:calc(50% - 22px);background:var(--red);color:#fff;font-size:10px;font-weight:700;width:18px;height:18px;border-radius:50%;display:flex;align-items:center;justify-content:center;line-height:1}
+.tab-badge.orange{background:var(--orange)}
+
+/* CONTENT */
+.content{padding:14px;flex:1;overflow-y:auto}
+.section-label{font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.8px;margin:16px 0 10px;padding-left:2px}
+.section-label:first-child{margin-top:4px}
+
+/* CARDS */
+.card{background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius2);padding:14px;margin-bottom:12px;position:relative}
+.card.encargo-card{border-left:4px solid var(--orange)}
+.card.llegado-card{border-left:4px solid var(--green)}
+.card-top{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:10px}
+.factura{font-size:12px;font-weight:600;color:var(--text3);font-family:monospace}
+.badge{display:inline-flex;align-items:center;gap:4px;font-size:11px;font-weight:600;padding:4px 10px;border-radius:20px}
+.badge-pendiente{background:#fff3cd;color:#856404}
+.badge-prep{background:#e8eaff;color:#3730a3}
+.badge-despachado{background:#d4edda;color:#155724}
+.badge-llegado{background:#d4edda;color:#1a7a4a}
+.badge-encargo{background:#fff3cd;color:#d46a1a}
+
+.product-list{margin-bottom:10px}
+.product-item{font-size:14px;font-weight:500;color:var(--text);line-height:1.5}
+.product-item span{color:var(--text3);font-size:12px}
+.cliente-row{font-size:12px;color:var(--text3);margin-bottom:10px}
+.cliente-row strong{color:var(--text2)}
+
+.method-box{background:var(--bg3);border-radius:10px;padding:10px 12px;margin-bottom:12px}
+.method-title{font-size:12px;font-weight:600;color:var(--navy);margin-bottom:4px;display:flex;align-items:center;gap:6px}
+.method-detail{font-size:12px;color:var(--text2);line-height:1.7}
+.method-detail strong{color:var(--navy)}
+
+/* FORMS inside card */
+.field-group{display:flex;flex-direction:column;gap:4px;margin-bottom:10px}
+.field-label{font-size:12px;font-weight:500;color:var(--text2)}
+.field-input{padding:11px 13px;border:1.5px solid var(--border);border-radius:10px;outline:none;background:#fff;width:100%;font-size:15px;transition:border-color .15s}
+.field-input:focus{border-color:var(--navy)}
+.field-row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+
+/* BUTTONS */
+.btn{width:100%;padding:14px;border-radius:12px;border:none;font-size:14px;font-weight:600;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;transition:all .15s;min-height:50px}
+.btn:active{transform:scale(.97)}
+.btn-navy{background:var(--navy);color:#fff}
+.btn-navy:active{background:#182d52}
+.btn-gold{background:var(--gold);color:#fff}
+.btn-gold:active{background:#b0811e}
+.btn-green{background:var(--green);color:#fff}
+.btn-green:active{background:#145d38}
+.btn-danger{background:var(--red);color:#fff}
+.btn-ghost{background:transparent;border:1.5px solid var(--border);color:var(--text2)}
+.btn-row{display:flex;gap:8px}
+.btn-row .btn{flex:1}
+
+/* ALERT BANNER */
+.encargo-banner{background:#fff3cd;border-radius:10px;padding:10px 12px;margin-bottom:12px;border-left:3px solid var(--orange)}
+.encargo-banner-title{font-size:12px;font-weight:700;color:#854F0B;margin-bottom:3px}
+.encargo-banner-text{font-size:12px;color:#854F0B;line-height:1.5}
+
+/* EMPTY STATE */
+.empty-state{text-align:center;padding:48px 20px;color:var(--text3)}
+.empty-icon{font-size:48px;margin-bottom:12px;opacity:.5}
+.empty-title{font-size:15px;font-weight:600;color:var(--text2);margin-bottom:6px}
+.empty-sub{font-size:13px}
+
+/* TOAST */
+#toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:var(--navy);color:#fff;padding:12px 24px;border-radius:30px;font-size:13px;font-weight:500;z-index:999;display:none;white-space:nowrap;box-shadow:0 4px 20px rgba(0,0,0,.25)}
+#toast.ok{background:var(--green)}
+#toast.err{background:var(--red)}
+
+/* REFRESH */
+.refresh-bar{background:var(--bg2);border-bottom:1px solid var(--border);padding:8px 14px;display:flex;align-items:center;justify-content:space-between;font-size:12px;color:var(--text3)}
+.refresh-btn{background:none;border:none;color:var(--navy);font-size:12px;font-weight:600;cursor:pointer;padding:4px 10px;border-radius:6px}
+.refresh-btn:active{background:var(--bg3)}
+
+/* CONFIRMAR DESPACHO overlay */
+.confirm-overlay{position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:200;display:none;align-items:flex-end;padding:20px}
+.confirm-overlay.open{display:flex}
+.confirm-sheet{background:#fff;border-radius:20px 20px 16px 16px;padding:24px;width:100%;max-width:420px;margin:0 auto}
+.confirm-sheet-title{font-size:17px;font-weight:600;color:var(--navy);margin-bottom:8px}
+.confirm-sheet-sub{font-size:13px;color:var(--text3);margin-bottom:20px;line-height:1.5}
+
+/* TRANSPORT FORM */
+.transport-form{background:var(--bg3);border-radius:12px;padding:14px;margin-bottom:12px;border:1.5px dashed var(--border)}
+.transport-form-title{font-size:12px;font-weight:700;color:var(--navy);text-transform:uppercase;letter-spacing:.5px;margin-bottom:12px}
+</style>
+</head>
+<body>
+
+<!-- LOGIN -->
+<div id="login-screen">
+  <div class="login-box">
+    <div class="login-logo">📦</div>
+    <div class="login-title">Bodega</div>
+    <div class="login-sub">Repuestos Ruta Directa</div>
+    <div class="pin-display">
+      <div class="pin-dot" id="dot-0"></div>
+      <div class="pin-dot" id="dot-1"></div>
+      <div class="pin-dot" id="dot-2"></div>
+      <div class="pin-dot" id="dot-3"></div>
+    </div>
+    <div class="numpad">
+      <button class="numpad-btn" onclick="pinPress('1')">1</button>
+      <button class="numpad-btn" onclick="pinPress('2')">2</button>
+      <button class="numpad-btn" onclick="pinPress('3')">3</button>
+      <button class="numpad-btn" onclick="pinPress('4')">4</button>
+      <button class="numpad-btn" onclick="pinPress('5')">5</button>
+      <button class="numpad-btn" onclick="pinPress('6')">6</button>
+      <button class="numpad-btn" onclick="pinPress('7')">7</button>
+      <button class="numpad-btn" onclick="pinPress('8')">8</button>
+      <button class="numpad-btn" onclick="pinPress('9')">9</button>
+      <button class="numpad-btn" onclick="pinPress('')" style="visibility:hidden"></button>
+      <button class="numpad-btn" onclick="pinPress('0')">0</button>
+      <button class="numpad-btn del" onclick="pinDel()">⌫</button>
+    </div>
+    <div class="login-err" id="login-err"></div>
+  </div>
+</div>
+
+<!-- APP -->
+<div id="app" style="display:none;flex-direction:column;min-height:100vh">
+  <div class="topbar">
+    <div class="topbar-left">
+      <div class="topbar-title">📦 Bodega — Ruta Directa</div>
+      <div class="topbar-sub" id="sync-label">Cargando...</div>
+    </div>
+    <div style="display:flex;align-items:center;gap:10px">
+      <div class="sync-dot" id="sync-dot"></div>
+      <button class="logout-btn" onclick="logout()">Salir</button>
+    </div>
+  </div>
+
+  <div class="refresh-bar">
+    <span id="ultima-actualizacion">—</span>
+    <button class="refresh-btn" onclick="recargar()">↻ Actualizar</button>
+  </div>
+
+  <div class="tabs">
+    <div class="tab active" id="tab-despachos" onclick="switchTab('despachos')">
+      Despachos
+      <div class="tab-badge" id="badge-despachos" style="display:none">0</div>
+    </div>
+    <div class="tab" id="tab-encargos" onclick="switchTab('encargos')">
+      Encargos llegados
+      <div class="tab-badge orange" id="badge-encargos" style="display:none">0</div>
+    </div>
+  </div>
+
+  <div class="content">
+    <div id="pane-despachos"></div>
+    <div id="pane-encargos" style="display:none"></div>
+  </div>
+</div>
+
+<!-- Confirm despacho sheet -->
+<div class="confirm-overlay" id="confirm-overlay">
+  <div class="confirm-sheet">
+    <div class="confirm-sheet-title" id="confirm-title">Confirmar despacho</div>
+    <div class="confirm-sheet-sub" id="confirm-sub">¿Confirmas que el producto ya salió de bodega?</div>
+    <div class="btn-row">
+      <button class="btn btn-ghost" onclick="closeConfirm()">Cancelar</button>
+      <button class="btn btn-gold" id="confirm-action-btn" onclick="">✓ Confirmar</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+const SUPA_URL = 'https://wqepixkddixxxojvwogk.supabase.co';
+const SUPA_KEY = 'sb_publishable_QmTX_tf0OO4SFIQhUabwRw_yCRZFi2k';
+const _supa = supabase.createClient(SUPA_URL, SUPA_KEY);
+const DB_KEY = 'rrd3_cache';
+const SYNC_TABLE = 'rrd_data';
+const BODEGA_PIN = '2025';
+
+let _db = null;
+let _activeTab = 'despachos';
+let _pinBuffer = '';
+
+// ── PIN ──
+function pinPress(d){
+  if(_pinBuffer.length>=4)return;
+  _pinBuffer+=d;
+  updatePinDots();
+  if(_pinBuffer.length===4) setTimeout(checkPin,120);
+}
+function pinDel(){
+  _pinBuffer=_pinBuffer.slice(0,-1);
+  updatePinDots();
+  document.getElementById('login-err').textContent='';
+}
+function updatePinDots(){
+  for(let i=0;i<4;i++){
+    const d=document.getElementById('dot-'+i);
+    d.classList.toggle('filled',i<_pinBuffer.length);
+  }
+}
+function checkPin(){
+  if(_pinBuffer===BODEGA_PIN){
+    document.getElementById('login-screen').style.display='none';
+    document.getElementById('app').style.display='flex';
+    cargarDB();
+    setInterval(cargarDB,20000);
+  } else {
+    document.getElementById('login-err').textContent='PIN incorrecto. Intenta de nuevo.';
+    _pinBuffer='';
+    updatePinDots();
+  }
+}
+function logout(){
+  _pinBuffer='';
+  updatePinDots();
+  document.getElementById('login-err').textContent='';
+  document.getElementById('app').style.display='none';
+  document.getElementById('login-screen').style.display='flex';
+  _db=null;
+}
+
+// ── DB ──
+async function cargarDB(){
+  setSyncStatus('loading','Actualizando...');
+  try{
+    const {data,error}=await _supa.from(SYNC_TABLE).select('data').eq('id','main').single();
+    if(error)throw error;
+    if(data&&data.data){
+      _db=JSON.parse(data.data);
+      try{localStorage.setItem(DB_KEY,data.data);}catch(e){}
+      setSyncStatus('ok','Actualizado');
+      const now=new Date();
+      document.getElementById('ultima-actualizacion').textContent=
+        'Última actualización: '+now.toLocaleTimeString('es-HN',{hour:'2-digit',minute:'2-digit'});
+    }
+  }catch(e){
+    // fallback to localStorage
+    try{
+      const s=localStorage.getItem(DB_KEY);
+      if(s){_db=JSON.parse(s);setSyncStatus('err','Sin conexión — datos locales');}
+      else setSyncStatus('err','Sin datos');
+    }catch(e2){setSyncStatus('err','Error');}
+  }
+  renderAll();
+}
+async function guardarDB(){
+  if(!_db)return;
+  setSyncStatus('loading','Guardando...');
+  try{
+    localStorage.setItem(DB_KEY,JSON.stringify(_db));
+    const{error}=await _supa.from(SYNC_TABLE).upsert({
+      id:'main',data:JSON.stringify(_db),updated_at:new Date().toISOString()
+    },{onConflict:'id'});
+    if(error)throw error;
+    setSyncStatus('ok','Guardado ✓');
+  }catch(e){
+    setSyncStatus('err','Error al guardar');
+    toast('Error al guardar. Intenta de nuevo.','err');
+  }
+}
+function setSyncStatus(state,label){
+  const dot=document.getElementById('sync-dot');
+  const lbl=document.getElementById('sync-label');
+  dot.className='sync-dot '+(state==='ok'?'ok':state==='err'?'err':'');
+  if(lbl)lbl.textContent=label;
+}
+
+// ── TABS ──
+function switchTab(t){
+  _activeTab=t;
+  document.getElementById('tab-despachos').classList.toggle('active',t==='despachos');
+  document.getElementById('tab-encargos').classList.toggle('active',t==='encargos');
+  document.getElementById('pane-despachos').style.display=t==='despachos'?'block':'none';
+  document.getElementById('pane-encargos').style.display=t==='encargos'?'block':'none';
+}
+function recargar(){cargarDB();}
+
+// ── HELPERS ──
+function uid(){return Math.random().toString(36).slice(2,10)+Date.now().toString(36)}
+function today(){return new Date().toISOString().split('T')[0]}
+function fmtDate(s){if(!s)return'—';const d=new Date(s+'T00:00:00');return d.toLocaleDateString('es-HN',{day:'2-digit',month:'2-digit',year:'numeric'})}
+function toast(msg,type){
+  const t=document.getElementById('toast');
+  t.textContent=msg;t.className=type||'';t.style.display='block';
+  setTimeout(()=>t.style.display='none',3000);
+}
+function methodIcon(m){return m==='transporte'?'🚌':m==='delivery'?'🏍️':'🏠'}
+function methodLabel(m){return m==='transporte'?'Transporte':m==='delivery'?'Delivery':'Retiro en bodega'}
+function estadoBadge(e){
+  if(e==='pendiente')return'<span class="badge badge-pendiente">⏳ Pendiente</span>';
+  if(e==='preparacion')return'<span class="badge badge-prep">🔧 Preparando</span>';
+  if(e==='despachado')return'<span class="badge badge-despachado">✅ Despachado</span>';
+  return'<span class="badge">—</span>';
+}
+
+// ── RENDER ──
+function renderAll(){
+  if(!_db)return;
+  renderDespachos();
+  renderEncargos();
+}
+
+function renderDespachos(){
+  const el=document.getElementById('pane-despachos');
+  if(!el)return;
+  const ventas=(_db.ventas||[]).filter(v=>
+    !v.anulada&&v.entrega&&
+    (v.entrega.estado==='pendiente'||v.entrega.estado==='preparacion')
+  );
+  // Update badge
+  const badge=document.getElementById('badge-despachos');
+  if(ventas.length>0){badge.textContent=ventas.length;badge.style.display='flex';}
+  else badge.style.display='none';
+
+  if(!ventas.length){
+    el.innerHTML='<div class="empty-state"><div class="empty-icon">📭</div><div class="empty-title">Sin despachos pendientes</div><div class="empty-sub">Todo está al día 👍</div></div>';
+    return;
+  }
+
+  const pendientes=ventas.filter(v=>v.entrega.estado==='pendiente');
+  const enPrep=ventas.filter(v=>v.entrega.estado==='preparacion');
+  let html='';
+
+  if(pendientes.length){
+    html+='<div class="section-label">📋 Pendientes de preparar ('+pendientes.length+')</div>';
+    html+=pendientes.map(v=>renderCardDespacho(v)).join('');
+  }
+  if(enPrep.length){
+    html+='<div class="section-label">🔧 En preparación ('+enPrep.length+')</div>';
+    html+=enPrep.map(v=>renderCardDespacho(v)).join('');
+  }
+  el.innerHTML=html;
+}
+
+function renderCardDespacho(v){
+  const e=v.entrega;
+  const items=(v.items||[]).map(i=>`<div class="product-item">${i.descripcion} <span>x${i.cant}</span></div>`).join('');
+  const estado=estadoBadge(e.estado);
+
+  // Method details (pre-filled by vendedor)
+  let methodDetails='';
+  if(e.metodo==='transporte'){
+    methodDetails=`
+      <div class="method-detail">
+        ${e.departamento?'<div>📍 <strong>Destino:</strong> '+e.departamento+(e.municipio?', '+e.municipio:'')+'</div>':''}
+        ${e.direccionDestino?'<div>🏠 <strong>Dirección:</strong> '+e.direccionDestino+'</div>':''}
+      </div>`;
+  } else if(e.metodo==='delivery'){
+    methodDetails=`
+      <div class="method-detail">
+        ${e.departamento?'<div>📍 <strong>Zona:</strong> '+e.departamento+(e.municipio?', '+e.municipio:'')+'</div>':''}
+        ${e.direccionDestino?'<div>🏠 <strong>Dirección:</strong> '+e.direccionDestino+'</div>':''}
+      </div>`;
+  }
+
+  // Transport form (bodega fills)
+  let transportForm='';
+  if(e.metodo==='transporte'&&e.estado==='preparacion'){
+    transportForm=`
+      <div class="transport-form" id="tform-${v.id}">
+        <div class="transport-form-title">📋 Datos del envío — llena en la terminal</div>
+        <div class="field-group">
+          <div class="field-label">Empresa de transporte *</div>
+          <input class="field-input" id="tf-empresa-${v.id}" placeholder="Ej: Hedman, Sultana, Cristina..." value="${e.empresaTransporte||''}" autocomplete="off">
+        </div>
+        <div class="field-row">
+          <div class="field-group">
+            <div class="field-label">Terminal de salida *</div>
+            <input class="field-input" id="tf-terminal-${v.id}" placeholder="Ej: Comayagüela" value="${e.terminalSalida||''}" autocomplete="off">
+          </div>
+          <div class="field-group">
+            <div class="field-label">Hora de salida *</div>
+            <input class="field-input" type="time" id="tf-hora-${v.id}" value="${e.horaSalida||''}">
+          </div>
+        </div>
+        <div class="field-row">
+          <div class="field-group">
+            <div class="field-label">Fecha de salida *</div>
+            <input class="field-input" type="date" id="tf-fecha-${v.id}" value="${e.fechaSalida||today()}">
+          </div>
+          <div class="field-group">
+            <div class="field-label">N° de recibo *</div>
+            <input class="field-input" id="tf-recibo-${v.id}" placeholder="Referencia" value="${e.numRecibo||''}" autocomplete="off">
+          </div>
+        </div>
+        <div class="field-group">
+          <div class="field-label">Costo del envío (L) — lo paga el cliente</div>
+          <input class="field-input" type="number" id="tf-costo-${v.id}" placeholder="0.00" value="${e.costoEnvio||''}" autocomplete="off">
+        </div>
+        <div class="field-group">
+          <div class="field-label">Nota adicional (opcional)</div>
+          <input class="field-input" id="tf-nota-${v.id}" placeholder="Algún detalle..." value="${e.notaEnvio||''}" autocomplete="off">
+        </div>
+      </div>`;
+  }
+
+  // Delivery form (bodega fills)
+  let deliveryForm='';
+  if(e.metodo==='delivery'&&e.estado==='preparacion'){
+    deliveryForm=`
+      <div class="transport-form" id="dform-${v.id}">
+        <div class="transport-form-title">🏍️ Datos del delivery — llena al coordinar</div>
+        <div class="field-group">
+          <div class="field-label">Empresa de delivery *</div>
+          <input class="field-input" id="df-empresa-${v.id}" placeholder="Ej: Hugo's, moto propia..." value="${e.empresaDelivery||''}" autocomplete="off">
+        </div>
+        <div class="field-group">
+          <div class="field-label">Nombre del motorista *</div>
+          <input class="field-input" id="df-motorista-${v.id}" placeholder="Nombre completo" value="${e.motorista||''}" autocomplete="off">
+        </div>
+        <div class="field-row">
+          <div class="field-group">
+            <div class="field-label">Costo delivery (L)</div>
+            <input class="field-input" type="number" id="df-costo-${v.id}" placeholder="0.00" value="${e.costoDelivery||''}" autocomplete="off">
+          </div>
+          <div class="field-group">
+            <div class="field-label">Hora estimada llegada</div>
+            <input class="field-input" type="time" id="df-hora-${v.id}" value="${e.horaEstimada||''}">
+          </div>
+        </div>
+        <div class="field-group">
+          <div class="field-label">Código de referencia (si aplica)</div>
+          <input class="field-input" id="df-ref-${v.id}" placeholder="Opcional" value="${e.refDelivery||''}" autocomplete="off">
+        </div>
+        <div class="field-group">
+          <div class="field-label">Nota adicional (opcional)</div>
+          <input class="field-input" id="df-nota-${v.id}" placeholder="Algún detalle..." value="${e.notaDelivery||''}" autocomplete="off">
+        </div>
+      </div>`;
+  }
+
+  // Action buttons
+  let acciones='';
+  if(e.estado==='pendiente'){
+    acciones=`<button class="btn btn-navy" onclick="marcarPreparando('${v.id}')">🔧 Marcar en preparación</button>`;
+  } else if(e.estado==='preparacion'){
+    if(e.metodo==='transporte'){
+      acciones=`<button class="btn btn-gold" onclick="abrirConfirmDespacho('${v.id}','transporte')">📦 Confirmar despacho</button>`;
+    } else if(e.metodo==='delivery'){
+      acciones=`<button class="btn btn-gold" onclick="abrirConfirmDespacho('${v.id}','delivery')">📦 Confirmar despacho</button>`;
+    } else {
+      acciones=`<button class="btn btn-gold" onclick="abrirConfirmDespacho('${v.id}','bodega')">📦 Confirmar despacho</button>`;
+    }
+  }
+
+  return`
+    <div class="card" id="card-${v.id}">
+      <div class="card-top">
+        <span class="factura">${v.factura}</span>
+        ${estado}
+      </div>
+      <div class="product-list">${items}</div>
+      <div class="cliente-row">Cliente: <strong>${v.cliente||'—'}</strong></div>
+      <div class="method-box">
+        <div class="method-title">${methodIcon(e.metodo)} ${methodLabel(e.metodo)}</div>
+        ${methodDetails}
+      </div>
+      ${transportForm}${deliveryForm}
+      ${acciones}
+    </div>`;
+}
+
+function renderEncargos(){
+  const el=document.getElementById('pane-encargos');
+  if(!el)return;
+  // Encargos: ventas con esEncargo:true, saldo>0, y que NO tengan entrega.encargoLlego=true aún pendientes
+  const encargos=(_db.ventas||[]).filter(v=>
+    !v.anulada&&v.esEncargo&&(v.saldo||0)>0&&
+    !(v.entrega&&v.entrega.encargoLlego)
+  );
+  // Ya llegaron (esperando que vendedor cobre y autorice despacho)
+  const llegados=(_db.ventas||[]).filter(v=>
+    !v.anulada&&v.esEncargo&&(v.saldo||0)>0&&
+    v.entrega&&v.entrega.encargoLlego&&!v.entrega.despachoAutorizado
+  );
+
+  const total=encargos.length+llegados.length;
+  const badge=document.getElementById('badge-encargos');
+  if(total>0){badge.textContent=total;badge.style.display='flex';}
+  else badge.style.display='none';
+
+  if(!encargos.length&&!llegados.length){
+    el.innerHTML='<div class="empty-state"><div class="empty-icon">📦</div><div class="empty-title">Sin encargos pendientes</div><div class="empty-sub">Aquí aparecerán los encargos esperando llegar a bodega</div></div>';
+    return;
+  }
+
+  let html='';
+  if(encargos.length){
+    html+='<div class="section-label">⏳ Esperando llegar a bodega ('+encargos.length+')</div>';
+    html+=encargos.map(v=>renderCardEncargo(v,'pendiente')).join('');
+  }
+  if(llegados.length){
+    html+='<div class="section-label">⚠️ Llegaron — esperando cobro del vendedor ('+llegados.length+')</div>';
+    html+=llegados.map(v=>renderCardEncargo(v,'llegado')).join('');
+  }
+  el.innerHTML=html;
+}
+
+function renderCardEncargo(v,tipo){
+  const items=(v.items||[]).filter(i=>i.esEncargo).map(i=>
+    `<div class="product-item">${i.descripcion} <span>x${i.cant}</span></div>`
+  ).join('');
+  const e=v.entrega||{};
+  const metodo=e.metodo||'bodega';
+
+  let metodBox='';
+  if(metodo!=='bodega'){
+    metodBox=`<div class="method-box">
+      <div class="method-title">${methodIcon(metodo)} ${methodLabel(metodo)}</div>
+      <div class="method-detail">
+        ${e.departamento?'<div>📍 '+e.departamento+(e.municipio?', '+e.municipio:'')+'</div>':''}
+        ${e.direccionDestino?'<div>🏠 '+e.direccionDestino+'</div>':''}
+      </div>
+    </div>`;
+  }
+
+  if(tipo==='pendiente'){
+    return`
+      <div class="card encargo-card" id="card-enc-${v.id}">
+        <div class="card-top">
+          <span class="factura">${v.factura}</span>
+          <span class="badge badge-encargo">📦 Encargo</span>
+        </div>
+        <div class="product-list">${items}</div>
+        <div class="cliente-row">Cliente: <strong>${v.cliente||'—'}</strong> · Saldo: <strong>L ${(v.saldo||0).toFixed(2)}</strong></div>
+        ${metodBox}
+        <button class="btn btn-green" onclick="marcarEncargoLlego('${v.id}')">✅ El encargo llegó a bodega</button>
+      </div>`;
+  } else {
+    return`
+      <div class="card llegado-card" id="card-enc-${v.id}">
+        <div class="encargo-banner">
+          <div class="encargo-banner-title">⚠️ Encargo en bodega — esperando cobro</div>
+          <div class="encargo-banner-text">El vendedor fue notificado. No despachar hasta que autorice. El cliente debe pagar el saldo antes de recibir.</div>
+        </div>
+        <div class="card-top">
+          <span class="factura">${v.factura}</span>
+          <span class="badge badge-llegado">✅ Llegó a bodega</span>
+        </div>
+        <div class="product-list">${items}</div>
+        <div class="cliente-row">Cliente: <strong>${v.cliente||'—'}</strong> · Saldo: <strong style="color:var(--orange)">L ${(v.saldo||0).toFixed(2)}</strong></div>
+        ${metodBox}
+        <div style="font-size:12px;color:var(--text3);text-align:center;padding:10px 0">
+          🔒 Despacho bloqueado hasta que el vendedor confirme el cobro
+        </div>
+      </div>`;
+  }
+}
+
+// ── ACCIONES ──
+function marcarPreparando(ventaId){
+  if(!_db)return;
+  const v=(_db.ventas||[]).find(x=>x.id===ventaId);
+  if(!v)return;
+  if(!v.entrega)v.entrega={};
+  v.entrega.estado='preparacion';
+  v.entrega.fechaPreparacion=today();
+  guardarDB().then(()=>{
+    toast('Marcado en preparación ✓','ok');
+    renderAll();
+  });
+}
+
+function abrirConfirmDespacho(ventaId,tipo){
+  const v=(_db.ventas||[]).find(x=>x.id===ventaId);
+  if(!v)return;
+  const e=v.entrega||{};
+
+  // Validate forms first
+  if(tipo==='transporte'){
+    const empresa=document.getElementById('tf-empresa-'+ventaId)?.value.trim();
+    const terminal=document.getElementById('tf-terminal-'+ventaId)?.value.trim();
+    const hora=document.getElementById('tf-hora-'+ventaId)?.value;
+    const fecha=document.getElementById('tf-fecha-'+ventaId)?.value;
+    const recibo=document.getElementById('tf-recibo-'+ventaId)?.value.trim();
+    if(!empresa||!terminal||!hora||!fecha||!recibo){
+      toast('Completa todos los datos del envío','err');return;
+    }
+    // Save transport data to memory before confirming
+    e.empresaTransporte=empresa;
+    e.terminalSalida=terminal;
+    e.horaSalida=hora;
+    e.fechaSalida=fecha;
+    e.numRecibo=recibo;
+    e.costoEnvio=parseFloat(document.getElementById('tf-costo-'+ventaId)?.value)||0;
+    e.notaEnvio=document.getElementById('tf-nota-'+ventaId)?.value.trim()||'';
+  } else if(tipo==='delivery'){
+    const empresa=document.getElementById('df-empresa-'+ventaId)?.value.trim();
+    const motorista=document.getElementById('df-motorista-'+ventaId)?.value.trim();
+    if(!empresa||!motorista){
+      toast('Ingresa la empresa y el motorista','err');return;
+    }
+    e.empresaDelivery=empresa;
+    e.motorista=motorista;
+    e.costoDelivery=parseFloat(document.getElementById('df-costo-'+ventaId)?.value)||0;
+    e.horaEstimada=document.getElementById('df-hora-'+ventaId)?.value||'';
+    e.refDelivery=document.getElementById('df-ref-'+ventaId)?.value.trim()||'';
+    e.notaDelivery=document.getElementById('df-nota-'+ventaId)?.value.trim()||'';
+  }
+  v.entrega=e;
+
+  // Show confirm sheet
+  const nombres=(v.items||[]).map(i=>i.descripcion+' x'+i.cant).join(', ');
+  document.getElementById('confirm-title').textContent='Confirmar despacho';
+  document.getElementById('confirm-sub').textContent='¿Confirmas que "'+nombres+'" ya salió de bodega hacia '+v.cliente+'?';
+  document.getElementById('confirm-action-btn').onclick=()=>ejecutarDespacho(ventaId);
+  document.getElementById('confirm-overlay').classList.add('open');
+}
+
+function closeConfirm(){
+  document.getElementById('confirm-overlay').classList.remove('open');
+}
+
+function ejecutarDespacho(ventaId){
+  closeConfirm();
+  if(!_db)return;
+  const v=(_db.ventas||[]).find(x=>x.id===ventaId);
+  if(!v)return;
+  if(!v.entrega)v.entrega={};
+  v.entrega.estado='despachado';
+  v.entrega.fechaDespacho=today();
+  v.entrega.despachoPor='bodega';
+  guardarDB().then(()=>{
+    toast('¡Despachado! El vendedor será notificado ✓','ok');
+    renderAll();
+  });
+}
+
+function marcarEncargoLlego(ventaId){
+  if(!_db)return;
+  const v=(_db.ventas||[]).find(x=>x.id===ventaId);
+  if(!v)return;
+  if(!v.entrega)v.entrega={metodo:'bodega'};
+  v.entrega.encargoLlego=true;
+  v.entrega.fechaLlegadaBodega=today();
+  v.entrega.notificadoVendedor=false;
+  guardarDB().then(()=>{
+    toast('¡Encargo marcado como llegado! El vendedor fue notificado ✓','ok');
+    renderAll();
+  });
+}
+</script>
+</body>
+</html>
