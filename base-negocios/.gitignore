@@ -5,3 +5,5 @@
 *.tmp
 .tmp/
 .DS_Store
+# Respaldos que hace migrar.sh (pueden tener datos de clientes: nunca a git)
+respaldos/

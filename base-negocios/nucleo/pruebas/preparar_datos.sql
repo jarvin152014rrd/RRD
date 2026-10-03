@@ -2,7 +2,8 @@
 -- preparar_datos.sql  -  SOLO PRUEBAS. Datos y ayudantes comunes.
 --   Empresa A: dueño, admin, cajero, vendedor y proveedor.
 --   Empresa B: su dueño (para probar que A y B no se ven).
--- Las empresas se crean con la llave service_role, como en la vida real.
+-- Las empresas se crean con la llave service_role, como en la vida real,
+-- con fecha de inicio 01/01/2026.
 -- =====================================================================
 
 CREATE SCHEMA pruebas;
@@ -111,12 +112,16 @@ GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA pruebas TO anon, authenticated, service
 -- ---------------------------------------------------------------------
 SET ROLE service_role;
 SELECT set_config('request.jwt.claims', '{"role":"service_role"}', false);
-SELECT set_config('pruebas.emp_a', public.crear_empresa_inicial(
-  'Ferretería El Martillo', '08011999000001',
-  'a0000000-0000-0000-0000-000000000001', 'a0000000-0000-0000-0000-000000000005')::text, false);
-SELECT set_config('pruebas.emp_b', public.crear_empresa_inicial(
-  'Pulpería La Esquina', '08011999000002',
-  'b0000000-0000-0000-0000-000000000001')::text, false);
+SELECT set_config('pruebas.emp_a', public.crear_empresa_inicial('{
+  "nombre": "Ferretería El Martillo", "rtn": "08011999000001", "rubro": "Ferretería",
+  "fecha_inicio": "2026-01-01",
+  "dueno":     {"user_id": "a0000000-0000-0000-0000-000000000001", "nombre": "Dueño A"},
+  "proveedor": {"user_id": "a0000000-0000-0000-0000-000000000005"}
+}')::text, false);
+SELECT set_config('pruebas.emp_b', public.crear_empresa_inicial('{
+  "nombre": "Pulpería La Esquina", "rtn": "08011999000002", "fecha_inicio": "2026-01-01",
+  "dueno": {"correo": "dueno_b@prueba.hn"}
+}')::text, false);
 -- Licencias vigentes por 30 días.
 INSERT INTO public.licencia (empresa_id, vence_el)
 VALUES (current_setting('pruebas.emp_a')::uuid, public.hoy_local() + 30),

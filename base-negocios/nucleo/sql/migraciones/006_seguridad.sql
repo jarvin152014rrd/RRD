@@ -26,7 +26,9 @@ REVOKE EXECUTE ON ALL FUNCTIONS IN SCHEMA interno FROM PUBLIC, anon, authenticat
 
 -- Lectura / ayuda (las usan las políticas RLS y la app).
 GRANT EXECUTE ON FUNCTION
-  public.hoy_local(),
+  public.hoy_local(uuid),
+  public.iso(timestamptz),
+  public.verificar_bitacora(uuid),
   public.mis_empresas(),
   public.empresa_actual(),
   public.mi_rol(uuid),
@@ -77,6 +79,7 @@ CREATE POLICY leer ON public.modulo_activo   FOR SELECT TO authenticated USING (
 CREATE POLICY leer ON public.licencia        FOR SELECT TO authenticated USING (empresa_id IN (SELECT public.mis_empresas()));
 CREATE POLICY leer ON public.periodo         FOR SELECT TO authenticated USING (empresa_id IN (SELECT public.mis_empresas()));
 CREATE POLICY leer ON public.cuenta          FOR SELECT TO authenticated USING (empresa_id IN (SELECT public.mis_empresas()));
+CREATE POLICY leer ON public.acceso_soporte  FOR SELECT TO authenticated USING (empresa_id IN (SELECT public.mis_empresas()));
 
 -- Contabilidad y bitácora: además piden permiso de lectura.
 CREATE POLICY leer ON public.asiento       FOR SELECT TO authenticated
@@ -87,14 +90,18 @@ CREATE POLICY leer ON public.bitacora      FOR SELECT TO authenticated
   USING (empresa_id IN (SELECT public.mis_empresas()) AND public.tiene_permiso('bitacora.ver', empresa_id));
 
 -- ---------------------------------------------------------------------
--- 4) El proveedor nunca recibe permisos que muevan los libros
+-- 4) El proveedor no recibe permisos por la tabla rol x permiso.
+--    Para leer cifras necesita un acceso de soporte temporal (ver 009),
+--    y nunca puede mover los libros.
 -- ---------------------------------------------------------------------
 CREATE FUNCTION interno.validar_rol_permiso() RETURNS trigger
 LANGUAGE plpgsql SECURITY DEFINER SET search_path = '' AS $$
 BEGIN
-  IF NEW.rol = 'proveedor'
-     AND (SELECT p.es_movimiento FROM public.permiso p WHERE p.codigo = NEW.permiso) THEN
-    RAISE EXCEPTION 'PROHIBIDO: el rol proveedor no puede tener el permiso "%" (mueve los libros).', NEW.permiso;
+  IF NEW.rol = 'proveedor' THEN
+    RAISE EXCEPTION 'PROHIBIDO: el rol proveedor no recibe permisos ("%"). Para soporte, el dueño da un acceso temporal.', NEW.permiso;
+  END IF;
+  IF NEW.permiso = 'soporte.otorgar' AND NEW.rol <> 'dueno' THEN
+    RAISE EXCEPTION 'PROHIBIDO: solo el dueño puede dar acceso de soporte.';
   END IF;
   RETURN NEW;
 END $$;
@@ -103,25 +110,34 @@ CREATE TRIGGER validar BEFORE INSERT OR UPDATE ON public.rol_permiso
   FOR EACH ROW EXECUTE FUNCTION interno.validar_rol_permiso();
 
 -- ---------------------------------------------------------------------
--- 5) RPC: dar o quitar un permiso a un rol (tabla rol x permiso)
+-- 5) RPC: dar o quitar un permiso a un rol (tabla rol x permiso).
+--    Exige motivo (mínimo 5 letras); queda en la bitácora.
 -- ---------------------------------------------------------------------
-CREATE FUNCTION public.cambiar_permiso_rol(p_empresa_id uuid, p_rol text, p_permiso text, p_otorgar boolean)
+CREATE FUNCTION public.cambiar_permiso_rol(p_empresa_id uuid, p_rol text, p_permiso text,
+                                           p_otorgar boolean, p_motivo text)
 RETURNS jsonb
 LANGUAGE plpgsql SECURITY DEFINER SET search_path = '' AS $$
 BEGIN
   PERFORM interno.exigir_escritura(p_empresa_id, 'permisos.editar', NULL);
 
+  IF length(trim(coalesce(p_motivo, ''))) < 5 THEN
+    RAISE EXCEPTION 'FALTA_MOTIVO: escriba el motivo del cambio de permisos (mínimo 5 letras).';
+  END IF;
   IF NOT EXISTS (SELECT 1 FROM public.rol WHERE codigo = p_rol) THEN
     RAISE EXCEPTION 'NO_EXISTE: el rol "%" no existe.', p_rol;
   END IF;
   IF NOT EXISTS (SELECT 1 FROM public.permiso WHERE codigo = p_permiso) THEN
     RAISE EXCEPTION 'NO_EXISTE: el permiso "%" no existe.', p_permiso;
   END IF;
+  IF p_otorgar IS NULL THEN
+    RAISE EXCEPTION 'DATO_INVALIDO: indique si el permiso se da (true) o se quita (false).';
+  END IF;
   -- Evita que el negocio se quede sin nadie que pueda editar permisos.
   IF p_rol = 'dueno' AND p_permiso = 'permisos.editar' AND NOT p_otorgar THEN
     RAISE EXCEPTION 'PROHIBIDO: no se le puede quitar al dueño el permiso de editar permisos.';
   END IF;
 
+  PERFORM set_config('app.motivo', trim(p_motivo), true);   -- lo toma la bitácora
   IF p_otorgar THEN
     INSERT INTO public.rol_permiso (empresa_id, rol, permiso) VALUES (p_empresa_id, p_rol, p_permiso)
     ON CONFLICT DO NOTHING;
@@ -129,9 +145,10 @@ BEGIN
     DELETE FROM public.rol_permiso
      WHERE empresa_id = p_empresa_id AND rol = p_rol AND permiso = p_permiso;
   END IF;
+  PERFORM set_config('app.motivo', '', true);
 
   RETURN jsonb_build_object('rol', p_rol, 'permiso', p_permiso, 'otorgado', p_otorgar);
 END $$;
 
-REVOKE EXECUTE ON FUNCTION public.cambiar_permiso_rol(uuid, text, text, boolean) FROM PUBLIC;
-GRANT  EXECUTE ON FUNCTION public.cambiar_permiso_rol(uuid, text, text, boolean) TO authenticated;
+REVOKE EXECUTE ON FUNCTION public.cambiar_permiso_rol(uuid, text, text, boolean, text) FROM PUBLIC;
+GRANT  EXECUTE ON FUNCTION public.cambiar_permiso_rol(uuid, text, text, boolean, text) TO authenticated;

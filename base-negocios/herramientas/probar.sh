@@ -10,7 +10,11 @@
 #   2. Crea una base "plantilla" vacía y le aplica: simulador de
 #      Supabase + migraciones en orden + datos de prueba.
 #   3. Cada prueba corre en su propia copia de la plantilla, así una
-#      prueba nunca afecta a otra.
+#      prueba nunca afecta a otra. Hay dos tipos:
+#        prueba_NN_*.sql  se corre con psql (variable :version_nucleo)
+#        prueba_NN_*.sh   se corre con bash, recibe el nombre de su base
+#                         como $1 (para probar herramientas y varias
+#                         conexiones a la vez)
 #   4. Muestra OK / FALLA y termina con código 1 si algo falló.
 #
 # Variables opcionales: PGBIN, PRUEBAS_PGDATA, PRUEBAS_PUERTO,
@@ -19,49 +23,21 @@
 set -uo pipefail
 
 RAIZ="$(cd "$(dirname "$0")/.." && pwd)"
-PGBIN="${PGBIN:-/usr/lib/postgresql/16/bin}"
-DATOS="${PRUEBAS_PGDATA:-$RAIZ/.pgdata}"
-PUERTO="${PRUEBAS_PUERTO:-54329}"
 DIR_PRUEBAS="$RAIZ/nucleo/pruebas"
 PLANTILLA="nucleo_plantilla"
-
-export PATH="$PGBIN:$PATH"
-export PGHOST="$DATOS" PGPORT="$PUERTO" PGUSER="postgres"
-unset PGDATABASE PGPASSWORD
-
-# PostgreSQL no arranca como root: en ese caso usamos el usuario postgres.
-como_postgres() {
-  if [ "$(id -u)" = "0" ]; then runuser -u postgres -- "$@"; else "$@"; fi
-}
+VERSION="$(tr -d '[:space:]' < "$RAIZ/VERSION_NUCLEO")"
+export RAIZ
 
 falla_fatal() { echo; echo "FALLA: $*"; exit 1; }
 
 # ---------------------------------------------------------------------
 # 1) Servidor local
 # ---------------------------------------------------------------------
-if [ ! -f "$DATOS/PG_VERSION" ]; then
-  echo "Creando servidor local de pruebas en $DATOS ..."
-  mkdir -p "$DATOS"
-  [ "$(id -u)" = "0" ] && chown postgres:postgres "$DATOS"
-  chmod 700 "$DATOS"
-  como_postgres initdb -D "$DATOS" -U postgres --auth=trust --encoding=UTF8 \
-    --locale=C.UTF-8 >/dev/null || falla_fatal "no se pudo crear el servidor (initdb)."
-fi
-
-ENCENDI_YO=0
-if ! como_postgres pg_ctl -D "$DATOS" status >/dev/null 2>&1; then
-  como_postgres pg_ctl -D "$DATOS" -l "$DATOS/servidor.log" -w \
-    -o "-p $PUERTO -k $DATOS -c listen_addresses='' -c timezone=UTC" start >/dev/null \
-    || falla_fatal "no arrancó PostgreSQL. Revise $DATOS/servidor.log"
-  ENCENDI_YO=1
-fi
-
-apagar() {
-  if [ "$ENCENDI_YO" = "1" ] && [ "${MANTENER_SERVIDOR:-0}" != "1" ]; then
-    como_postgres pg_ctl -D "$DATOS" -m fast stop >/dev/null 2>&1
-  fi
-}
-trap apagar EXIT
+source "$RAIZ/herramientas/servidor_local.sh"
+# Las pruebas NUNCA usan una base real aunque la terminal tenga una puesta.
+unset PGDATABASE DATABASE_URL
+local_encender || exit 1
+trap local_apagar EXIT
 
 psql_q() { psql -X -q -v ON_ERROR_STOP=1 "$@"; }
 
@@ -74,7 +50,8 @@ createdb "$PLANTILLA" || falla_fatal "no se pudo crear la base plantilla."
 
 psql_q -d "$PLANTILLA" -f "$DIR_PRUEBAS/simular_supabase.sql" >/dev/null \
   || falla_fatal "error en simular_supabase.sql"
-PGDATABASE="$PLANTILLA" bash "$RAIZ/herramientas/migrar.sh" \
+# Base desechable: sin confirmación ni respaldo.
+PGDATABASE="$PLANTILLA" SIN_PREGUNTAR=1 SIN_RESPALDO=1 bash "$RAIZ/herramientas/migrar.sh" >/dev/null \
   || falla_fatal "error aplicando migraciones."
 psql_q -d "$PLANTILLA" -f "$DIR_PRUEBAS/preparar_datos.sql" >/dev/null \
   || falla_fatal "error en preparar_datos.sql"
@@ -86,9 +63,11 @@ echo
 echo "Corriendo pruebas:"
 total=0; buenas=0; malas=()
 
-for archivo in "$DIR_PRUEBAS"/prueba_*.sql; do
-  nombre="$(basename "$archivo" .sql)"
-  que="$(grep -m1 '^-- PRUEBA:' "$archivo" | sed 's/^-- PRUEBA: *//')"
+# .sql y .sh juntos, en orden de número.
+mapfile -t archivos < <(ls "$DIR_PRUEBAS"/prueba_*.sql "$DIR_PRUEBAS"/prueba_*.sh 2>/dev/null | sort)
+for archivo in "${archivos[@]}"; do
+  nombre="$(basename "$archivo")"; nombre="${nombre%.*}"
+  que="$(grep -m1 -E '^(--|#) PRUEBA:' "$archivo" | sed -E 's/^(--|#) PRUEBA: *//')"
   base="t_${nombre}"
   total=$((total + 1))
 
@@ -97,7 +76,13 @@ for archivo in "$DIR_PRUEBAS"/prueba_*.sql; do
     echo "  FALLA  $nombre  (no se pudo copiar la plantilla)"; malas+=("$nombre"); continue
   fi
 
-  if salida="$(psql_q -d "$base" -f "$archivo" 2>&1)"; then
+  if [[ "$archivo" == *.sql ]]; then
+    salida="$(psql_q -d "$base" -v version_nucleo="$VERSION" -f "$archivo" 2>&1)"; codigo=$?
+  else
+    salida="$(bash "$archivo" "$base" 2>&1)"; codigo=$?
+  fi
+
+  if [ "$codigo" = "0" ]; then
     echo "  OK     $nombre - $que"
     buenas=$((buenas + 1))
   else

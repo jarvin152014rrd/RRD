@@ -23,8 +23,9 @@ BEGIN
   -- Cierre y reapertura auditados (quién, motivo).
   PERFORM pruebas.afirmar(EXISTS (
     SELECT 1 FROM public.bitacora b
-    WHERE b.empresa_id = e AND b.tabla = 'periodo' AND b.accion = 'UPDATE'
-      AND b.despues->>'estado' = 'cerrado' AND b.usuario_id = pruebas.usuario('dueno_a')), 'cierre en bitácora');
+    WHERE b.empresa_id = e AND b.tabla = 'periodo' AND b.accion IN ('INSERT', 'UPDATE')   -- mes nuevo: se crea ya cerrado
+      AND (b.despues->>'mes')::int = 4 AND b.despues->>'estado' = 'cerrado'
+      AND b.usuario_id = pruebas.usuario('dueno_a')), 'cierre en bitácora');
   PERFORM pruebas.afirmar(EXISTS (
     SELECT 1 FROM public.bitacora b
     WHERE b.empresa_id = e AND b.tabla = 'periodo' AND b.accion = 'UPDATE'

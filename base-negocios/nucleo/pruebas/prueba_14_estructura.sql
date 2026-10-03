@@ -1,4 +1,6 @@
 -- PRUEBA: revisión de seguridad de la estructura (RLS en todo, sin escritura directa, search_path fijo)
+-- La versión esperada se lee del archivo VERSION_NUCLEO (probar.sh la pasa como :version_nucleo).
+SELECT set_config('pruebas.version_nucleo', :'version_nucleo', false);
 DO $$
 DECLARE r record;
 BEGIN
@@ -36,14 +38,16 @@ BEGIN
 
   -- Las funciones internas no las ejecuta authenticated; crear empresa tampoco.
   PERFORM pruebas.afirmar(NOT has_function_privilege('authenticated', 'interno.crear_cabecera(uuid,uuid,date,text,text,uuid,bigint,uuid,text)', 'EXECUTE'), 'crear_cabecera oculta');
-  PERFORM pruebas.afirmar(NOT has_function_privilege('authenticated', 'public.crear_empresa_inicial(text,text,uuid,uuid)', 'EXECUTE'), 'crear_empresa solo service_role');
-  PERFORM pruebas.afirmar(has_function_privilege('service_role', 'public.crear_empresa_inicial(text,text,uuid,uuid)', 'EXECUTE'), 'service_role crea empresas');
+  PERFORM pruebas.afirmar(NOT has_function_privilege('authenticated', 'public.crear_empresa_inicial(jsonb)', 'EXECUTE'), 'crear_empresa solo service_role');
+  PERFORM pruebas.afirmar(has_function_privilege('service_role', 'public.crear_empresa_inicial(jsonb)', 'EXECUTE'), 'service_role crea empresas');
   PERFORM pruebas.afirmar(NOT has_table_privilege('authenticated', 'public.licencia', 'UPDATE'), 'licencia no editable por usuario');
   PERFORM pruebas.afirmar(has_table_privilege('service_role', 'public.licencia', 'UPDATE'), 'licencia editable por service_role');
 
   -- Migraciones registradas y versión visible.
-  PERFORM pruebas.afirmar((SELECT count(*) FROM interno._migraciones) >= 7, 'migraciones registradas');
-  PERFORM pruebas.afirmar((SELECT version_nucleo FROM public.version_esquema) = '0.1.0', 'versión del núcleo 0.1.0');
+  PERFORM pruebas.afirmar((SELECT count(*) FROM interno._migraciones) >= 11, 'migraciones registradas');
+  PERFORM pruebas.afirmar(current_setting('pruebas.version_nucleo') ~ '^[0-9]+\.[0-9]+\.[0-9]+$', 'VERSION_NUCLEO con formato X.Y.Z');
+  PERFORM pruebas.afirmar((SELECT version_nucleo FROM public.version_esquema) = current_setting('pruebas.version_nucleo'),
+    'la base registra la misma versión que VERSION_NUCLEO');
 
   -- Catálogo: cada cuenta de detalle es hoja y cada hoja es de detalle.
   PERFORM pruebas.afirmar(NOT EXISTS (

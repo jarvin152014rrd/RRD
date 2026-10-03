@@ -1,0 +1,67 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "ficha.schema.json",
+  "title": "Ficha de un cliente (empresa nueva)",
+  "description": "Datos para crear una empresa con herramientas/nuevo_cliente.sh. La base vuelve a validar todo en crear_empresa_inicial(jsonb).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["nombre", "fecha_inicio", "dueno"],
+  "properties": {
+    "$schema": { "type": "string" },
+    "nombre": {
+      "description": "Nombre del negocio como aparecerá en la app y los reportes.",
+      "type": "string", "minLength": 1, "pattern": "\\S"
+    },
+    "rtn": {
+      "description": "RTN de 14 dígitos, sin guiones.",
+      "type": ["string", "null"], "pattern": "^[0-9]{14}$"
+    },
+    "rubro": {
+      "description": "A qué se dedica (ferretería, pulpería, farmacia...).",
+      "type": ["string", "null"]
+    },
+    "moneda": {
+      "description": "Código ISO 4217 de 3 letras mayúsculas.",
+      "type": "string", "pattern": "^[A-Z]{3}$", "default": "HNL"
+    },
+    "pais": {
+      "description": "Código ISO 3166-1 de 2 letras mayúsculas.",
+      "type": "string", "pattern": "^[A-Z]{2}$", "default": "HN"
+    },
+    "zona_horaria": {
+      "description": "Zona horaria IANA.",
+      "type": "string", "default": "America/Tegucigalpa"
+    },
+    "fecha_inicio": {
+      "description": "Primer día que se registra en el sistema (AAAA-MM-DD). No se aceptan asientos antes.",
+      "type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$", "format": "date"
+    },
+    "dias_futuro_max": {
+      "description": "Cuántos días al futuro se permite fechar un asiento.",
+      "type": "integer", "minimum": 0, "maximum": 31, "default": 3
+    },
+    "modulos": {
+      "description": "Módulos activos. 'contabilidad' siempre se activa.",
+      "type": "array", "uniqueItems": true,
+      "items": { "enum": ["contabilidad", "ventas", "inventario", "compras"] }
+    },
+    "dueno":     { "$ref": "#/$defs/usuario", "description": "Dueño del negocio (debe estar registrado en Supabase)." },
+    "proveedor": { "$ref": "#/$defs/usuario", "description": "Usuario del proveedor (opcional)." },
+    "tema": {
+      "description": "Colores y logo de la app. La base no lo usa.",
+      "type": "object"
+    }
+  },
+  "$defs": {
+    "usuario": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "correo":  { "type": "string", "format": "email", "pattern": "^[^@\\s]+@[^@\\s]+$" },
+        "user_id": { "type": "string", "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$" },
+        "nombre":  { "type": "string" }
+      },
+      "anyOf": [ { "required": ["correo"] }, { "required": ["user_id"] } ]
+    }
+  }
+}

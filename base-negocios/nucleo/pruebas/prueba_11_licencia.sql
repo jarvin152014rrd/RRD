@@ -20,7 +20,7 @@ BEGIN
   PERFORM pruebas.debe_fallar(pruebas.sql_registrar(e, '2026-01-11', pruebas.lineas('1.1.01.01', '4.1.01.01', 100)), 'LICENCIA_VENCIDA', 'registrar');
   PERFORM pruebas.debe_fallar(format('SELECT public.anular_asiento(%L, %L)', x, 'por prueba'), 'LICENCIA_VENCIDA', 'anular');
   PERFORM pruebas.debe_fallar(format('SELECT public.cerrar_periodo(%L, 2026, 1)', e), 'LICENCIA_VENCIDA', 'cerrar mes');
-  PERFORM pruebas.debe_fallar(format('SELECT public.cambiar_permiso_rol(%L, %L, %L, true)', e, 'cajero', 'asientos.anular'), 'LICENCIA_VENCIDA', 'editar permisos');
+  PERFORM pruebas.debe_fallar(format('SELECT public.cambiar_permiso_rol(%L, %L, %L, true, %L)', e, 'cajero', 'asientos.anular', 'por la prueba'), 'LICENCIA_VENCIDA', 'editar permisos');
 
   -- Leer y exportar nunca se bloquea.
   PERFORM pruebas.afirmar((SELECT count(*) FROM public.asiento WHERE empresa_id = e) = 1, 'puede leer asientos');

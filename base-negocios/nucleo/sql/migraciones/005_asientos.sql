@@ -51,11 +51,18 @@ CREATE INDEX asiento_linea_asiento ON public.asiento_linea (asiento_id);
 -- Defensas a nivel de tabla (valen aunque alguien salte las funciones)
 -- ---------------------------------------------------------------------
 
--- Antes de guardar un asiento: mes abierto, hora y usuario del servidor.
+-- Antes de guardar un asiento: fecha válida, mes abierto, sucursal activa
+-- (una anulación sí puede usar la sucursal ya desactivada del original),
+-- hora y usuario del servidor.
 CREATE FUNCTION interno.antes_de_asiento() RETURNS trigger
 LANGUAGE plpgsql SECURITY DEFINER SET search_path = '' AS $$
 BEGIN
   PERFORM interno.exigir_periodo_abierto(NEW.empresa_id, NEW.fecha_contable);
+  IF NEW.anula_asiento_id IS NULL AND NOT EXISTS (
+       SELECT 1 FROM public.sucursal s
+        WHERE s.id = NEW.sucursal_id AND s.empresa_id = NEW.empresa_id AND s.activa) THEN
+    RAISE EXCEPTION 'SUCURSAL_INVALIDA: la sucursal no existe en esta empresa o está desactivada.';
+  END IF;
   NEW.registrado_en := now();
   NEW.creado_por    := auth.uid();
   RETURN NEW;
@@ -146,11 +153,9 @@ CREATE FUNCTION interno.crear_cabecera(
   p_anula_id uuid DEFAULT NULL, p_motivo text DEFAULT NULL,
   OUT o_id uuid, OUT o_numero bigint, OUT o_duplicado boolean)
 LANGUAGE plpgsql SECURITY DEFINER SET search_path = '' AS $$
+DECLARE v_sucursal uuid := p_sucursal_id;
 BEGIN
-  INSERT INTO interno.contador (empresa_id, clave) VALUES (p_empresa_id, 'asiento')
-  ON CONFLICT DO NOTHING;
-  PERFORM 1 FROM interno.contador
-   WHERE empresa_id = p_empresa_id AND clave = 'asiento' FOR UPDATE;
+  PERFORM interno.bloquear_libros(p_empresa_id);
 
   SELECT a.id, a.numero INTO o_id, o_numero FROM public.asiento a
    WHERE a.empresa_id = p_empresa_id AND a.id_operacion = p_id_operacion;
@@ -159,13 +164,20 @@ BEGIN
     RETURN;
   END IF;
 
+  -- Sin sucursal indicada: la primera sucursal ACTIVA (por código).
+  IF v_sucursal IS NULL THEN
+    SELECT s.id INTO v_sucursal FROM public.sucursal s
+     WHERE s.empresa_id = p_empresa_id AND s.activa
+     ORDER BY s.codigo LIMIT 1;
+    IF v_sucursal IS NULL THEN
+      RAISE EXCEPTION 'SIN_SUCURSAL_ACTIVA: la empresa no tiene ninguna sucursal activa. Active o cree una sucursal primero.';
+    END IF;
+  END IF;
+
   o_numero := interno.siguiente_numero(p_empresa_id, 'asiento');
   INSERT INTO public.asiento (empresa_id, sucursal_id, numero, fecha_contable, descripcion,
                               origen, id_operacion, total_centavos, anula_asiento_id, motivo_anulacion)
-  VALUES (p_empresa_id,
-          coalesce(p_sucursal_id, (SELECT s.id FROM public.sucursal s
-                                    WHERE s.empresa_id = p_empresa_id
-                                    ORDER BY s.codigo LIMIT 1)),
+  VALUES (p_empresa_id, v_sucursal,
           o_numero, p_fecha, trim(p_descripcion), p_origen, p_id_operacion, p_total,
           p_anula_id, p_motivo)
   RETURNING id INTO o_id;
@@ -296,7 +308,7 @@ END $$;
 -- ---------------------------------------------------------------------
 -- RPC: anular_asiento
 -- Crea un contra-asiento (debe <-> haber) enlazado al original.
--- Fecha por defecto: hoy en Honduras. Exige motivo. No se anula dos veces.
+-- Fecha por defecto: hoy en la zona de la empresa. Exige motivo. No se anula dos veces.
 -- ---------------------------------------------------------------------
 CREATE FUNCTION public.anular_asiento(
   p_asiento_id   uuid,
@@ -337,7 +349,7 @@ BEGIN
 
   BEGIN
     SELECT * INTO v_cab FROM interno.crear_cabecera(
-      v_orig.empresa_id, v_orig.sucursal_id, coalesce(p_fecha, public.hoy_local()),
+      v_orig.empresa_id, v_orig.sucursal_id, coalesce(p_fecha, public.hoy_local(v_orig.empresa_id)),
       'ANULACIÓN del asiento #' || v_orig.numero || ': ' || trim(p_motivo),
       'anulacion', v_id_op, v_orig.total_centavos, v_orig.id, trim(p_motivo));
   EXCEPTION WHEN unique_violation THEN
