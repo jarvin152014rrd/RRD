@@ -5,7 +5,10 @@
   funciones (RPC) que revisan todo.
 - **service_role** (llave del proveedor): lee todo, escribe solo `licencia`
   y crea empresas.
-- Asientos, líneas y bitácora además piden `contabilidad.ver` / `bitacora.ver`.
+- Asientos, líneas y bitácora además piden `contabilidad.ver` / `bitacora.ver`;
+  clientes y proveedores, `terceros.ver` (financiero: el proveedor solo con soporte).
+- Las políticas filtran con `empresa_id = ANY (ARRAY(SELECT empresas_con_permiso('...')))`:
+  se calcula una vez por consulta, no por fila.
 - Toda tabla de `public` tiene RLS y no se puede vaciar (TRUNCATE).
 - El rol proveedor no recibe permisos por la tabla rol x permiso.
 - Solo del dueño (012): `soporte.otorgar`, `permisos.editar`,
@@ -15,4 +18,8 @@
   lee con soporte). `v_existencia` muestra cantidades con `inventario.ver`
   y oculta costos a quien no tiene `inventario.costos`.
 - `cambiar_permiso_rol(empresa, rol, permiso, otorgar, motivo)`: motivo
-  obligatorio; al dueño no se le quita `permisos.editar`.
+  obligatorio; al dueño no se le quita `permisos.editar`; al contador solo se
+  le dan permisos de lectura.
+- **Límite honesto:** quien tiene la llave `service_role` o la clave
+  `postgres` puede leer todo; eso se regula por contrato y bitácora
+  (PROCEDIMIENTOS P-04).

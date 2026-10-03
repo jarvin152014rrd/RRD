@@ -8,8 +8,9 @@ módulos activos, licencia, acceso de soporte, contadores.
 (validada), `fecha_inicio` (no hay asientos antes), `dias_futuro_max` (0-31,
 defecto 3), `rubro`.
 
-**Roles:** dueño (todo), admin (día a día), cajero, vendedor, proveedor
-(instala; sin cifras salvo soporte temporal; nunca mueve libros).
+**Roles:** dueño (todo), admin (día a día), cajero, vendedor, contador
+(solo lectura, 0.4.0), proveedor (instala; sin cifras salvo soporte
+temporal; nunca mueve libros).
 
 **Funciones de ayuda:** `hoy_local(empresa?)`, `mis_empresas()`,
 `empresa_actual()`, `mi_rol(empresa)`, `tiene_permiso(permiso, empresa?)`,

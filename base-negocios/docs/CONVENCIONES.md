@@ -25,6 +25,15 @@ cabe en estas reglas, se discute antes de programarlo.
 - Datos de documentos (compras, terceros, productos) llegan en `jsonb` con
   claves conocidas; una clave que no se reconoce es error.
 - Moneda de la empresa: código ISO 4217 (`HNL`, `USD`).
+- **ISV:** el precio se guarda como lo escribe el usuario, con la marca
+  `precio_incluye_isv`. La cuenta sale SIEMPRE de `public.precio_isv(precio,
+  incluye, impuesto, cantidad)`: por LÍNEA (sobre cantidad x precio), redondeo
+  a centavo con mitades hacia arriba. Si incluye: sin = round(total / (1 + tasa)),
+  ISV = total - sin. Si no: ISV = round(sin x tasa), con = sin + ISV.
+- **Costo promedio:** se calcula en el ORDEN DE REGISTRO (no por fecha). Una
+  entrada no puede tener fecha anterior a la última salida del producto en
+  esa bodega, salvo permiso `inventario.fecha_atrasada` (y entonces lo ya
+  salido no se recalcula). 0 unidades = L 0.00 (lo que sobre va a ajuste de costo).
 
 ## Fechas y horas
 - Columnas de momento (fecha + hora) terminan en **`_en`**: `creado_en`,
@@ -45,11 +54,37 @@ cabe en estas reglas, se discute antes de programarlo.
   temporal vigente).
 - Toda función que escribe empieza con `interno.exigir_escritura(...)`;
   toda función que lee cifras, con `interno.exigir_lectura(...)`.
+- Rol `contador`: solo permisos de lectura (`es_financiero` o `*.ver`, nunca
+  `es_movimiento`). Lo vigila un trigger; solo el dueño crea contadores.
+- Una RPC que devuelve montos de costo (kardex, ajustes, traslados) los pasa
+  por `interno.ocultar_costos(...)`: sin `inventario.costos` llegan en null y
+  con `"costos_ocultos": true`.
 
 ## Errores
 - Todo `RAISE EXCEPTION` empieza con una CLAVE en mayúsculas y dos puntos:
   `'NO_CUADRA: el debe ... '`. La clave va en `error_catalogo` con su
   mensaje sencillo y qué hacer (en la misma migración que la usa).
+
+## id_operacion
+- Cada RPC que crea algo recibe un `id_operacion` (uuid) y llama
+  `interno.exigir_tipo_operacion(empresa, id, 'tipo')`: un reintento solo se
+  reconoce si el id ya se usó para el MISMO tipo de operación; si se usó para
+  otra cosa, `ID_OPERACION_USADO`. Al agregar una tabla con `id_operacion`,
+  sumarla en `interno.tipo_operacion` (migración nueva, `CREATE OR REPLACE`).
+
+## Anular (patrón; los cobros de la etapa 2b lo copian)
+- El documento original NO se edita: la anulación es una fila aparte
+  (`pago_proveedor_anulacion`, `inventario_documento_anulacion`) o columnas
+  de anulación que se llenan una sola vez (compra, saldo inicial).
+- **Anular un abono** (pago a proveedor hoy; cobro a cliente en 2b):
+  `anular_X(id, motivo, id_operacion, fecha?)` con permiso propio; motivo de
+  5 letras o más; fecha por defecto hoy y nunca anterior al abono; candado de
+  la empresa (`bloquear_libros`); mes abierto; una sola vez (`YA_ANULADO`);
+  contra-asiento con `anula_asiento_id` = asiento del abono, a la MISMA
+  cuenta de dinero del abono (Dr esa cuenta / Cr CxP en pagos; en cobros:
+  Dr CxC / Cr esa cuenta); el saldo del documento se calcula sumando solo
+  abonos NO anulados; el documento se puede anular cuando ya no tiene abonos
+  vigentes.
 
 ## Cuentas de los módulos
 - Las cuentas que usa un módulo están en `interno.cuenta_sistema` (un solo
@@ -58,6 +93,10 @@ cabe en estas reglas, se discute antes de programarlo.
 
 ## Vistas
 - Por defecto `security_invoker = true` (respetan RLS).
+- Políticas y vistas que piden un permiso usan
+  `empresa_id = ANY (ARRAY(SELECT public.empresas_con_permiso('permiso')))`:
+  PostgreSQL lo calcula una vez por consulta. Nunca `tiene_permiso(...)` por
+  fila en una política (la prueba 53 lo vigila).
 - Si hay que ocultar columnas según el permiso (ej. costos), vista "del
   sistema" con filtro explícito `public.puede_leer(empresa, permiso)`.
 
@@ -77,6 +116,12 @@ cabe en estas reglas, se discute antes de programarlo.
   `no_vaciar`, y si guarda datos del negocio: `auditar` y `no_borrar`.
 - Cada cambio lleva su prueba en `nucleo/pruebas/prueba_NN_que_prueba.sql`
   (o `.sh`). La primera línea `-- PRUEBA:` / `# PRUEBA:` dice qué prueba.
+
+## Herramientas (bash)
+- Se conectan con `herramientas/conexion.sh`: la clave nunca va como
+  argumento de psql/pg_dump ni en PGPASSWORD (pgpass temporal 600 que se
+  borra); se confirma con un identificador único del proyecto; los
+  respaldos salen cifrados. `SIN_PREGUNTAR` / `SIN_RESPALDO` solo con base local.
 
 ## Versiones (VERSION_NUCLEO)
 - MAYOR.MENOR.ARREGLO. ARREGLO: corrección sin cambios de uso. MENOR:

@@ -2,39 +2,45 @@
 # =====================================================================
 # nuevo_cliente.sh  -  Crea la empresa de un cliente nuevo desde su ficha.
 #
-#   bash herramientas/nuevo_cliente.sh [--solo-validar] personal/ficha.json
+#   bash herramientas/nuevo_cliente.sh [--solo-validar] personal/ficha.json [cadena_de_conexion]
 #
 # Pasos:
 #   1. Revisa que la ficha sea JSON válido.
 #   2. La compara con personal/ficha.schema.json (si python3 tiene el
 #      paquete jsonschema; si no, avisa y sigue: la base valida igual).
-#   3. Muestra a qué base se conecta y pide escribir su nombre.
+#   3. Muestra a qué base se conecta (servidor completo) y qué empresas ya
+#      tiene, y pide escribir un identificador único: la referencia del
+#      proyecto de Supabase, o el nombre de la empresa que ya está en esa
+#      base, o (base local nueva) el nombre de la base.
 #   4. Llama crear_empresa_inicial(ficha) en una transacción.
 #      Con --solo-validar hace todo y al final DESHACE (no crea nada).
 #
-# A qué base se conecta:
-#   * Si hay PGDATABASE (o PGHOST/DATABASE_URL), a esa (ej. Supabase).
-#     DATABASE_URL = "postgresql://usuario:clave@host:5432/postgres"
-#   * Si no, a la base local de pruebas "base_local" (la crea si falta,
-#     con el simulador de Supabase y todas las migraciones).
+# A qué base se conecta (la clave nunca va como argumento de psql; ver conexion.sh):
+#   * La cadena del tercer argumento, SIN clave (se pide sin mostrarla):
+#     "postgresql://postgres@db.<ref>.supabase.co:5432/postgres"
+#   * Si no, DATABASE_URL o PGHOST/PGDATABASE de la terminal (y lo AVISA).
+#   * Si no hay nada, la base local de pruebas "base_local" (la crea si
+#     falta, con el simulador de Supabase y todas las migraciones).
 #
 # Antes: el dueño (y el proveedor) deben estar registrados en Supabase
 # (Authentication > Users) con el correo de la ficha.
 # Después: activar la licencia (sin licencia la empresa queda en solo lectura).
 #
-# Variable opcional: SIN_PREGUNTAR=1 (no pide confirmación; pruebas).
+# Variable opcional: SIN_PREGUNTAR=1 (no pide confirmación; SOLO base local).
 # =====================================================================
 set -euo pipefail
 
 RAIZ="$(cd "$(dirname "$0")/.." && pwd)"
+source "$RAIZ/herramientas/conexion.sh"
 SOLO_VALIDAR=0
 FICHA=""
+CADENA=""
 for arg in "$@"; do
   case "$arg" in
     --solo-validar) SOLO_VALIDAR=1 ;;
-    -h|--ayuda)     sed -n '2,30p' "$0"; exit 0 ;;
+    -h|--ayuda)     sed -n '2,34p' "$0"; exit 0 ;;
     -*)             echo "ERROR: opción desconocida: $arg" >&2; exit 2 ;;
-    *)              FICHA="$arg" ;;
+    *)              if [ -z "$FICHA" ]; then FICHA="$arg"; else CADENA="$arg"; fi ;;
   esac
 done
 [ -n "$FICHA" ] || { echo "Uso: bash herramientas/nuevo_cliente.sh [--solo-validar] ruta/ficha.json" >&2; exit 2; }
@@ -72,13 +78,19 @@ fi
 # ---------------------------------------------------------------------
 # 3) Destino
 # ---------------------------------------------------------------------
-CONEXION=()
-if [ -n "${DATABASE_URL:-}" ]; then
-  CONEXION=("$DATABASE_URL")
-elif [ -z "${PGDATABASE:-}" ] && [ -z "${PGHOST:-}" ]; then
+ORIGEN="argumento"
+apagar_local() { :; }
+if [ -n "$CADENA" ]; then
+  :
+elif [ -n "${DATABASE_URL:-}" ]; then
+  CADENA="$DATABASE_URL"; ORIGEN="DATABASE_URL"
+elif [ -n "${PGDATABASE:-}" ] || [ -n "${PGHOST:-}" ]; then
+  ORIGEN="variables"
+else
+  ORIGEN="local"
   source "$RAIZ/herramientas/servidor_local.sh"
   local_encender
-  trap local_apagar EXIT
+  apagar_local() { local_apagar; }
   export PGDATABASE="base_local"
   if [ "$(psql -X -tA -d postgres -c "SELECT count(*) FROM pg_database WHERE datname = 'base_local'")" = "0" ]; then
     echo "Creando la base local de pruebas \"base_local\" ..."
@@ -87,23 +99,18 @@ elif [ -z "${PGDATABASE:-}" ] && [ -z "${PGHOST:-}" ]; then
     SIN_PREGUNTAR=1 SIN_RESPALDO=1 bash "$RAIZ/herramientas/migrar.sh" >/dev/null
   fi
 fi
-psql_q() { psql "${CONEXION[@]}" -X -q -v ON_ERROR_STOP=1 "$@"; }
+trap 'conexion_limpiar; apagar_local' EXIT
+conexion_preparar "$CADENA" "$ORIGEN" || exit 1
+psql_q() { psql -X -q -v ON_ERROR_STOP=1 "$@"; }
 
-info="$(psql_q -tA -F'|' -c "SELECT current_database(), coalesce(inet_server_addr()::text, 'socket local'), current_user")" \
-  || { echo "ERROR: no se pudo conectar a la base." >&2; exit 1; }
-IFS='|' read -r BASE SERVIDOR USUARIO <<< "$info"
-echo "Destino: base \"$BASE\" en $SERVIDOR como $USUARIO"
+conexion_mostrar
+conexion_info || exit 1
 NOMBRE="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1], encoding="utf-8")).get("nombre",""))' "$FICHA")"
-echo "Empresa: $NOMBRE"
+echo "Empresa nueva: $NOMBRE"
 
-if [ "$SOLO_VALIDAR" = "0" ] && [ "${SIN_PREGUNTAR:-0}" != "1" ]; then
-  printf 'Para crearla escriba el nombre de la base (%s): ' "$BASE"
-  respuesta=""
-  read -r respuesta || true
-  if [ "$respuesta" != "$BASE" ]; then
-    echo; echo "Cancelado: el nombre no coincide. No se creó nada." >&2
-    exit 1
-  fi
+if [ "$SOLO_VALIDAR" = "0" ]; then
+  conexion_identificador
+  conexion_confirmar "crear la empresa \"$NOMBRE\" en esa base" || exit 1
 fi
 
 # ---------------------------------------------------------------------

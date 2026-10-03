@@ -9,8 +9,14 @@ positivos, debe = haber. Número correlativo sin huecos por empresa.
 Si llega dos veces el mismo `id_operacion`, devuelve el mismo asiento.
 
 **Anular:** `anular_asiento(asiento, motivo, id_operacion?, fecha?)` crea un
-contra-asiento enlazado (fecha por defecto: hoy de la empresa). No se anula
-dos veces. Se puede anular aunque la sucursal o cuenta se hayan desactivado.
+contra-asiento enlazado. La fecha no puede ser anterior a la del asiento
+(`FECHA_INVALIDA`); por defecto es hoy, o la del asiento si este tiene fecha
+futura. No se anula dos veces. Se puede anular aunque la sucursal o cuenta
+se hayan desactivado. Los asientos de un módulo se anulan desde su documento.
+
+**id_operacion:** solo se reconoce como reintento si es del mismo tipo
+(asiento manual con asiento manual); si ya se usó en otra operación (una
+compra, un pago...), `ID_OPERACION_USADO`.
 
 **Sin sucursal indicada:** usa la primera sucursal activa; si no hay ninguna,
 `SIN_SUCURSAL_ACTIVA`.

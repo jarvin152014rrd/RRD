@@ -64,7 +64,7 @@ BEGIN
   PERFORM pruebas.afirmar(pruebas.saldo_libros(e, '1.1.03.01') = 188533, 'inventario en libros = 188533');
   PERFORM pruebas.afirmar(pruebas.valor('B1','P1') + pruebas.valor('B2','P1') = 188533, 'kardex = 188533');
   PERFORM pruebas.afirmar(pruebas.saldo_libros(e, '5.1.01.02') = 3358 AND pruebas.saldo_libros(e, '4.2.01.02') = 2200, 'faltantes y sobrantes');
-  PERFORM pruebas.afirmar(pruebas.saldo_libros(e, '3.1.01.01') = 100000, 'patrimonio por saldo inicial');
+  PERFORM pruebas.afirmar(pruebas.saldo_libros(e, '3.3.01.03') = 100000, 'Saldos de apertura por saldo inicial (0.4.0)');
 
   -- 7) Sin permiso ni configuración no queda en negativo; no se guarda nada.
   PERFORM pruebas.como('superusuario');

@@ -14,8 +14,13 @@
   administradores, tocar al usuario del proveedor, ni dar un rol que tenga
   algún permiso que él no tiene (tampoco cambiar o desactivar a quien tenga
   un rol así; pasa si el dueño le da al cajero un permiso extra).
-- **Cajero / vendedor:** ven cantidades de inventario (no costos) y
+- **Cajero / vendedor:** ven cantidades de inventario (no costos), ven y
   registran clientes.
+- **Contador (0.4.0):** solo lectura: contabilidad y reportes, bitácora,
+  clientes y proveedores, compras y CxP, existencias **con costos y valor**
+  (los necesita para el balance y el costo de ventas). No registra, no anula,
+  no cierra meses, no administra usuarios. Solo el dueño lo crea, lo cambia
+  o lo desactiva, y nadie le puede dar un permiso que mueva los libros.
 
 `agregar_usuario_empresa(empresa, correo, rol, nombre?)` y
 `desactivar_usuario_empresa(empresa, user_id, motivo)` (permiso

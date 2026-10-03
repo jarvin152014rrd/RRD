@@ -1,4 +1,4 @@
--- PRUEBA: carga inicial de inventario: existencia + costo con asiento de apertura contra patrimonio, una sola vez por producto y bodega (o con permiso especial y motivo)
+-- PRUEBA: carga inicial de inventario: existencia + costo con asiento contra Saldos de apertura (3.3.01.03), una sola vez por producto y bodega (o con permiso especial y motivo)
 DO $$
 DECLARE
   e  uuid := pruebas.empresa('A');
@@ -17,7 +17,7 @@ BEGIN
          jsonb_build_object('producto_id', pruebas.id('P1'), 'cantidad', 100, 'costo_unitario', 1000),
          jsonb_build_object('producto_id', pruebas.id('P3'), 'cantidad', 2,   'costo_unitario', 30000)), op);
   PERFORM pruebas.afirmar((r->>'total_centavos')::bigint = 160000 AND r->>'tipo' = 'carga_inicial', 'total 160000');
-  PERFORM pruebas.afirmar(pruebas.saldo_libros(e, '1.1.03.01') = 160000 AND pruebas.saldo_libros(e, '3.1.01.01') = 160000, 'asiento de apertura');
+  PERFORM pruebas.afirmar(pruebas.saldo_libros(e, '1.1.03.01') = 160000 AND pruebas.saldo_libros(e, '3.3.01.03') = 160000 AND pruebas.saldo_libros(e, '3.1.01.01') = 0, 'asiento de apertura');
   PERFORM pruebas.como('superusuario');
   PERFORM pruebas.afirmar((SELECT origen FROM public.asiento WHERE id = (r->>'asiento_id')::uuid) = 'carga_inicial_inventario', 'origen');
   PERFORM pruebas.como('admin_a');
@@ -44,7 +44,7 @@ BEGIN
     'Faltó contar la bodega de arriba');
   PERFORM pruebas.afirmar(pruebas.existencia('B1','P1') = 150 AND pruebas.valor('B1','P1') = 165000 AND pruebas.promedio('B1','P1') = 1100, 'repetida con permiso');
   -- Libros: 160,000 + 10,000 + 65,000 = 235,000.
-  PERFORM pruebas.afirmar(pruebas.saldo_libros(e, '1.1.03.01') = 235000 AND pruebas.saldo_libros(e, '3.1.01.01') = 235000, 'apertura total 235000');
+  PERFORM pruebas.afirmar(pruebas.saldo_libros(e, '1.1.03.01') = 235000 AND pruebas.saldo_libros(e, '3.3.01.03') = 235000, 'apertura total 235000');
 
   -- Costo 0: entra la existencia, sin asiento.
   r := public.cargar_saldo_inicial(e, pruebas.id('B1'), '2026-01-01',

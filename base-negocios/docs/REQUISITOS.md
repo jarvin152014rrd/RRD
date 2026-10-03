@@ -39,6 +39,11 @@ Extras: panel "Mi negocio hoy", modo vacaciones (admin a cargo con límites y
 fechas), rol contador de solo lectura, deshacer el último cambio de Ajustes,
 página "Mi cuenta" (plan, módulos, próximo pago, pedir módulo).
 
+Rol contador (hecho en 0.4.0): solo lectura de contabilidad, reportes,
+bitácora, clientes y proveedores, compras y existencias. SÍ ve costos y valor
+del inventario (los necesita para el balance y el costo de ventas). Solo el
+dueño lo crea; nunca recibe permisos que muevan los libros.
+
 ## Ayuda dentro del programa
 
 - NO lleva botón "?" ni videos de ayuda (decisión del dueño).
@@ -103,6 +108,11 @@ página "Mi cuenta" (plan, módulos, próximo pago, pedir módulo).
 - Cada producto tiene impuesto (15%, 18% o Exento) y la marca "precio incluye
   ISV" (Sí/No). El valor por defecto lo elige el dueño en Ajustes
   (recomendado: Sí). El programa calcula la otra cifra.
+- Hecho en 0.4.0. Regla: el precio se guarda como se escribe; el ISV se
+  calcula por línea (cantidad x precio) y se redondea a centavo, mitades
+  hacia arriba. Productos de antes de 0.4.0 quedaron "sin ISV".
+- Costo promedio (0.4.0): en orden de registro; no se registran entradas con
+  fecha anterior a la última salida del producto en esa bodega, salvo el dueño.
 
 ### Columnas del Excel
 

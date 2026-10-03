@@ -27,5 +27,9 @@ El RTN y el teléfono aceptan guiones, espacios y paréntesis; se guardan solo d
 **Historial:** cada alta y cambio queda en la bitácora con el antes, el
 después, quién y el motivo. Nunca se borra: se desactiva.
 
+**Ver** (0.4.0): pide `terceros.ver` (financiero). Lo tienen dueño, admin,
+cajero, vendedor y contador; el proveedor solo con acceso de soporte vigente.
+
 **Permisos por defecto:** editar: dueño, admin, cajero, vendedor.
-Crédito y desactivar: dueño y admin.
+Crédito y desactivar: dueño y admin. En `crear_tercero`, un `id_operacion`
+ya usado en otra operación que no es un tercero da `ID_OPERACION_USADO`.

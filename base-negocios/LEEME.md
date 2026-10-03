@@ -6,7 +6,7 @@ La app será una PWA (página web instalable) y los datos vivirán en Supabase
 funciones SQL que guardan todo o nada. El navegador solo muestra y llama
 esas funciones.
 
-Versión del núcleo: ver `VERSION_NUCLEO` (hoy 0.3.0, etapa 2a). Cambios: `CHANGELOG.md`.
+Versión del núcleo: ver `VERSION_NUCLEO` (hoy 0.4.0, correcciones de la etapa 2a). Cambios: `CHANGELOG.md`.
 
 ## Carpetas
 
@@ -26,8 +26,11 @@ base-negocios/
 ├── respaldos/              respaldos de migrar.sh (NO se sube a git)
 └── herramientas/
     ├── probar.sh           corre todas las pruebas
-    ├── migrar.sh           respalda y aplica migraciones pendientes a una base
+    ├── migrar.sh           respalda (cifrado) y aplica migraciones pendientes
     ├── nuevo_cliente.sh    crea la empresa de un cliente desde su ficha
+    ├── respaldar.sh        respaldo completo cifrado (age o gpg)
+    ├── restaurar.sh        restaura un respaldo en una base NUEVA y la revisa
+    ├── conexion.sh         (lo usan los otros) conexión sin exponer la clave
     └── servidor_local.sh   (lo usan los otros) PostgreSQL local de pruebas
 ```
 
@@ -51,6 +54,10 @@ Qué hace cada migración:
 | 014_productos | unidades, categorías, campos extra, productos, historial de precios |
 | 015_inventario | bodegas, kardex con costo promedio, ajustes, traslados, carga inicial, existencias |
 | 016_compras | compras, anulación, pagos a proveedores, CxP con antigüedad |
+| 017_seguridad_operaciones | rol contador, `terceros.ver`, RLS más rápido, índices, `id_operacion` por tipo, fecha de anulación, costos ocultos |
+| 018_inventario_correcciones | Saldos de apertura, fecha atrasada, 0 unidades = L 0, fracciones, reactivar, anular documentos de inventario |
+| 019_compras_correcciones | anular pagos, saldos iniciales de proveedores, activar módulos con saldo |
+| 020_precios_isv | precio con o sin ISV, `precio_isv()`, `v_producto` |
 
 Detalle de cada módulo: `nucleo/docs/`.
 
@@ -83,7 +90,9 @@ Si algo falla, termina con error (código distinto de 0).
 8. **Licencia vencida = solo lectura.** Consultar y exportar nunca se bloquea.
 9. **El proveedor instala y actualiza, pero no registra movimientos ni ve
    cifras.** Para soporte, el dueño le da un acceso temporal de solo lectura
-   (con motivo y vencimiento, máximo 30 días); vence solo.
+   (con motivo y vencimiento, máximo 30 días); vence solo. Esto vale dentro
+   de la app: con la llave `service_role` o la clave `postgres` técnicamente
+   se lee todo, y eso se regula por contrato y bitácora (P-04).
 10. **Las migraciones solo van hacia adelante.** Una migración ya aplicada no
     se edita: se crea otra con el número siguiente (`migrar.sh` lo vigila).
 11. **Fechas:** la fecha contable (la que cuenta para los libros) es aparte
@@ -96,7 +105,10 @@ Si algo falla, termina con error (código distinto de 0).
     `verificar_bitacora()` avisa si alguien la alteró por fuera.
 14. **Kardex = contabilidad.** El valor del inventario es igual al saldo de
     la cuenta de inventario, y las CxP por proveedor al de proveedores. Esas
-    cuentas no aceptan asientos manuales si su módulo está activo.
+    cuentas no aceptan asientos manuales si su módulo está activo, y el
+    módulo no se activa si ya tienen un saldo que no explica.
+15. **Secretos fuera de la vista.** Las herramientas nunca pasan la clave de
+    la base como argumento; los respaldos salen cifrados (P-03).
 
 ## Funciones que usará la app (RPC)
 
@@ -112,26 +124,31 @@ Si algo falla, termina con error (código distinto de 0).
 | `cambiar_permiso_rol(empresa, rol, permiso, otorgar, motivo)` | editar permisos | permisos.editar |
 | `agregar_usuario_empresa(empresa, correo, rol, nombre?)` | agregar / reactivar / cambiar rol | usuarios.administrar |
 | `desactivar_usuario_empresa(empresa, user_id, motivo)` | desactivar (nunca borrar) | usuarios.administrar |
-| `crear_sucursal(empresa, codigo, nombre)` / `desactivar_sucursal(empresa, sucursal, motivo)` | sucursales | sucursales.administrar |
-| `crear_caja(empresa, sucursal, nombre, punto_emision)` / `desactivar_caja(empresa, caja, motivo)` | cajas | sucursales.administrar |
+| `crear_sucursal(empresa, codigo, nombre)` / `desactivar_sucursal` / `reactivar_sucursal(empresa, sucursal, motivo)` | sucursales (no se desactiva con existencias) | sucursales.administrar |
+| `crear_caja(empresa, sucursal, nombre, punto_emision)` / `desactivar_caja` / `reactivar_caja(empresa, caja, motivo)` | cajas | sucursales.administrar |
 | `crear_subcuenta(empresa, codigo_madre, codigo, nombre, naturaleza?)` | subcuenta de detalle | catalogo.editar |
 | `otorgar_acceso_soporte(empresa, vence_en, motivo)` / `revocar_acceso_soporte(empresa, motivo)` | soporte temporal | soporte.otorgar (solo dueño) |
-| `configurar_empresa(empresa, datos, motivo)` | tope de crédito, inventario negativo | empresa.configurar (solo dueño) |
+| `configurar_empresa(empresa, datos, motivo)` | tope de crédito, inventario negativo, precio incluye ISV por defecto | empresa.configurar (solo dueño) |
 | `crear_tercero` / `editar_tercero` / `desactivar_tercero` | clientes y proveedores | terceros.editar / .credito / .desactivar |
-| `crear_unidad`, `crear_categoria`, `crear_campo_extra`, `crear_producto`, `editar_producto`, `desactivar_producto` | catálogo | productos.editar |
+| `crear_unidad`, `crear_categoria`, `crear_campo_extra`, `crear_producto`, `editar_producto`, `desactivar_producto`, `reactivar_categoria`, `reactivar_campo_extra` | catálogo | productos.editar |
 | `cambiar_precio_producto(empresa, producto, precio, motivo)` | precio con historial | productos.precios |
 | `buscar_producto_por_codigo(empresa, codigo)` | escáner / cámara | miembro de la empresa |
-| `crear_bodega` / `desactivar_bodega` | bodegas | bodegas.administrar |
+| `crear_bodega` / `desactivar_bodega` / `reactivar_bodega` | bodegas | bodegas.administrar |
 | `ajustar_inventario(empresa, bodega, fecha, lineas, motivo, id_operacion)` | conteo físico + asiento | inventario.ajustar |
 | `trasladar_inventario(empresa, origen, destino, fecha, lineas, id_operacion, nota?)` | traslado entre bodegas | inventario.trasladar |
-| `cargar_saldo_inicial(empresa, bodega, fecha, lineas, id_operacion, motivo?)` | apertura del inventario | inventario.carga_inicial |
+| `cargar_saldo_inicial(empresa, bodega, fecha, lineas, id_operacion, motivo?)` | apertura del inventario (contra Saldos de apertura) | inventario.carga_inicial |
+| `anular_documento_inventario(documento, motivo, id_operacion, fecha?)` | anular carga inicial, ajuste o traslado | inventario.anular + el del tipo |
 | `registrar_compra(empresa, datos, id_operacion)` | compra contado / crédito | compras.registrar |
 | `anular_compra(compra, motivo, id_operacion, fecha?)` | contra-movimiento + contra-asiento | compras.anular |
-| `pagar_proveedor(empresa, compra, monto, fecha, forma_pago, id_operacion, referencia?, cuenta_pago?)` | abono a CxP desde la caja o banco elegido | compras.pagar |
+| `pagar_proveedor(empresa, documento, monto, fecha, forma_pago, id_operacion, referencia?, cuenta_pago?)` | abono a una compra o saldo inicial desde la caja o banco elegido | compras.pagar |
+| `anular_pago_proveedor(pago, motivo, id_operacion, fecha?)` | contra-asiento a la misma cuenta de dinero | compras.anular |
+| `registrar_saldo_inicial_cxp(empresa, datos, id_operacion)` / `anular_saldo_inicial_cxp(saldo, motivo, id_operacion, fecha?)` | facturas de proveedores pendientes al empezar | compras.saldo_inicial (solo dueño) |
+| `precio_isv(precio, incluye_isv, impuesto, cantidad?)` | precio sin ISV, ISV y con ISV (regla única de redondeo) | con sesión |
 | `crear_empresa_inicial(ficha jsonb)` | instalar cliente | solo service_role |
 
 Vistas: `v_existencia` (inventario.ver; costos solo con inventario.costos),
-`v_kardex` (inventario.costos), `v_cxp_documento` y `v_cxp_proveedor` (compras.ver).
+`v_kardex` (inventario.costos), `v_cxp_documento` y `v_cxp_proveedor` (compras.ver),
+`v_producto` (precio sin y con ISV).
 Detalle de cada módulo en `nucleo/docs/` (terceros, productos, inventario, compras, usuarios).
 
 Formato de `lineas` (montos en centavos):
@@ -153,7 +170,8 @@ busca ahí. Claves de hoy: `SIN_SESION`, `NO_PERTENECE`, `SIN_PERMISO`,
 `USUARIO_NO_EXISTE`, `VENCIMIENTO_INVALIDO`, `TOPE_CREDITO`, `RTN_INVALIDO`,
 `TERCERO_INVALIDO`, `PRODUCTO_INVALIDO`, `CAMPO_EXTRA_INVALIDO`, `BODEGA_INVALIDA`,
 `CANTIDAD_INVALIDA`, `EXISTENCIA_INSUFICIENTE`, `SALDO_INICIAL_YA_CARGADO`,
-`CUENTA_CONTROLADA`, `PAGO_EXCEDE_SALDO`.
+`CUENTA_CONTROLADA`, `PAGO_EXCEDE_SALDO`, `ID_OPERACION_USADO`,
+`ENTRADA_FECHA_ATRASADA`, `MOVIMIENTOS_POSTERIORES`, `MODULO_CON_SALDO`.
 
 **Regla:** si una migración usa una clave nueva, la agrega a `error_catalogo`
 en ese mismo archivo. La prueba 17 falla si alguna falta.
@@ -162,4 +180,5 @@ en ese mismo archivo. La prueba 17 falla si alguna falta.
 
 - `docs/CONVENCIONES.md` — nombres, centavos, `_en`, permisos, migraciones.
 - `docs/PERSONALIZAR.md` — qué se cambia por cliente sin programar y qué nunca.
-- `docs/PROCEDIMIENTOS.md` — instalar, actualizar, respaldar/restaurar, soporte.
+- `docs/PROCEDIMIENTOS.md` — instalar, actualizar, respaldar/restaurar
+  (cifrado), soporte, simulacro de restauración, activar módulos con saldos.
