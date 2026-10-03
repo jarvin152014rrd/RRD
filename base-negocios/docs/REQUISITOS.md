@@ -189,3 +189,21 @@ bloquea sin borrar. Reabrir: solo dueño, con motivo, en orden.
   elegida por el dueño: sobre la GANANCIA (precio sin ISV menos costo,
   recomendado) o sobre el precio sin ISV. Nunca sobre el ISV. Se ganan cuando
   la venta está cobrada completa y se ajustan con devoluciones.
+
+## Arranque fácil para cualquier tamaño de negocio
+
+Objetivo: que un negocio pequeño, mediano o grande cargue sus datos y empiece
+a dar seguimiento el primer día, sin trabas.
+
+- Saldo negativo configurable POR CUENTA de dinero: no permitir (por defecto),
+  permitir con alerta ("revisa el saldo inicial"), o sobregiro autorizado hasta
+  un monto. Cargar saldos iniciales NO es obligatorio para empezar.
+- Perfiles por tamaño (pequeño, mediano, grande): solo configuraciones de
+  inicio (módulos, turnos obligatorios o no, aprobaciones, contabilidad
+  visible o no, menú). Mismo núcleo para todos. Se pueden cambiar después.
+- Asistente de arranque con avance: datos del negocio, usuarios, cajas y
+  bancos con saldo inicial (o empezar en cero), productos, clientes con
+  saldos, proveedores con saldos, primera venta. Cada paso se puede saltar y
+  el programa recuerda lo pendiente sin bloquear.
+- Valores iniciales aprobados: admin registra y aprueba gastos hasta L 5,000;
+  arqueo a ciegas; solo lempiras por ahora (dólares más adelante).
