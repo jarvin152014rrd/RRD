@@ -228,3 +228,13 @@ a dar seguimiento el primer día, sin trabas.
   régimen "fiscal_hn" activable. Sin régimen fiscal se usa numeración interna.
 - Módulos futuros pensados para servicios (se venden aparte): órdenes de
   trabajo, citas/agenda, cobros recurrentes (mensualidades, membresías).
+
+## Versiones y venta
+
+- NO hay versiones, planes ni desbloqueos dentro del programa, ni mensajes
+  de "pásate a otra versión". El cliente solo ve los módulos que tiene.
+- Los paquetes son una guía de venta del proveedor (docs/PAQUETES.md). El
+  proveedor elige módulos y perfil al instalar y fija el precio en su
+  contrato de servicio. Agregar un módulo después = el proveedor lo activa.
+- Mercado objetivo: negocios pequeños y medianos que van empezando y tienen
+  dificultades con la administración y el rastro del dinero.
