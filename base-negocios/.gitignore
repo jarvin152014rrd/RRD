@@ -1,0 +1,7 @@
+# Base de datos local de pruebas (se crea sola con herramientas/probar.sh)
+.pgdata/
+# Temporales
+*.log
+*.tmp
+.tmp/
+.DS_Store

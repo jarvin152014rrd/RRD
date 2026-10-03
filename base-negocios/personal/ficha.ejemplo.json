@@ -1,0 +1,8 @@
+{
+  "nombre_comercial": "Mi Negocio S. de R.L.",
+  "rtn": "08011999000000",
+  "moneda": "HNL",
+  "zona_horaria": "America/Tegucigalpa",
+  "modulos": ["contabilidad"],
+  "tema": { "color_principal": "#1f6feb", "logo": "logo.png" }
+}
