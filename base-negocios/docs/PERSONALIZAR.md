@@ -29,7 +29,30 @@ todos sin perder lo propio de nadie.
 | Saldos iniciales de las cuentas de dinero | app: `registrar_saldo_inicial_dinero` | solo el dueño |
 | Topes por puesto (gasto sin aprobación y hasta cuánto aprueba; defecto admin L 5,000) | app: `configurar_tope_rol` | solo el dueño |
 | Días de un depósito en tránsito antes de la alerta (defecto 3) | app: `configurar_empresa` | solo el dueño |
+| Perfil de tamaño al instalar (pequeno, mediano, grande) | ficha (`perfil`) | proveedor, con el dueño |
+| Cambiar de perfil (con vista previa) | app: `vista_previa_perfil` y `aplicar_perfil` (con motivo) | solo el dueño |
+| Turnos de caja obligatorios, contabilidad visible en el menú, doble aprobación | app: `configurar_empresa` | solo el dueño |
+| Saldo negativo de cada caja o banco (no permitir, permitir con alerta, sobregiro hasta un monto) | app: `configurar_saldo_negativo` (con motivo) | solo el dueño |
+| Asistente de arranque (saltar o volver a pendiente un paso) | app: `estado_arranque`, `marcar_paso_arranque` | dueño o admin |
+| Empezar una caja o banco en cero (sin saldo inicial) | app: `empezar_cuenta_en_cero` | solo el dueño |
 | Licencia (vencimiento, gracia, suspensión) | tabla `licencia` con la llave service_role | proveedor |
+
+## Perfiles por tamaño (cómo usarlos)
+
+Un perfil es solo una configuración de inicio; el núcleo es el mismo para todos.
+
+1. Al instalar, poner en la ficha `"perfil": "pequeno"` (o `mediano`, `grande`).
+   Si la ficha no trae `"modulos"`, se activan los que sugiere el perfil; si los
+   trae, mandan los de la ficha (los módulos pagados los decide el proveedor).
+2. Después, el dueño puede ver qué cambiaría otro perfil con
+   `vista_previa_perfil(empresa, 'mediano')` y aplicarlo con
+   `aplicar_perfil(empresa, 'mediano', 'motivo')`. Queda en la bitácora.
+3. Un perfil nunca borra datos ni activa o desactiva módulos. Si sugiere un
+   módulo que no está activo, la vista previa lo avisa: se pide al proveedor.
+4. Cada ajuste se puede cambiar luego por separado (`configurar_empresa`,
+   `configurar_tope_rol`, `configurar_saldo_negativo`).
+5. Los valores de cada perfil viven en `interno.plantilla_perfil*`: si hay que
+   cambiarlos para TODOS, va en una migración nueva. Detalle en `nucleo/docs/arranque.md`.
 
 ## No se toca NUNCA (ni por un cliente "especial")
 

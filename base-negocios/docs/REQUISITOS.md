@@ -207,3 +207,10 @@ a dar seguimiento el primer día, sin trabas.
   el programa recuerda lo pendiente sin bloquear.
 - Valores iniciales aprobados: admin registra y aprueba gastos hasta L 5,000;
   arqueo a ciegas; solo lempiras por ahora (dólares más adelante).
+- Hecho en 0.6.0: saldo negativo por cuenta (solo el dueño, con motivo),
+  turnos obligatorios o no por empresa, perfiles pequeno/mediano/grande como
+  datos (vista previa y aplicar, solo el dueño; nunca tocan módulos ni datos),
+  asistente de arranque de 7 pasos y "empezar en cero". Valores iniciales
+  confirmados (L 5,000, arqueo a ciegas, solo la moneda de la empresa).
+  Pendiente: la doble aprobación solo se guarda; se aplicará en 2b-2. El paso
+  "primera venta" se marcará solo cuando exista ventas (2b-2).

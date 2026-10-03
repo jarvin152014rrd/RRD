@@ -40,8 +40,12 @@
       "description": "Cuántos días al futuro se permite fechar un asiento.",
       "type": "integer", "minimum": 0, "maximum": 31, "default": 3
     },
+    "perfil": {
+      "description": "Tamaño del negocio: configura turnos obligatorios, contabilidad visible en el menú, doble aprobación y topes (ver docs/PERSONALIZAR.md). Sin perfil queda como siempre. El dueño lo cambia después con aplicar_perfil.",
+      "enum": ["pequeno", "mediano", "grande", null]
+    },
     "modulos": {
-      "description": "Módulos activos. 'contabilidad' siempre se activa.",
+      "description": "Módulos activos. 'contabilidad' siempre se activa. Si no se indica y hay 'perfil', se activan los que sugiere el perfil.",
       "type": "array", "uniqueItems": true,
       "items": { "enum": ["contabilidad", "ventas", "inventario", "compras", "dinero"] }
     },

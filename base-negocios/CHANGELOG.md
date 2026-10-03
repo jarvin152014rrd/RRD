@@ -4,6 +4,51 @@ Formato: versión (fecha) y lista de cambios. La versión vive en `VERSION_NUCLE
 y queda guardada en cada base al migrar (vista `version_esquema`).
 Números: MAYOR.MENOR.ARREGLO (ver `docs/CONVENCIONES.md`).
 
+## 0.6.0 (2026-10-03) — Etapa 2b-1.1: arranque fácil para cualquier tamaño de negocio
+
+Migración nueva 025 (las 001-024 no se tocaron). 76 pruebas (nuevas 72-76).
+
+**Saldo negativo por cuenta de dinero**
+- `cuenta_dinero.politica_saldo_negativo`: `no_permitir` (defecto, como antes),
+  `permitir_con_alerta` (alerta "Revise el saldo inicial" mientras esté en
+  negativo) o `sobregiro_hasta` con `sobregiro_limite_centavos`.
+- `configurar_saldo_negativo(empresa, cuenta, politica, limite, motivo)`: solo
+  el dueño, con motivo y bitácora; no pasa a una política más estricta si la
+  cuenta ya está por debajo. Tránsito siempre `no_permitir`.
+- `interno.rastrear_dinero` revisa solo la cuenta de la que SALE dinero (una
+  entrada nunca se rechaza). El rastro sigue obligatorio.
+- `donde_esta_mi_dinero` trae `alertas` y, por cuenta, `politica_saldo_negativo`
+  y `alerta`; `v_cuenta_dinero` tiene columnas nuevas al final.
+
+**Turnos de caja obligatorios o no** — `empresa.turnos_obligatorios` (defecto
+true) en `configurar_empresa` (solo el dueño). Sin turnos obligatorios el
+efectivo entra a la caja sin turno: `interno.cuenta_efectivo_cobro(empresa, caja?)`
+para los cobros de 2b-2; `interno.exigir_turno_abierto` devuelve un turno vacío.
+
+**Perfiles por tamaño** (`interno.plantilla_perfil`, `_modulo`, `_tope`):
+`perfiles_negocio()`, `vista_previa_perfil(empresa, perfil)` y
+`aplicar_perfil(empresa, perfil, motivo)` (solo el dueño; bitácora). Nunca
+borran datos ni activan o desactivan módulos (eso es del proveedor según el
+plan). Banderas nuevas en `empresa`: `perfil`, `contabilidad_visible`,
+`doble_aprobacion` (también en `configurar_empresa` y en `mi_perfil()->'empresa'`).
+`crear_empresa_inicial` acepta `"perfil"` (ficha.schema.json y ficha.ejemplo.json);
+sin `"modulos"` en la ficha activa los que sugiere el perfil.
+
+**Asistente de arranque:** `estado_arranque(empresa)` (7 pasos con estado
+hecho/saltado/pendiente y porcentaje; "hecho" sale de los datos reales),
+`marcar_paso_arranque(empresa, paso, 'saltado'|'pendiente')`, tabla
+`arranque_paso`, permiso nuevo `arranque.gestionar` (dueño y admin).
+`empezar_cuenta_en_cero(empresa, cuenta)` (solo el dueño). Nunca bloquea operar.
+
+**Valores iniciales confirmados:** admin registra y aprueba gastos hasta
+L 5,000.00; arqueo a ciegas; solo la moneda de la empresa (prueba 75).
+
+**Pendiente (honesto):** `doble_aprobacion` solo se guarda; se aplicará en las
+aprobaciones de 2b-2. El paso "primera venta" se marcará solo con el módulo de ventas.
+
+**Cambios que rompen:** ninguno para la app. El admin tiene un permiso más
+(`arranque.gestionar`): se ajustó la prueba 31.
+
 ## 0.5.0 (2026-10-03) — Etapa 2b-1: dinero (y correcciones de la revisión de 0.4.0)
 
 Migraciones nuevas 021-024 (las 001-020 no se tocaron). 71 pruebas.

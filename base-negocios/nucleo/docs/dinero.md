@@ -39,8 +39,36 @@ entra, − sale), operación, documento, contrapartida (origen o destino),
 turno de caja (si había uno abierto en esa caja), referencia, equipo
 (`"equipo"` en los datos o la cabecera `x-equipo` de la app), usuario y hora
 del servidor. Si un asiento toca una cuenta de dinero sin dejar su fila, **no
-se guarda nada** (`MOVIMIENTO_SIN_RASTRO`). Ninguna cuenta queda en negativo
-(`SALDO_INSUFICIENTE`) y la caja chica no pasa su fondo (`TOPE_CAJA_CHICA`).
+se guarda nada** (`MOVIMIENTO_SIN_RASTRO`). Por defecto ninguna cuenta queda
+en negativo (`SALDO_INSUFICIENTE`; ver "Saldo negativo") y la caja chica no
+pasa su fondo (`TOPE_CAJA_CHICA`).
+
+## Saldo negativo por cuenta (0.6.0)
+
+Cada cuenta de dinero tiene su política (`politica_saldo_negativo`):
+
+| política | qué pasa |
+|---|---|
+| `no_permitir` (defecto) | una salida que la deja en negativo se rechaza (`SALDO_INSUFICIENTE`) |
+| `permitir_con_alerta` | la salida pasa; mientras esté en negativo sale la alerta "Revise el saldo inicial..." |
+| `sobregiro_hasta` | pasa hasta el límite (`sobregiro_limite_centavos`); más allá, `SALDO_INSUFICIENTE`; en negativo sale la alerta de sobregiro |
+
+- `configurar_saldo_negativo(empresa, cuenta, politica, limite_centavos, motivo)`:
+  **solo el dueño** (`empresa.configurar`), con motivo; queda en la bitácora.
+  No se pasa a una política más estricta si la cuenta ya está por debajo de lo
+  que permitiría (primero se registra la entrada o el saldo inicial que falta).
+  El dinero en tránsito siempre es `no_permitir`.
+- Solo se revisa la cuenta de la que SALE dinero: una entrada nunca se rechaza
+  aunque la cuenta siga en negativo.
+- El rastro (origen y destino) sigue siendo obligatorio siempre.
+- Alertas: `donde_esta_mi_dinero` trae `alertas` (cuentas en negativo con su
+  mensaje) y en cada cuenta `politica_saldo_negativo` y `alerta`;
+  `v_cuenta_dinero` tiene `alerta_saldo_negativo`.
+
+Ejemplo (prueba 72): Caja 1 en 0 con "permitir con alerta": gasto de 10,000 →
+-10,000 y alerta; entra 4,000 → -6,000; saldo inicial de 20,000 → 14,000 y la
+alerta se va. BAC 1,000,000 con sobregiro de 50,000: gasto 1,030,000 → -30,000;
+otro de 30,000 se rechaza (-60,000); uno de 20,000 pasa (-50,000, justo el límite).
 
 ## Operaciones (una sola operación: sale de una y entra a otra)
 
@@ -72,6 +100,10 @@ se guarda nada** (`MOVIMIENTO_SIN_RASTRO`). Ninguna cuenta queda en negativo
   `"contrapartida":"1.1.01.01"`, pasando el saldo de una cuenta de efectivo
   SIN rastro (caja general, bancos de la plantilla). Se anula con
   `anular_operacion_dinero` (pide también dinero.saldo_inicial).
+- `empezar_cuenta_en_cero(empresa, cuenta)` (dinero.saldo_inicial, 0.6.0): deja
+  constancia de que la cuenta empieza en L 0.00 (no mueve dinero). Lo usa el
+  asistente de arranque (ver `arranque.md`). Cargar saldos iniciales no es
+  obligatorio para empezar.
 
 Ejemplo (prueba 62): BAC 1,000,000 y caja fuerte 300,000. Depósito de 250,000:
 caja fuerte 50,000, tránsito 250,000, BAC 1,000,000. Al confirmar: BAC

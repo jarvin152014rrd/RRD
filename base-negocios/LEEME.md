@@ -6,7 +6,7 @@ La app será una PWA (página web instalable) y los datos vivirán en Supabase
 funciones SQL que guardan todo o nada. El navegador solo muestra y llama
 esas funciones.
 
-Versión del núcleo: ver `VERSION_NUCLEO` (hoy 0.5.0, etapa 2b-1: dinero). Cambios: `CHANGELOG.md`.
+Versión del núcleo: ver `VERSION_NUCLEO` (hoy 0.6.0, etapa 2b-1.1: arranque fácil). Cambios: `CHANGELOG.md`.
 
 ## Carpetas
 
@@ -62,8 +62,9 @@ Qué hace cada migración:
 | 022_dinero | cuentas de dinero con su subcuenta, rastro del dinero, depósitos (en tránsito), retiros, traslados, saldos iniciales, comprobantes, compras con cuenta de dinero, "dónde está mi dinero" y estado de cuenta |
 | 023_caja_turnos | turnos de caja por cajero, arqueo (conteo por denominación), diferencias pendientes y su resolución |
 | 024_gastos | categorías de gasto, gastos con ISV, topes por puesto, aprobaciones (genéricas), caja chica (cuadre), pagos fijos |
+| 025_arranque_facil | saldo negativo por cuenta (solo el dueño), turnos obligatorios o no, perfiles pequeño/mediano/grande, asistente de arranque, empezar en cero |
 
-Detalle de cada módulo: `nucleo/docs/` (dinero, caja y gastos en `dinero.md`, `caja.md`, `gastos.md`).
+Detalle de cada módulo: `nucleo/docs/` (dinero, caja, gastos y arranque en `dinero.md`, `caja.md`, `gastos.md`, `arranque.md`).
 
 ## Cómo correr las pruebas (un comando)
 

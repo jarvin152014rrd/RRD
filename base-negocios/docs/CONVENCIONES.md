@@ -107,10 +107,12 @@ cabe en estas reglas, se discute antes de programarlo.
   misma transacción y con el candado tomado, a
   `interno.rastrear_dinero(asiento, operacion, documento_tipo, documento_id, referencia, equipo)`.
   Si lo olvida, el asiento no se confirma (`MOVIMIENTO_SIN_RASTRO`). La
-  función también impide saldos negativos y pasar el fondo de la caja chica.
+  función también aplica la política de saldo negativo de cada cuenta (0.6.0:
+  por defecto no permitir) y no deja pasar el fondo de la caja chica.
 - Lo que se paga se valida con `interno.cuenta_dinero_para_pagar` (caja,
   caja chica o banco). El equipo sale de `interno.equipo(datos)`.
-- Un cobro en efectivo (2b-2) exige `interno.exigir_turno_abierto(empresa)`.
+- Un cobro en efectivo (2b-2) toma su cuenta con `interno.cuenta_efectivo_cobro(empresa, caja?)`
+  (turno abierto del usuario; sin turno solo si la empresa no los exige).
 - Comprobantes: `"comprobante": {"ruta","tipo","sha256"}` en los datos o
   `agregar_adjunto`; la ruta empieza con el id de la empresa.
 

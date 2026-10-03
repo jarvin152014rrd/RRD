@@ -22,8 +22,26 @@ efectivo; si no tiene, se crea al abrir el primer turno ("Efectivo <caja> (001-0
 
 Todo lo que entra o sale de esa caja (traslados, depósitos, gastos, pagos y,
 en 2b-2, cobros) queda marcado con el turno en el rastro del dinero.
-Para la etapa 2b-2: `interno.exigir_turno_abierto(empresa)` da el turno abierto
-del usuario o `SIN_TURNO_ABIERTO` (sin turno no se cobra en efectivo).
+
+## Turnos obligatorios o no (0.6.0, por empresa)
+
+`empresa.turnos_obligatorios` (defecto `true`; lo cambia solo el dueño con
+`configurar_empresa(..., '{"turnos_obligatorios": false}', motivo)` o con el
+perfil "pequeno").
+
+- **Obligatorios** (regla de siempre): sin turno abierto no entra efectivo
+  (`SIN_TURNO_ABIERTO`).
+- **No obligatorios** (negocios pequeños): el efectivo entra a la caja SIN
+  turno (el rastro queda con `turno_id` vacío). Los turnos se pueden seguir
+  usando igual. Si la caja tiene abierto el turno de OTRO cajero, no se cobra
+  en ella sin turno (`CAJA_OCUPADA`), para no descuadrar su arqueo.
+
+Para la etapa 2b-2 (cobros en efectivo): `interno.cuenta_efectivo_cobro(empresa, caja?)`
+da la cuenta de dinero donde entra el efectivo: la del turno abierto del
+usuario; sin turno, `SIN_TURNO_ABIERTO` si son obligatorios, o la cuenta de
+efectivo de la caja indicada (o de la única caja activa; se crea si falta).
+`interno.exigir_turno_abierto(empresa)` sigue igual cuando son obligatorios; si
+no lo son, devuelve un turno vacío (id NULL) en vez de error.
 
 ## Cerrar — `cerrar_turno(turno, contado_centavos, id_operacion, datos?)`
 

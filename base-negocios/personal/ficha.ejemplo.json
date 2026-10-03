@@ -8,6 +8,7 @@
   "zona_horaria": "America/Tegucigalpa",
   "fecha_inicio": "2026-01-01",
   "dias_futuro_max": 3,
+  "perfil": "pequeno",
   "modulos": ["contabilidad"],
   "dueno": { "correo": "dueno@minegocio.hn", "nombre": "Juan Pérez" },
   "proveedor": { "correo": "soporte@proveedor.hn", "nombre": "Soporte" },
