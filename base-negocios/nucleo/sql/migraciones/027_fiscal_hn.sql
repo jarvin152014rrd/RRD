@@ -1,5 +1,12 @@
 -- =====================================================================
--- 026_cai.sql  -  Núcleo 0.7.0 (etapa 2b-2a): CAI de la SAR (Honduras)
+-- 027_fiscal_hn.sql  -  Núcleo 0.7.0 (etapa 2b-2a): régimen fiscal de
+-- Honduras (SAR), aislado como MÓDULO activable "fiscal_hn".
+--
+-- El núcleo de ventas no sabe de CAI: pide un número a
+-- interno.numero_fiscal(empresa, caja, tipo, fecha), que despacha al régimen
+-- activo (hoy solo fiscal_hn). Sin régimen fiscal activo, la venta usa la
+-- numeración interna (ticket). Otro país = otro módulo fiscal_xx que agrega
+-- su rama en interno.numero_fiscal, sin tocar el núcleo de ventas.
 --
 -- Régimen de facturación, Acuerdo 481-2017. NOTA: las reglas fiscales de
 -- este archivo (formato del CAI, del número de documento, leyendas y
@@ -17,19 +24,21 @@
 --   Se rechaza un rango vencido o agotado (CAI_VENCIDO / CAI_AGOTADO); sin
 --   rango vigente: SIN_CAI. Alertas: CAI por vencer (N días) y rango por
 --   agotarse (% usado), configurables por el dueño.
---   Documento interno sin CAI ("recibo"): para negocios que no facturan
---   todo; se activa con empresa.documento_venta_modo.
+--   Ticket interno sin CAI: para negocios que no facturan todo
+--   (empresa.documento_venta_modo) o que no tienen el módulo fiscal_hn.
 -- =====================================================================
 
 INSERT INTO public.error_catalogo (codigo, mensaje_usuario, que_hacer) VALUES
   ('SIN_CAI', 'Esta caja no tiene un rango de facturación (CAI) vigente.',
-   'Registre el CAI que le autorizó la SAR para esta caja (Ajustes > CAI) o, si el negocio lo permite, emita un recibo interno.'),
+   'Registre el CAI que le autorizó la SAR para esta caja (Ajustes > CAI) o, si el negocio lo permite, emita un ticket interno.'),
   ('CAI_VENCIDO', 'La fecha límite de emisión del CAI ya pasó.',
    'Solicite un CAI nuevo a la SAR y regístrelo. No se pueden emitir facturas con un CAI vencido.'),
   ('CAI_AGOTADO', 'Se usaron todos los números del rango autorizado (CAI).',
    'Solicite a la SAR un rango nuevo y regístrelo para esta caja.'),
   ('CAI_INVALIDO', 'Los datos del CAI no son válidos.',
    'Revise el número CAI, el rango (formato 000-001-01-00000001) y la fecha límite tal como vienen en la resolución de la SAR.');
+
+INSERT INTO public.modulo (codigo, nombre) VALUES ('fiscal_hn', 'Régimen fiscal de Honduras (SAR): CAI y facturas');
 
 INSERT INTO public.permiso (codigo, descripcion, es_movimiento, es_financiero) VALUES
   ('cai.administrar', 'Registrar, desactivar y reactivar rangos de facturación (CAI) y ver sus alertas', false, false);
@@ -41,11 +50,13 @@ SELECT interno.repartir_permisos(ARRAY['cai.administrar'], 'Núcleo 0.7.0: rango
 -- 1) Configuración de la empresa (la cambia el dueño con configurar_empresa, 027)
 -- ---------------------------------------------------------------------
 ALTER TABLE public.empresa
+  -- Con un régimen fiscal activo (fiscal_hn):
   -- solo_factura (defecto): toda venta lleva factura con CAI.
-  -- factura_o_recibo: se elige en cada venta (defecto factura).
-  -- solo_recibo: negocio que aún no factura: recibo interno sin CAI.
+  -- factura_o_ticket: se elige en cada venta (defecto factura).
+  -- solo_ticket: el negocio aún no factura: ticket interno sin CAI.
+  -- Sin régimen fiscal activo, toda venta es ticket.
   ADD COLUMN documento_venta_modo   text NOT NULL DEFAULT 'solo_factura'
-    CHECK (documento_venta_modo IN ('solo_factura', 'factura_o_recibo', 'solo_recibo')),
+    CHECK (documento_venta_modo IN ('solo_factura', 'factura_o_ticket', 'solo_ticket')),
   ADD COLUMN cai_dias_alerta        integer NOT NULL DEFAULT 30 CHECK (cai_dias_alerta BETWEEN 0 AND 365),
   ADD COLUMN cai_porcentaje_alerta  integer NOT NULL DEFAULT 80 CHECK (cai_porcentaje_alerta BETWEEN 1 AND 100),
   ADD COLUMN leyenda_factura        text CHECK (leyenda_factura IS NULL OR length(leyenda_factura) BETWEEN 1 AND 300);
@@ -158,19 +169,6 @@ BEGIN
   o_numero := o_rango.prefijo || '-' || lpad(o_rango.ultimo_numero::text, 8, '0');
 END $$;
 
--- Número de un recibo interno (sin CAI): correlativo propio de la caja.
--- REC-001-001-00000001 (establecimiento y punto de emisión de la caja).
-CREATE FUNCTION interno.siguiente_recibo(p_empresa_id uuid, p_caja_id uuid) RETURNS text
-LANGUAGE plpgsql SECURITY DEFINER SET search_path = '' AS $$
-DECLARE
-  v_n   bigint := interno.siguiente_numero(p_empresa_id, 'recibo:' || p_caja_id);
-  v_pre text;
-BEGIN
-  SELECT s.codigo || '-' || c.punto_emision INTO v_pre
-    FROM public.caja c JOIN public.sucursal s ON s.id = c.sucursal_id WHERE c.id = p_caja_id;
-  RETURN 'REC-' || v_pre || '-' || lpad(v_n::text, 8, '0');
-END $$;
-
 -- ¿Quién puede ver los CAI y sus alertas? (cai.administrar, ventas.ver o
 -- quien vende: el cajero debe saber si su caja se queda sin números).
 CREATE FUNCTION interno.exigir_lectura_cai(p_empresa_id uuid) RETURNS void
@@ -192,7 +190,7 @@ END $$;
 -- ---------------------------------------------------------------------
 -- 4) RPC
 -- ---------------------------------------------------------------------
--- registrar_cai(empresa, datos)   cai.administrar (dueño y admin), módulo ventas
+-- registrar_cai(empresa, datos)   cai.administrar (dueño y admin), módulo fiscal_hn
 -- datos = {"caja_id":"...","tipo_documento":"factura"|"nota_credito"|"nota_debito",
 --          "cai":"A1B2C3-D4E5F6-A7B8C9-D0E1F2-A3B4C5-D6",
 --          "rango_desde":"001-001-01-00000001","rango_hasta":"001-001-01-00005000",
@@ -216,7 +214,7 @@ DECLARE
   r        public.cai_rango;
   x        public.cai_rango;
 BEGIN
-  PERFORM interno.exigir_escritura(p_empresa_id, 'cai.administrar', 'ventas');
+  PERFORM interno.exigir_escritura(p_empresa_id, 'cai.administrar', 'fiscal_hn');
   PERFORM interno.exigir_claves(p_datos, ARRAY['caja_id', 'tipo_documento', 'cai', 'rango_desde', 'rango_hasta',
                                                'fecha_limite_emision', 'ultimo_usado']);
   SELECT * INTO v_caja FROM public.caja c
@@ -302,7 +300,7 @@ RETURNS jsonb
 LANGUAGE plpgsql SECURITY DEFINER SET search_path = '' AS $$
 DECLARE r public.cai_rango;
 BEGIN
-  PERFORM interno.exigir_escritura(p_empresa_id, 'cai.administrar', 'ventas');
+  PERFORM interno.exigir_escritura(p_empresa_id, 'cai.administrar', 'fiscal_hn');
   IF length(trim(coalesce(p_motivo, ''))) < 5 THEN
     RAISE EXCEPTION 'FALTA_MOTIVO: escriba por qué se desactiva el rango (mínimo 5 letras).';
   END IF;
@@ -325,7 +323,7 @@ RETURNS jsonb
 LANGUAGE plpgsql SECURITY DEFINER SET search_path = '' AS $$
 DECLARE r public.cai_rango;
 BEGIN
-  PERFORM interno.exigir_escritura(p_empresa_id, 'cai.administrar', 'ventas');
+  PERFORM interno.exigir_escritura(p_empresa_id, 'cai.administrar', 'fiscal_hn');
   IF length(trim(coalesce(p_motivo, ''))) < 5 THEN
     RAISE EXCEPTION 'FALTA_MOTIVO: escriba por qué se reactiva el rango (mínimo 5 letras).';
   END IF;
@@ -409,7 +407,7 @@ BEGIN
       END IF;
     END IF;
   END LOOP;
-  IF e.documento_venta_modo <> 'solo_recibo' THEN
+  IF e.documento_venta_modo <> 'solo_ticket' AND public.modulo_esta_activo(p_empresa_id, 'fiscal_hn') THEN
     FOR r IN SELECT c.id, c.nombre FROM public.caja c JOIN public.sucursal s ON s.id = c.sucursal_id
               WHERE c.empresa_id = p_empresa_id AND c.activa AND s.activa
                 AND NOT EXISTS (SELECT 1 FROM public.cai_rango x WHERE x.caja_id = c.id AND x.tipo_documento = 'factura'
@@ -425,7 +423,56 @@ BEGIN
 END $$;
 
 -- ---------------------------------------------------------------------
--- 6) Seguridad
+-- 6) Despacho por régimen fiscal (lo único que ve el núcleo de ventas)
+-- ---------------------------------------------------------------------
+-- Régimen fiscal activo de la empresa: un módulo cuyo código empieza con
+-- "fiscal_" (a lo más uno activo). NULL = sin régimen (ventas con ticket).
+CREATE FUNCTION interno.regimen_fiscal(p_empresa_id uuid) RETURNS text
+LANGUAGE sql STABLE SECURITY DEFINER SET search_path = '' AS $$
+  SELECT min(m.modulo) FROM public.modulo_activo m
+   WHERE m.empresa_id = p_empresa_id AND m.activo AND m.modulo LIKE 'fiscal\_%'
+$$;
+
+-- Número fiscal de un documento (factura, nota de crédito, nota de débito)
+-- según el régimen activo. Devuelve el número y los datos fiscales que el
+-- documento debe guardar e imprimir. Un régimen nuevo agrega su rama aquí.
+CREATE FUNCTION interno.numero_fiscal(p_empresa_id uuid, p_caja_id uuid, p_tipo text, p_fecha date,
+                                      OUT o_numero text, OUT o_datos jsonb)
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = '' AS $$
+DECLARE
+  v_reg text := interno.regimen_fiscal(p_empresa_id);
+  rf    record;
+  r     public.cai_rango;
+BEGIN
+  IF v_reg = 'fiscal_hn' THEN
+    SELECT * INTO rf FROM interno.asignar_numero_fiscal(p_empresa_id, p_caja_id, p_tipo, p_fecha);
+    r := rf.o_rango;
+    o_numero := rf.o_numero;
+    o_datos := jsonb_build_object('regimen', 'fiscal_hn', 'cai_rango_id', r.id, 'cai', r.cai,
+      'rango_desde', r.rango_desde, 'rango_hasta', r.rango_hasta,
+      'fecha_limite_emision', to_char(r.fecha_limite_emision, 'YYYY-MM-DD'));
+    RETURN;
+  END IF;
+  RAISE EXCEPTION 'MODULO_INACTIVO: la empresa no tiene un régimen fiscal activo para emitir %; emita un ticket interno o pida activar el módulo fiscal.',
+    replace(p_tipo, '_', ' ');
+END $$;
+
+-- Solo un régimen fiscal activo a la vez.
+CREATE FUNCTION interno.un_regimen_fiscal() RETURNS trigger
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = '' AS $$
+BEGIN
+  IF NEW.activo AND NEW.modulo LIKE 'fiscal\_%' AND EXISTS (
+       SELECT 1 FROM public.modulo_activo m WHERE m.empresa_id = NEW.empresa_id AND m.activo
+          AND m.modulo LIKE 'fiscal\_%' AND m.modulo <> NEW.modulo) THEN
+    RAISE EXCEPTION 'NO_PERMITIDO: la empresa ya tiene otro régimen fiscal activo; desactívelo primero.';
+  END IF;
+  RETURN NEW;
+END $$;
+CREATE TRIGGER un_regimen_fiscal BEFORE INSERT OR UPDATE ON public.modulo_activo
+  FOR EACH ROW EXECUTE FUNCTION interno.un_regimen_fiscal();
+
+-- ---------------------------------------------------------------------
+-- 7) Seguridad
 -- ---------------------------------------------------------------------
 ALTER TABLE public.cai_rango ENABLE ROW LEVEL SECURITY;
 CREATE TRIGGER no_vaciar BEFORE TRUNCATE ON public.cai_rango
@@ -440,8 +487,10 @@ REVOKE EXECUTE ON FUNCTION
   interno.proteger_cai_rango(),
   interno.estado_cai(public.cai_rango, date),
   interno.asignar_numero_fiscal(uuid, uuid, text, date),
-  interno.siguiente_recibo(uuid, uuid),
-  interno.exigir_lectura_cai(uuid)
+    interno.exigir_lectura_cai(uuid),
+  interno.regimen_fiscal(uuid),
+  interno.numero_fiscal(uuid, uuid, text, date),
+  interno.un_regimen_fiscal()
 FROM PUBLIC, anon, authenticated, service_role;
 REVOKE EXECUTE ON FUNCTION
   public.registrar_cai(uuid, jsonb),

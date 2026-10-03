@@ -217,6 +217,57 @@ CREATE FUNCTION pruebas.comprobante(p_nombre text) RETURNS jsonb LANGUAGE sql ST
   $$ SELECT jsonb_build_object('ruta', pruebas.empresa('A')::text || '/comprobantes/' || p_nombre, 'tipo', 'image/jpeg',
                                'sha256', encode(sha256(convert_to(p_nombre, 'UTF8')), 'hex')) $$;
 
+-- Etapa 2b-2a: inventario + dinero + módulo "ventas" en la empresa A y (como dueño):
+--   compras al crédito (PROV1, B1, 05/01/2026): P1 100 und a L 10.00, P2 50 lb a L 15.00,
+--   P3 10 gal a L 300.00 (valor 475,000);
+--   clientes CLI1 (límite L 5,000.00, plazo 30, RTN) y CLI2 (sin límite);
+--   servicio S1 "Mano de obra" (hora, ISV15, L 230.00 con ISV, costo estimado L 80.00).
+--   p_fiscal = true: activa el régimen fiscal_hn y registra un CAI de factura
+--   para la caja 001 (001-001-01-00000001 a 001-001-01-00001000, vence en 180 días).
+-- Deja la sesión como dueno_a. (plpgsql: carga también en bases viejas.)
+CREATE FUNCTION pruebas.preparar_ventas(p_fiscal boolean DEFAULT true) RETURNS void LANGUAGE plpgsql AS $$
+DECLARE e uuid := pruebas.empresa('A');
+BEGIN
+  PERFORM pruebas.preparar_inventario();
+  PERFORM pruebas.preparar_dinero();
+  PERFORM pruebas.como('superusuario');
+  INSERT INTO public.modulo_activo (empresa_id, modulo) VALUES (e, 'ventas')
+  ON CONFLICT (empresa_id, modulo) DO UPDATE SET activo = true;
+  IF p_fiscal THEN
+    INSERT INTO public.modulo_activo (empresa_id, modulo) VALUES (e, 'fiscal_hn')
+    ON CONFLICT (empresa_id, modulo) DO UPDATE SET activo = true;
+  END IF;
+  PERFORM pruebas.como('dueno_a');
+  PERFORM public.registrar_compra(e, jsonb_build_object('proveedor_id', pruebas.id('PROV1'), 'bodega_id', pruebas.id('B1'),
+    'numero_documento', 'F-INI-1', 'fecha', '2026-01-05', 'condicion', 'credito',
+    'lineas', jsonb_build_array(
+      jsonb_build_object('producto_id', pruebas.id('P1'), 'cantidad', 100, 'costo_unitario', 1000),
+      jsonb_build_object('producto_id', pruebas.id('P2'), 'cantidad', 50, 'costo_unitario', 1500),
+      jsonb_build_object('producto_id', pruebas.id('P3'), 'cantidad', 10, 'costo_unitario', 30000))), gen_random_uuid());
+  PERFORM pruebas.guardar('CLI1', (public.crear_tercero(e, '{"nombre": "Constructora Ríos", "es_cliente": true,
+    "rtn": "08011999000222", "limite_credito_centavos": 500000, "plazo_dias": 30}', gen_random_uuid())->>'tercero_id')::uuid);
+  PERFORM pruebas.guardar('CLI2', (public.crear_tercero(e, '{"nombre": "Juan Pérez", "es_cliente": true}',
+    gen_random_uuid())->>'tercero_id')::uuid);
+  PERFORM pruebas.guardar('S1', (public.crear_producto(e, jsonb_build_object('codigo', 'MO-HORA', 'nombre', 'Mano de obra',
+    'tipo', 'servicio', 'unidad_id', (SELECT id FROM public.unidad WHERE empresa_id IS NULL AND codigo = 'HORA'),
+    'precio_venta_centavos', 23000, 'costo_estimado_centavos', 8000, 'permite_fracciones', true), gen_random_uuid())->>'producto_id')::uuid);
+  IF p_fiscal THEN
+    PERFORM pruebas.guardar('CAI1', (public.registrar_cai(e, jsonb_build_object('caja_id', pruebas.id('CAJA001'),
+      'tipo_documento', 'factura', 'cai', 'A1B2C3-D4E5F6-A7B8C9-D0E1F2-A3B4C5-D6',
+      'rango_desde', '001-001-01-00000001', 'rango_hasta', '001-001-01-00001000',
+      'fecha_limite_emision', to_char(public.hoy_local(e) + 180, 'YYYY-MM-DD')))->>'cai_rango_id')::uuid);
+  END IF;
+END $$;
+
+-- Una venta (jsonb) de una línea con un solo pago por el total.
+CREATE FUNCTION pruebas.venta(p_producto text, p_cantidad numeric, p_forma text DEFAULT 'efectivo',
+                              p_cliente text DEFAULT NULL) RETURNS jsonb
+LANGUAGE sql STABLE AS $$
+  SELECT jsonb_strip_nulls(jsonb_build_object('cliente_id', pruebas.id(p_cliente),
+    'lineas', jsonb_build_array(jsonb_build_object('producto_id', pruebas.id(p_producto), 'cantidad', p_cantidad)),
+    'pagos', jsonb_build_array(jsonb_build_object('forma', p_forma))))
+$$;
+
 GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA pruebas TO anon, authenticated, service_role;
 
 -- ---------------------------------------------------------------------

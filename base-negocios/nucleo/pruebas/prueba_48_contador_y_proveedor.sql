@@ -29,7 +29,7 @@ BEGIN
   PERFORM pruebas.como('contador');
   p := public.mi_perfil();
   PERFORM pruebas.afirmar(p->'rol'->>'codigo' = 'contador'
-    AND p->'permisos' = '["aprobaciones.ver", "bitacora.ver", "compras.ver", "contabilidad.ver", "dinero.ver", "inventario.costos", "inventario.ver", "terceros.ver"]',
+    AND p->'permisos' = '["aprobaciones.ver", "bitacora.ver", "compras.ver", "contabilidad.ver", "dinero.ver", "inventario.costos", "inventario.ver", "terceros.ver", "ventas.ver"]',
     'permisos del contador: ' || (p->'permisos')::text);
   PERFORM pruebas.afirmar((SELECT count(*) FROM public.asiento WHERE empresa_id = e) = 3, 've asientos');
   PERFORM pruebas.afirmar((SELECT saldo_final_centavos FROM public.saldo_cuentas(e, NULL, '2026-12-31') WHERE codigo = '1.1.03.01') = 15000, 've saldos: inventario 15,000');

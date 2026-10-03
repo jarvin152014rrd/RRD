@@ -22,15 +22,15 @@ BEGIN
   PERFORM pruebas.como('admin_a');
   p := public.mi_perfil(e);
   PERFORM pruebas.afirmar(p->'rol'->>'codigo' = 'admin', 'rol admin');
-  PERFORM pruebas.afirmar(p->'permisos' = '["adjuntos.agregar", "aprobaciones.ver", "arranque.gestionar", "asientos.anular", "asientos.registrar", "bitacora.ver", "bodegas.administrar", "caja.supervisar", "caja.turno", "compras.anular", "compras.pagar", "compras.registrar", "compras.ver", "contabilidad.ver", "dinero.administrar", "dinero.anular", "dinero.trasladar", "dinero.ver", "gastos.anular", "gastos.aprobar", "gastos.registrar", "inventario.ajustar", "inventario.anular", "inventario.carga_inicial", "inventario.costos", "inventario.trasladar", "inventario.ver", "periodos.cerrar", "productos.editar", "productos.precios", "sucursales.administrar", "terceros.credito", "terceros.desactivar", "terceros.editar", "terceros.ver", "usuarios.administrar"]', 'permisos admin: ' || (p->'permisos')::text);
+  PERFORM pruebas.afirmar(p->'permisos' = '["adjuntos.agregar", "aprobaciones.ver", "arranque.gestionar", "asientos.anular", "asientos.registrar", "bitacora.ver", "bodegas.administrar", "cai.administrar", "caja.supervisar", "caja.turno", "compras.anular", "compras.pagar", "compras.registrar", "compras.ver", "contabilidad.ver", "dinero.administrar", "dinero.anular", "dinero.trasladar", "dinero.ver", "gastos.anular", "gastos.aprobar", "gastos.registrar", "inventario.ajustar", "inventario.anular", "inventario.carga_inicial", "inventario.costos", "inventario.trasladar", "inventario.ver", "periodos.cerrar", "productos.editar", "productos.precios", "sucursales.administrar", "terceros.credito", "terceros.desactivar", "terceros.editar", "terceros.ver", "usuarios.administrar", "ventas.anular", "ventas.aprobar", "ventas.cobrar", "ventas.cotizar", "ventas.promociones", "ventas.solicitar_anulacion", "ventas.vender", "ventas.ver"]', 'permisos admin: ' || (p->'permisos')::text);
 
   -- Cajero y vendedor: sin contabilidad ni costos; ven existencias y registran clientes (0.3.0).
   PERFORM pruebas.como('cajero_a');
   p := public.mi_perfil();
-  PERFORM pruebas.afirmar(p->'rol'->>'codigo' = 'cajero' AND p->'permisos' = '["adjuntos.agregar", "caja.turno", "inventario.ver", "terceros.editar", "terceros.ver"]', 'cajero: su turno, comprobantes, existencias y clientes');
+  PERFORM pruebas.afirmar(p->'rol'->>'codigo' = 'cajero' AND p->'permisos' = '["adjuntos.agregar", "caja.turno", "inventario.ver", "terceros.editar", "terceros.ver", "ventas.cobrar", "ventas.cotizar", "ventas.solicitar_anulacion", "ventas.vender"]', 'cajero: su turno, comprobantes, existencias y clientes');
   PERFORM pruebas.como('vendedor_a');
   p := public.mi_perfil();
-  PERFORM pruebas.afirmar(p->'rol'->>'codigo' = 'vendedor' AND p->'permisos' = '["inventario.ver", "terceros.editar", "terceros.ver"]' AND p->'modulos' = '["contabilidad"]', 'vendedor');
+  PERFORM pruebas.afirmar(p->'rol'->>'codigo' = 'vendedor' AND p->'permisos' = '["inventario.ver", "terceros.editar", "terceros.ver", "ventas.cotizar", "ventas.solicitar_anulacion", "ventas.vender"]' AND p->'modulos' = '["contabilidad"]', 'vendedor');
 
   -- Proveedor: sin permisos; con soporte, solo lectura.
   PERFORM pruebas.como('proveedor');
@@ -40,7 +40,7 @@ BEGIN
   PERFORM public.otorgar_acceso_soporte(e, now() + interval '1 day', 'Configurar reportes');
   PERFORM pruebas.como('proveedor');
   p := public.mi_perfil();
-  PERFORM pruebas.afirmar(p->'permisos' = '["aprobaciones.ver", "bitacora.ver", "compras.ver", "contabilidad.ver", "dinero.ver", "inventario.costos", "terceros.ver"]', 'proveedor con soporte');
+  PERFORM pruebas.afirmar(p->'permisos' = '["aprobaciones.ver", "bitacora.ver", "compras.ver", "contabilidad.ver", "dinero.ver", "inventario.costos", "terceros.ver", "ventas.ver"]', 'proveedor con soporte');
   PERFORM pruebas.afirmar(p->>'soporte_vigente_hasta' ~ '^\d{4}-\d{2}-\d{2}T', 'muestra hasta cuándo');
 
   -- Estados de licencia.

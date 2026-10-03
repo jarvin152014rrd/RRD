@@ -58,7 +58,7 @@ BEGIN
   PERFORM pruebas.debe_fallar(format('SELECT public.crear_producto(%L, %L, gen_random_uuid())', e, '{"codigo":"cem-50","nombre":"X"}'), 'YA_EXISTE', 'código repetido (minúsculas)');
   PERFORM pruebas.debe_fallar(format('SELECT public.crear_producto(%L, %L, gen_random_uuid())', e, '{"codigo":"X2","nombre":"X","codigo_barras":"7420000000505"}'), 'YA_EXISTE', 'código de barras repetido');
   PERFORM pruebas.debe_fallar(format('SELECT public.crear_producto(%L, %L, gen_random_uuid())', e, '{"codigo":"X 2","nombre":"X"}'), 'DATO_INVALIDO', 'código con espacio');
-  PERFORM pruebas.debe_fallar(format('SELECT public.crear_producto(%L, %L, gen_random_uuid())', e, '{"codigo":"X2","nombre":"X","tipo_impuesto":"ISV12"}'), 'ISV15, ISV18 o EXENTO', 'impuesto inventado');
+  PERFORM pruebas.debe_fallar(format('SELECT public.crear_producto(%L, %L, gen_random_uuid())', e, '{"codigo":"X2","nombre":"X","tipo_impuesto":"ISV12"}'), 'IMPUESTO_INVALIDO', 'impuesto inventado');
   PERFORM pruebas.debe_fallar(format('SELECT public.crear_producto(%L, %L, gen_random_uuid())', e, '{"codigo":"X2","nombre":"X","precio_venta_centavos":10.5}'), 'centavos', 'precio con decimales');
   PERFORM pruebas.debe_fallar(format('SELECT public.crear_producto(%L, %L, gen_random_uuid())', e, '{"codigo":"X2","nombre":"X","precio_venta_centavos":-1}'), 'centavos', 'precio negativo');
   PERFORM pruebas.debe_fallar(format('SELECT public.crear_producto(%L, %L, gen_random_uuid())', e, '{"codigo":"X2","nombre":"X","campos_extra":{"color":"rojo"}}'), 'CAMPO_EXTRA_INVALIDO', 'campo extra inexistente');
