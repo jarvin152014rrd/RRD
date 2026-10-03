@@ -31,7 +31,7 @@ Si la bodega queda vacía sale todo su valor y la diferencia contra el costo
 original va a 5.1.01.02 (ajuste de costo; sale en null a quien no tiene
 `inventario.costos`). Fecha por defecto: hoy (nunca antes de la compra).
 
-**`pagar_proveedor(empresa, documento, monto_centavos, fecha, forma_pago, id_operacion, referencia?, cuenta_pago?)`**
+**`pagar_proveedor(empresa, documento, monto_centavos, fecha, forma_pago, id_operacion, referencia?, cuenta_pago?, cuenta_dinero_id?)`**
 (compras.pagar): abono a una compra al crédito o a un saldo inicial
 (`documento` = `documento_id` de `v_cxp_documento`). Nunca más que su saldo
 (`PAGO_EXCEDE_SALDO`; los pagos anulados no cuentan). Asiento Dr 2.1.01.01 /
@@ -69,6 +69,14 @@ vuelve a 0 y la factura debe 75,000.
 módulo activo esa cuenta no acepta asientos manuales, y el módulo no se
 activa si 2.1.01.01 ya tiene saldo que no explica (`MODULO_CON_SALDO`, ver
 PROCEDIMIENTOS P-07).
+
+**Cuentas de dinero (0.5.0, ver `dinero.md`):** una compra de contado acepta
+`"cuenta_dinero_id"` (la forma de pago sale del tipo de cuenta) y
+`pagar_proveedor` el último parámetro `cuenta_dinero_id` (forma de pago puede
+ir en NULL). Pagar desde una cuenta de dinero (o con el código de su
+subcuenta) deja su rastro y nunca la deja en negativo; las anulaciones
+devuelven el dinero a esa misma cuenta. No se paga desde tránsito, POS ni
+transferencias por confirmar. Las llamadas de antes siguen igual.
 
 **Reintentos:** el `id_operacion` solo se reconoce como reintento si es del
 mismo tipo (compra, pago, anulación...); si ya se usó en otra cosa: `ID_OPERACION_USADO`.

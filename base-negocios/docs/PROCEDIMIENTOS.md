@@ -16,6 +16,10 @@ se anota en el registro; no se improvisa.
   herramienta lo **avisa y lo muestra**: léalo antes de confirmar.
 - Para confirmar se escribe un identificador único: la **referencia del
   proyecto de Supabase**, o el **nombre de la empresa** que ya está en la base.
+- `SIN_PREGUNTAR=1` y `SIN_RESPALDO=1` solo valen con la base local de
+  pruebas (el socket de `base-negocios/.pgdata`, o el que se declare en
+  `BASE_LOCAL_SOCKET`). `localhost` o `127.0.0.1` NO cuentan como locales:
+  por un túnel pueden ser la base de un cliente.
 
 ---
 
@@ -227,3 +231,31 @@ módulo no conoce, activar el módulo da `MODULO_CON_SALDO`. Pasos:
 
 Si la empresa usa otro código porque 3.3.01.03 ya era suyo, el mensaje de
 error dice cuál (3.3.01.04...).
+
+---
+
+## P-08 Empezar a usar el módulo "dinero"
+
+**Objetivo:** que cada lugar con dinero tenga su cuenta y su saldo real, con
+rastro desde el primer día. **Responsable:** dueño (saldos), admin (cuentas),
+proveedor (activar el módulo).
+
+1. Activar el módulo `dinero` (ficha o `modulo_activo`). Si 1.1.02.04
+   (diferencias de caja) tiene saldo que no explica, da `MODULO_CON_SALDO`.
+2. Crear las cuentas de dinero (`crear_cuenta_dinero`): cada banco (el número
+   completo solo sirve para enmascararlo: se guardan 4 dígitos), la caja chica
+   con su fondo fijo, la caja fuerte o caja general. La caja de cada punto de
+   emisión se crea sola al abrir su primer turno.
+3. El dueño carga el saldo de cada una con `registrar_saldo_inicial_dinero`
+   (con el estado de cuenta del banco o el conteo del efectivo, y su foto).
+   Si ese dinero ya estaba en los libros en 1.1.01.01/02/03 (cuentas de la
+   plantilla, sin rastro), usar `"contrapartida": "1.1.01.01"` para pasarlo;
+   si no, va contra Saldos de apertura.
+4. Revisar `donde_esta_mi_dinero`: "otras_cuentas_efectivo_sin_rastro" debe
+   quedar vacío (o explicado por el contador).
+5. Fijar los topes por puesto (`configurar_tope_rol`) y los días de alerta de
+   depósitos en tránsito (`configurar_empresa`), crear categorías de gasto y
+   pagos fijos.
+
+**Registro:** fecha, cuentas creadas, saldos iniciales con su comprobante
+(quedan en bitácora con usuario y hora).

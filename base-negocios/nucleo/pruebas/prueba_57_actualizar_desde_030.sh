@@ -42,9 +42,10 @@ COMMIT;
 SQL
 [ "$(q "SELECT pruebas.saldo_libros(pruebas.empresa('A'), '3.1.01.01')")" = "60000" ] || falla "la carga de 0.3.0 no fue contra 3.1.01.01"
 
-# 3) Actualizar con migrar.sh (017-020).
+# 3) Actualizar con migrar.sh (017 en adelante).
 PGDATABASE="$VIEJA" SIN_PREGUNTAR=1 SIN_RESPALDO=1 bash "$RAIZ/herramientas/migrar.sh" >/dev/null || falla "no se pudo actualizar"
-[ "$(q "SELECT version_nucleo || '/' || ultima_migracion FROM public.version_esquema")" = "$(tr -d '[:space:]' < "$RAIZ/VERSION_NUCLEO")/20" ] || falla "versión final"
+ULTIMA="$(ls "$RAIZ"/nucleo/sql/migraciones/[0-9][0-9][0-9]_*.sql | tail -1 | xargs basename | cut -c1-3)"
+[ "$(q "SELECT version_nucleo || '/' || ultima_migracion FROM public.version_esquema")" = "$(tr -d '[:space:]' < "$RAIZ/VERSION_NUCLEO")/$((10#$ULTIMA))" ] || falla "versión final"
 
 # 4) Lo viejo se respeta.
 [ "$(q "SELECT nombre FROM public.cuenta WHERE empresa_id = pruebas.empresa('A') AND codigo = '3.3.01.03'")" = "Revaluaciones del cliente" ] \
@@ -57,7 +58,7 @@ PGDATABASE="$VIEJA" SIN_PREGUNTAR=1 SIN_RESPALDO=1 bash "$RAIZ/herramientas/migr
   || falla "volvió un permiso que el dueño había quitado"
 [ "$(q "SELECT count(*) FROM public.rol_permiso WHERE empresa_id = pruebas.empresa('A') AND rol = 'admin' AND permiso IN ('terceros.ver', 'inventario.anular')")" = "2" ] \
   || falla "el admin no recibió los permisos nuevos"
-[ "$(q "SELECT count(*) FROM public.rol_permiso WHERE empresa_id = pruebas.empresa('A') AND rol = 'contador'")" = "6" ] || falla "faltan permisos del contador"
+[ "$(q "SELECT count(*) FROM public.rol_permiso WHERE empresa_id = pruebas.empresa('A') AND rol = 'contador'")" = "8" ] || falla "faltan permisos del contador"
 [ "$(q "SELECT count(*) FROM public.permiso p WHERE NOT EXISTS (SELECT 1 FROM public.rol_permiso r WHERE r.empresa_id = pruebas.empresa('A') AND r.rol = 'dueno' AND r.permiso = p.codigo)")" = "0" ] \
   || falla "el dueño no tiene todos los permisos"
 # Precios de antes: SIN ISV (P1 1,500 -> con ISV 1,500 + 225 = 1,725). El defecto nuevo de la empresa: con ISV.

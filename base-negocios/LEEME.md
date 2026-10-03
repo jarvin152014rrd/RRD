@@ -6,7 +6,7 @@ La app será una PWA (página web instalable) y los datos vivirán en Supabase
 funciones SQL que guardan todo o nada. El navegador solo muestra y llama
 esas funciones.
 
-Versión del núcleo: ver `VERSION_NUCLEO` (hoy 0.4.0, correcciones de la etapa 2a). Cambios: `CHANGELOG.md`.
+Versión del núcleo: ver `VERSION_NUCLEO` (hoy 0.5.0, etapa 2b-1: dinero). Cambios: `CHANGELOG.md`.
 
 ## Carpetas
 
@@ -58,8 +58,12 @@ Qué hace cada migración:
 | 018_inventario_correcciones | Saldos de apertura, fecha atrasada, 0 unidades = L 0, fracciones, reactivar, anular documentos de inventario |
 | 019_compras_correcciones | anular pagos, saldos iniciales de proveedores, activar módulos con saldo |
 | 020_precios_isv | precio con o sin ISV, `precio_isv()`, `v_producto` |
+| 021_correcciones_revision_040 | id_operacion revisado después del candado, activar módulos con candado, factura de saldo inicial por uuid, fracciones sin carrera |
+| 022_dinero | cuentas de dinero con su subcuenta, rastro del dinero, depósitos (en tránsito), retiros, traslados, saldos iniciales, comprobantes, compras con cuenta de dinero, "dónde está mi dinero" y estado de cuenta |
+| 023_caja_turnos | turnos de caja por cajero, arqueo (conteo por denominación), diferencias pendientes y su resolución |
+| 024_gastos | categorías de gasto, gastos con ISV, topes por puesto, aprobaciones (genéricas), caja chica (cuadre), pagos fijos |
 
-Detalle de cada módulo: `nucleo/docs/`.
+Detalle de cada módulo: `nucleo/docs/` (dinero, caja y gastos en `dinero.md`, `caja.md`, `gastos.md`).
 
 ## Cómo correr las pruebas (un comando)
 
@@ -108,7 +112,13 @@ Si algo falla, termina con error (código distinto de 0).
     cuentas no aceptan asientos manuales si su módulo está activo, y el
     módulo no se activa si ya tienen un saldo que no explica.
 15. **Secretos fuera de la vista.** Las herramientas nunca pasan la clave de
-    la base como argumento; los respaldos salen cifrados (P-03).
+    la base (ni la ficha del cliente) como argumento; los respaldos salen
+    cifrados (P-03). "Base local de pruebas" es solo el socket de `.pgdata`
+    (o `BASE_LOCAL_SOCKET`), nunca `localhost`.
+16. **Rastro del dinero.** Cada lugar con dinero es una cuenta de dinero con
+    su subcuenta; todo lo que entra o sale deja una fila (de dónde, a dónde,
+    quién, equipo, referencia, turno). Su suma = la contabilidad; su
+    subcuenta no acepta asientos manuales; ninguna queda en negativo.
 
 ## Funciones que usará la app (RPC)
 
@@ -138,17 +148,33 @@ Si algo falla, termina con error (código distinto de 0).
 | `trasladar_inventario(empresa, origen, destino, fecha, lineas, id_operacion, nota?)` | traslado entre bodegas | inventario.trasladar |
 | `cargar_saldo_inicial(empresa, bodega, fecha, lineas, id_operacion, motivo?)` | apertura del inventario (contra Saldos de apertura) | inventario.carga_inicial |
 | `anular_documento_inventario(documento, motivo, id_operacion, fecha?)` | anular carga inicial, ajuste o traslado | inventario.anular + el del tipo |
-| `registrar_compra(empresa, datos, id_operacion)` | compra contado / crédito | compras.registrar |
+| `registrar_compra(empresa, datos, id_operacion)` | compra contado (acepta `cuenta_dinero_id`) / crédito | compras.registrar |
 | `anular_compra(compra, motivo, id_operacion, fecha?)` | contra-movimiento + contra-asiento | compras.anular |
-| `pagar_proveedor(empresa, documento, monto, fecha, forma_pago, id_operacion, referencia?, cuenta_pago?)` | abono a una compra o saldo inicial desde la caja o banco elegido | compras.pagar |
+| `pagar_proveedor(empresa, documento, monto, fecha, forma_pago, id_operacion, referencia?, cuenta_pago?, cuenta_dinero_id?)` | abono a una compra o saldo inicial desde la caja o banco elegido (con rastro si es cuenta de dinero) | compras.pagar |
 | `anular_pago_proveedor(pago, motivo, id_operacion, fecha?)` | contra-asiento a la misma cuenta de dinero | compras.anular |
 | `registrar_saldo_inicial_cxp(empresa, datos, id_operacion)` / `anular_saldo_inicial_cxp(saldo, motivo, id_operacion, fecha?)` | facturas de proveedores pendientes al empezar | compras.saldo_inicial (solo dueño) |
 | `precio_isv(precio, incluye_isv, impuesto, cantidad?)` | precio sin ISV, ISV y con ISV (regla única de redondeo) | con sesión |
+| `crear_cuenta_dinero(empresa, datos)` / `editar_cuenta_dinero` / `desactivar_cuenta_dinero` / `reactivar_cuenta_dinero` | cajas, bancos, caja chica, POS, transferencias, tránsito (crea su subcuenta) | dinero.administrar |
+| `trasladar_dinero(empresa, datos, id_operacion)` | depósito (en tránsito), retiro, reposición de caja chica, traslado | dinero.trasladar |
+| `confirmar_deposito(operacion, id_operacion, fecha?, referencia?)` | el banco ya tiene el depósito | dinero.trasladar |
+| `anular_operacion_dinero(operacion, motivo, id_operacion, fecha?)` | contra-asiento | dinero.anular |
+| `registrar_saldo_inicial_dinero(empresa, datos, id_operacion)` | saldo de apertura de una cuenta de dinero | dinero.saldo_inicial (solo dueño) |
+| `agregar_adjunto(empresa, documento_tipo, documento, comprobante)` | foto o PDF del comprobante (solo agregar) | adjuntos.agregar |
+| `donde_esta_mi_dinero(empresa)` / `estado_cuenta_dinero(cuenta, desde, hasta)` | saldos por cuenta y tránsito / movimientos con origen o destino | dinero.ver |
+| `abrir_turno(empresa, caja, fondo, id_operacion, datos?)` / `cerrar_turno(turno, contado, id_operacion, datos?)` / `mi_turno(empresa)` | turno de caja por cajero con arqueo | caja.turno |
+| `resolver_diferencia(turno, destino, motivo, id_operacion, fecha?)` | faltante al cajero o a gasto; sobrante a otros ingresos | caja.supervisar |
+| `crear_categoria_gasto` / `desactivar_categoria_gasto` / `reactivar_categoria_gasto` | categorías ligadas a cuentas de gasto | dinero.administrar |
+| `registrar_gasto(empresa, datos, id_operacion)` / `anular_gasto(gasto, motivo, id_operacion, fecha?)` | gasto con ISV y comprobante (sobre el tope queda pendiente) | gastos.registrar / gastos.anular |
+| `resolver_aprobacion(aprobacion, aprobar, motivo, id_operacion, fecha?)` | aprobar o rechazar (dentro del tope del puesto) | gastos.aprobar |
+| `configurar_tope_rol(empresa, rol, tipo, sin_aprobacion, aprueba_hasta, motivo)` | topes por puesto | empresa.configurar (solo dueño) |
+| `cuadre_caja_chica(cuenta, contado?)` | fondo, gastos con y sin comprobante, esperado | dinero.ver |
+| `crear_pago_fijo` / `editar_pago_fijo` / `registrar_pago_fijo` / `pagos_fijos_proximos` / `reporte_pagos_fijos` | plantillas, próximos y vencidos, gasto real, total mensual | dinero.administrar / gastos.registrar / dinero.ver |
 | `crear_empresa_inicial(ficha jsonb)` | instalar cliente | solo service_role |
 
 Vistas: `v_existencia` (inventario.ver; costos solo con inventario.costos),
 `v_kardex` (inventario.costos), `v_cxp_documento` y `v_cxp_proveedor` (compras.ver),
-`v_producto` (precio sin y con ISV).
+`v_producto` (precio sin y con ISV), `v_cuenta_dinero`, `v_deposito_transito` (dinero.ver),
+`v_turno_caja`, `v_diferencia_cajero` (dinero.ver o el propio cajero), `v_gasto`, `v_aprobacion`.
 Detalle de cada módulo en `nucleo/docs/` (terceros, productos, inventario, compras, usuarios).
 
 Formato de `lineas` (montos en centavos):
@@ -171,7 +197,11 @@ busca ahí. Claves de hoy: `SIN_SESION`, `NO_PERTENECE`, `SIN_PERMISO`,
 `TERCERO_INVALIDO`, `PRODUCTO_INVALIDO`, `CAMPO_EXTRA_INVALIDO`, `BODEGA_INVALIDA`,
 `CANTIDAD_INVALIDA`, `EXISTENCIA_INSUFICIENTE`, `SALDO_INICIAL_YA_CARGADO`,
 `CUENTA_CONTROLADA`, `PAGO_EXCEDE_SALDO`, `ID_OPERACION_USADO`,
-`ENTRADA_FECHA_ATRASADA`, `MOVIMIENTOS_POSTERIORES`, `MODULO_CON_SALDO`.
+`ENTRADA_FECHA_ATRASADA`, `MOVIMIENTOS_POSTERIORES`, `MODULO_CON_SALDO`,
+`CUENTA_DINERO_INVALIDA`, `SALDO_INSUFICIENTE`, `TOPE_CAJA_CHICA`,
+`MOVIMIENTO_SIN_RASTRO`, `MONEDA_NO_SOPORTADA`, `TURNO_YA_ABIERTO`,
+`CAJA_OCUPADA`, `TURNO_CERRADO`, `FONDO_NO_CUADRA`, `SIN_TURNO_ABIERTO`,
+`YA_RESUELTO`, `TOPE_APROBACION`.
 
 **Regla:** si una migración usa una clave nueva, la agrega a `error_catalogo`
 en ese mismo archivo. La prueba 17 falla si alguna falta.

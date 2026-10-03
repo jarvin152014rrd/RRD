@@ -28,6 +28,9 @@
 #   RESPALDO_CLAVE_ARCHIVO     archivo (permisos 600) con la frase de gpg; si no
 #                              está, la frase se pide en la terminal (dos veces)
 #   RESPALDO_SIN_CIFRAR=1      solo base local de pruebas, si no hay age ni gpg
+#   BASE_LOCAL_SOCKET          carpeta del socket de OTRA base local de pruebas
+#                              que se quiere tratar como local (por defecto solo
+#                              cuenta el socket de base-negocios/.pgdata)
 # =====================================================================
 
 CONEX_TMP=""
@@ -51,10 +54,21 @@ conexion_limpiar() {
 # ¿Se puede preguntar algo en la terminal?
 conexion_hay_terminal() { { : < /dev/tty; } 2>/dev/null; }
 
-# Base local: socket (carpeta), localhost o 127.0.0.1.
+# Base local de PRUEBAS: SOLO el socket del servidor de pruebas del proyecto
+# (carpeta base-negocios/.pgdata, o PRUEBAS_PGDATA si se usa otra) o la
+# carpeta de socket que se declare a propósito en BASE_LOCAL_SOCKET.
+# "localhost", "127.0.0.1" o un socket cualquiera NO cuentan como locales:
+# por un túnel SSH o un proxy pueden ser la base de un cliente.
+CONEX_RAIZ="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 conexion_es_local() {
-  local h="${PGHOST:-}"
-  [ -z "$h" ] || [ "${h:0:1}" = "/" ] || [ "$h" = "localhost" ] || [ "$h" = "127.0.0.1" ] || [ "$h" = "::1" ]
+  local h="${PGHOST:-}" real permitido
+  [ -n "$h" ] && [ "${h:0:1}" = "/" ] && [ -d "$h" ] || return 1
+  real="$(cd "$h" 2>/dev/null && pwd -P)" || return 1
+  for permitido in "${PRUEBAS_PGDATA:-$CONEX_RAIZ/.pgdata}" "${BASE_LOCAL_SOCKET:-}"; do
+    [ -n "$permitido" ] && [ -d "$permitido" ] || continue
+    [ "$real" = "$(cd "$permitido" && pwd -P)" ] && return 0
+  done
+  return 1
 }
 
 # Referencia del proyecto de Supabase (o nada) a partir del host y usuario.

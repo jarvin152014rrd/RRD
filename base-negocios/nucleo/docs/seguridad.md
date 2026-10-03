@@ -17,6 +17,12 @@
   `inventario.costos` / `compras.ver` (financieros: el proveedor solo los
   lee con soporte). `v_existencia` muestra cantidades con `inventario.ver`
   y oculta costos a quien no tiene `inventario.costos`.
+- Dinero (022-024): cuentas de dinero, rastro, operaciones, pagos fijos,
+  gastos y turnos piden `dinero.ver` (financiero); cada cajero ve sus turnos y
+  cada quien los gastos, solicitudes y comprobantes que hizo. Aprobaciones:
+  `aprobaciones.ver`. Las vistas no llaman funciones de `interno` (las
+  ejecutaría el usuario); el nombre de un compañero sale de `nombre_usuario()`,
+  que solo responde a alguien de la misma empresa.
 - `cambiar_permiso_rol(empresa, rol, permiso, otorgar, motivo)`: motivo
   obligatorio; al dueño no se le quita `permisos.editar`; al contador solo se
   le dan permisos de lectura.

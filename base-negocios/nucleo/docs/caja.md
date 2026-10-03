@@ -1,0 +1,60 @@
+# Turnos de caja por cajero (023_caja_turnos) — módulo "dinero"
+
+**Reglas:** un cajero no tiene dos turnos abiertos; una caja no tiene dos
+cajeros a la vez. La caja (punto de emisión) usa su cuenta de dinero de
+efectivo; si no tiene, se crea al abrir el primer turno ("Efectivo <caja> (001-001)").
+
+## Abrir — `abrir_turno(empresa, caja, fondo_centavos, id_operacion, datos?)` (caja.turno)
+
+```json
+{"conteo":[{"denominacion_centavos":10000,"cantidad":5}], "equipo":"Caja 1",
+ "cuenta_origen_id":"<caja fuerte>", "nota":"..."}
+```
+- El fondo puede ir como monto, como conteo por denominación o los dos (deben coincidir).
+- El fondo contado debe ser lo que la caja tiene en el sistema. Si no:
+  `FONDO_NO_CUADRA`, o con `cuenta_origen_id` (pide dinero.trasladar) se trae
+  o se lleva la diferencia desde esa cuenta en un traslado aparte (no cuenta
+  como entrada del turno).
+- `mi_turno(empresa)`: el turno abierto del usuario, **sin el esperado**
+  (conteo a ciegas).
+
+## Durante el turno
+
+Todo lo que entra o sale de esa caja (traslados, depósitos, gastos, pagos y,
+en 2b-2, cobros) queda marcado con el turno en el rastro del dinero.
+Para la etapa 2b-2: `interno.exigir_turno_abierto(empresa)` da el turno abierto
+del usuario o `SIN_TURNO_ABIERTO` (sin turno no se cobra en efectivo).
+
+## Cerrar — `cerrar_turno(turno, contado_centavos, id_operacion, datos?)`
+
+(caja.turno; el turno de otro cajero pide caja.supervisar). `datos`: `conteo`, `nota`, `equipo`, `fecha`.
+- **Esperado = fondo + entradas − salidas** del turno (= saldo de la caja en el sistema).
+- **Diferencia = contado − esperado** (− falta, + sobra). La caja queda con lo
+  contado y la diferencia queda **pendiente** en 1.1.02.04 Diferencias de caja
+  por resolver (faltante al debe, sobrante al haber). Esa cuenta no acepta
+  asientos manuales.
+
+Ejemplo (prueba 63): fondo 50,000; entra 10,000; salen 20,000 (depósito) y
+5,000 (gasto): esperado 35,000. Cuenta 34,000: faltan 1,000.
+
+## Resolver — `resolver_diferencia(turno, destino, motivo, id_operacion, fecha?)` (caja.supervisar)
+
+| Diferencia | destino | asiento |
+|---|---|---|
+| faltante | `cobrar_al_cajero` | Dr 1.1.02.05 CxC empleados / Cr 1.1.02.04 |
+| faltante | `gasto` | Dr 6.1.02.11 Faltantes de caja / Cr 1.1.02.04 |
+| sobrante | `otros_ingresos` | Dr 1.1.02.04 / Cr 4.2.01.03 Sobrantes de caja |
+
+Con motivo, una sola vez. Nadie resuelve la diferencia de su propio turno
+(salvo el dueño). Si la empresa ya usaba esos códigos, se usó el siguiente
+libre (ver `interno.cuenta_de`).
+
+## Lecturas
+
+- `v_turno_caja`: cada turno (fondo, entradas, salidas, esperado, contado,
+  diferencia, estado y resolución). dinero.ver ve todos; cada cajero ve los suyos.
+- `v_diferencia_cajero`: por cajero: turnos, con diferencia, faltantes,
+  sobrantes, pendiente, cobrado al cajero, enviado a gasto, a otros ingresos.
+
+`desactivar_caja` no deja desactivar una caja con turno abierto.
+Permisos por defecto: caja.turno = dueño, admin, cajero; caja.supervisar = dueño, admin.

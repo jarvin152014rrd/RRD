@@ -43,7 +43,7 @@
     "modulos": {
       "description": "Módulos activos. 'contabilidad' siempre se activa.",
       "type": "array", "uniqueItems": true,
-      "items": { "enum": ["contabilidad", "ventas", "inventario", "compras"] }
+      "items": { "enum": ["contabilidad", "ventas", "inventario", "compras", "dinero"] }
     },
     "dueno":     { "$ref": "#/$defs/usuario", "description": "Dueño del negocio (debe estar registrado en Supabase)." },
     "proveedor": { "$ref": "#/$defs/usuario", "description": "Usuario del proveedor (opcional)." },

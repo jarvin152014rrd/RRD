@@ -69,8 +69,14 @@ cabe en estas reglas, se discute antes de programarlo.
 - Cada RPC que crea algo recibe un `id_operacion` (uuid) y llama
   `interno.exigir_tipo_operacion(empresa, id, 'tipo')`: un reintento solo se
   reconoce si el id ya se usó para el MISMO tipo de operación; si se usó para
-  otra cosa, `ID_OPERACION_USADO`. Al agregar una tabla con `id_operacion`,
-  sumarla en `interno.tipo_operacion` (migración nueva, `CREATE OR REPLACE`).
+  otra cosa, `ID_OPERACION_USADO`.
+- Orden (desde 0.5.0): permiso -> revisión rápida del tipo -> validaciones ->
+  `interno.reservar_operacion(empresa, id, tipo)` (toma `bloquear_libros` y
+  revisa el tipo OTRA VEZ, ya con lo que otros confirmaron) -> "¿ya existe?" ->
+  guardar. Sin la segunda revisión, dos operaciones distintas con el mismo id
+  al mismo tiempo podían pasar las dos.
+- Al agregar una tabla con `id_operacion`, sumarla en
+  `interno.tipo_operacion_2b` (migración nueva, `CREATE OR REPLACE`).
 
 ## Anular (patrón; los cobros de la etapa 2b lo copian)
 - El documento original NO se edita: la anulación es una fila aparte
@@ -90,6 +96,31 @@ cabe en estas reglas, se discute antes de programarlo.
 - Las cuentas que usa un módulo están en `interno.cuenta_sistema` (un solo
   lugar). Si `modulo_controla` está activo, esa cuenta no acepta asientos
   manuales. Los asientos de un módulo se anulan desde su documento.
+- El código de un uso se pide SIEMPRE con `interno.cuenta_de(empresa, uso)`:
+  si el código de la plantilla ya era del cliente, la cuenta se creó en el
+  siguiente libre y quedó anotada en `interno.cuenta_sistema_empresa`
+  (`interno.asegurar_cuenta_uso` al instalar una versión nueva).
+
+## Rastro del dinero (0.5.0; ventas y cobros de 2b-2 lo copian)
+- Todo lugar con dinero es una `cuenta_dinero` con su subcuenta 1.1.01.NN.
+- Toda RPC que crea un asiento que toca una cuenta de dinero llama, en la
+  misma transacción y con el candado tomado, a
+  `interno.rastrear_dinero(asiento, operacion, documento_tipo, documento_id, referencia, equipo)`.
+  Si lo olvida, el asiento no se confirma (`MOVIMIENTO_SIN_RASTRO`). La
+  función también impide saldos negativos y pasar el fondo de la caja chica.
+- Lo que se paga se valida con `interno.cuenta_dinero_para_pagar` (caja,
+  caja chica o banco). El equipo sale de `interno.equipo(datos)`.
+- Un cobro en efectivo (2b-2) exige `interno.exigir_turno_abierto(empresa)`.
+- Comprobantes: `"comprobante": {"ruta","tipo","sha256"}` en los datos o
+  `agregar_adjunto`; la ruta empieza con el id de la empresa.
+
+## Aprobaciones (0.5.0; 2b-2 las reutiliza)
+- Una fila en `aprobacion` (tipo, documento, monto, solicitante, estado). El
+  documento queda "pendiente" SIN mover nada; `resolver_aprobacion` despacha
+  por tipo, revisa el tope del puesto (`interno.tope_rol`), que nadie resuelva
+  lo que pidió (salvo el dueño) y aplica o rechaza (con motivo) una sola vez.
+- Para un tipo nuevo: su permiso, su tope en `tope_rol` y su rama en
+  `resolver_aprobacion` (migración nueva).
 
 ## Vistas
 - Por defecto `security_invoker = true` (respetan RLS).
@@ -99,6 +130,9 @@ cabe en estas reglas, se discute antes de programarlo.
   fila en una política (la prueba 53 lo vigila).
 - Si hay que ocultar columnas según el permiso (ej. costos), vista "del
   sistema" con filtro explícito `public.puede_leer(empresa, permiso)`.
+- Una vista `security_invoker` no llama funciones de `interno` (el usuario
+  no las puede ejecutar) ni lee `auth.users`: para nombres, `public.nombre_usuario()`.
+  Lo que necesite cálculos internos va en una RPC de lectura (`exigir_lectura`).
 
 ## Funciones
 - `SECURITY DEFINER` siempre con `SET search_path = ''` y nombres completos
@@ -121,7 +155,9 @@ cabe en estas reglas, se discute antes de programarlo.
 - Se conectan con `herramientas/conexion.sh`: la clave nunca va como
   argumento de psql/pg_dump ni en PGPASSWORD (pgpass temporal 600 que se
   borra); se confirma con un identificador único del proyecto; los
-  respaldos salen cifrados. `SIN_PREGUNTAR` / `SIN_RESPALDO` solo con base local.
+  respaldos salen cifrados. `SIN_PREGUNTAR` / `SIN_RESPALDO` solo con la base
+  local de pruebas: el socket de `.pgdata` o `BASE_LOCAL_SOCKET` (nunca
+  `localhost`). Datos del cliente (ficha) por la entrada estándar, no como argumento.
 
 ## Versiones (VERSION_NUCLEO)
 - MAYOR.MENOR.ARREGLO. ARREGLO: corrección sin cambios de uso. MENOR:

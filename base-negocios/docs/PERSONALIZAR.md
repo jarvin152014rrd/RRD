@@ -11,7 +11,7 @@ todos sin perder lo propio de nadie.
 | Nombre, RTN, rubro, moneda, país, zona horaria | ficha del cliente (`personal/*.json`) al instalar | proveedor |
 | Fecha de inicio en el sistema | ficha (`fecha_inicio`) | proveedor, con el dueño |
 | Días al futuro permitidos para fechas (0-31, defecto 3) | ficha (`dias_futuro_max`) | proveedor |
-| Módulos activos (contabilidad, ventas, inventario, compras) | ficha (`modulos`) | proveedor |
+| Módulos activos (contabilidad, ventas, inventario, compras, dinero) | ficha (`modulos`) | proveedor |
 | Colores y logo | ficha (`tema`) | proveedor |
 | Usuarios y su rol | app: `agregar_usuario_empresa` / `desactivar_usuario_empresa` | dueño (admin: solo cajero y vendedor) |
 | Usuario contador (solo lectura, ve costos) | app: `agregar_usuario_empresa(..., 'contador')` | solo el dueño |
@@ -25,6 +25,10 @@ todos sin perder lo propio de nadie.
 | Bodegas, categorías, unidades, campos extra de productos | app | dueño o admin |
 | Productos y precios (con historial) | app | dueño o admin |
 | Clientes y proveedores | app | dueño, admin (crédito hasta el tope); cajero y vendedor registran |
+| Cuentas de dinero (cajas, bancos, caja chica y su fondo fijo), categorías de gasto, pagos fijos | app | dueño o admin |
+| Saldos iniciales de las cuentas de dinero | app: `registrar_saldo_inicial_dinero` | solo el dueño |
+| Topes por puesto (gasto sin aprobación y hasta cuánto aprueba; defecto admin L 5,000) | app: `configurar_tope_rol` | solo el dueño |
+| Días de un depósito en tránsito antes de la alerta (defecto 3) | app: `configurar_empresa` | solo el dueño |
 | Licencia (vencimiento, gracia, suspensión) | tabla `licencia` con la llave service_role | proveedor |
 
 ## No se toca NUNCA (ni por un cliente "especial")
@@ -41,7 +45,10 @@ todos sin perder lo propio de nadie.
   desactivar una cuenta, nunca cambiar su código, tipo o naturaleza).
 - La llave `service_role` jamás va en la app ni en `personal/`.
 - Las cuentas que usan los módulos (1.1.03.01, 2.1.01.01, 3.3.01.03 Saldos de
-  apertura...). Están en `interno.cuenta_sistema`; no se renombran a mano.
+  apertura, 1.1.02.04 Diferencias de caja...). Están en `interno.cuenta_sistema`
+  (y `interno.cuenta_sistema_empresa` si el código ya era del cliente); no se
+  renombran a mano. Las subcuentas de las cuentas de dinero tampoco reciben
+  asientos manuales.
 
 ## Lo que el proveedor puede ver (dicho con honestidad)
 

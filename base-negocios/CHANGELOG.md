@@ -4,6 +4,69 @@ Formato: versión (fecha) y lista de cambios. La versión vive en `VERSION_NUCLE
 y queda guardada en cada base al migrar (vista `version_esquema`).
 Números: MAYOR.MENOR.ARREGLO (ver `docs/CONVENCIONES.md`).
 
+## 0.5.0 (2026-10-03) — Etapa 2b-1: dinero (y correcciones de la revisión de 0.4.0)
+
+Migraciones nuevas 021-024 (las 001-020 no se tocaron). 71 pruebas.
+
+**Correcciones de la revisión de 0.4.0 (021 y herramientas)**
+- A. Una factura cargada como saldo inicial ya no entra como compra si el
+  proveedor llega con el uuid en MAYÚSCULAS (se compara como uuid, con el candado).
+- B. Activar un módulo toma primero el candado de la empresa: nadie mete un
+  asiento a la cuenta controlada mientras se compara libros contra módulo.
+- C. Las RPC revisan el `id_operacion` otra vez DESPUÉS de `bloquear_libros`
+  (`interno.reservar_operacion`). Antes, un asiento manual y una compra con el
+  mismo id al mismo tiempo podían pasar los dos (el asiento devolvía el de la compra).
+- D. `conexion.sh`: "base local" es solo el socket de `.pgdata` del proyecto
+  (o `BASE_LOCAL_SOCKET`); `localhost` ya no permite `SIN_PREGUNTAR`/`SIN_RESPALDO`.
+- E. `nuevo_cliente.sh` pasa la ficha por la entrada estándar de psql, no como argumento.
+- F. El motor de inventario bloquea el producto antes que su saldo y nunca deja
+  una existencia con decimales en un producto sin decimales (ni al anular);
+  quitar "decimales" bloquea los saldos antes de revisar.
+
+**Cuentas de dinero y rastro (022)**
+- `cuenta_dinero` (caja, banco con número enmascarado, caja chica con fondo
+  fijo, POS por liquidar, transferencias por confirmar, tránsito): crear una
+  crea su subcuenta 1.1.01.NN; esa subcuenta no acepta asientos manuales.
+- `dinero_movimiento`: una fila por cada línea que toca una cuenta de dinero
+  (contrapartida, usuario, equipo, referencia, turno). Sin ella el asiento no
+  se confirma (`MOVIMIENTO_SIN_RASTRO`). Ninguna cuenta queda en negativo.
+- `trasladar_dinero` (depósito en tránsito, retiro, reposición de caja chica,
+  traslado), `confirmar_deposito`, `anular_operacion_dinero`,
+  `registrar_saldo_inicial_dinero` (solo dueño), `agregar_adjunto`
+  (comprobantes en Storage con huella sha256, solo agregar).
+- Lecturas: `donde_esta_mi_dinero`, `estado_cuenta_dinero`, `v_cuenta_dinero`,
+  `v_deposito_transito` (alerta con `dias_alerta_transito`, nueva clave de `configurar_empresa`).
+- Compras: `registrar_compra` acepta `cuenta_dinero_id`; `pagar_proveedor`
+  tiene un último parámetro opcional `p_cuenta_dinero_id`; pagos, compras de
+  contado y sus anulaciones dejan rastro.
+
+**Turnos de caja (023):** `abrir_turno`, `cerrar_turno` (arqueo con conteo por
+denominación), `resolver_diferencia` (al cajero, a gasto u otros ingresos),
+`mi_turno`, `v_turno_caja`, `v_diferencia_cajero`. Cuentas nuevas 1.1.02.04,
+1.1.02.05, 4.2.01.03, 6.1.02.11 (siguiente código libre si ya eran del cliente).
+
+**Gastos (024):** categorías, `registrar_gasto` (ISV crédito fiscal con
+factura y RTN), topes por puesto (`configurar_tope_rol`), aprobaciones
+genéricas (`resolver_aprobacion`), `anular_gasto`, `cuadre_caja_chica`,
+pagos fijos (`crear_pago_fijo`, `editar_pago_fijo`, `registrar_pago_fijo`,
+`pagos_fijos_proximos`, `reporte_pagos_fijos`).
+
+**Permisos y módulo:** módulo nuevo `dinero`. Permisos `dinero.ver`,
+`dinero.administrar`, `dinero.trasladar`, `dinero.anular`,
+`dinero.saldo_inicial` (solo dueño), `adjuntos.agregar`, `caja.turno`,
+`caja.supervisar`, `gastos.registrar`, `gastos.aprobar`, `gastos.anular`,
+`aprobaciones.ver`. Admin: todo menos saldos iniciales; contador: `dinero.ver`
+y `aprobaciones.ver`; cajero: `caja.turno` y `adjuntos.agregar`; vendedor: nada de dinero.
+
+**Cambios que rompen (para quien ya usaba 0.4.0 en pruebas)**
+- `pagar_proveedor` tiene 9 parámetros (el último opcional): las llamadas de
+  antes funcionan igual, pero quien la referencie por su firma de 8 debe usar la nueva.
+- Empresas NUEVAS traen 6.1.02.11 "Faltantes de caja" (y 1.1.02.04/05,
+  4.2.01.03): una subcuenta propia del cliente toma el siguiente número.
+- `SIN_PREGUNTAR`/`SIN_RESPALDO` ya no aceptan `localhost`.
+- Se ajustaron las pruebas 19, 31, 32, 48 y 57 (permisos nuevos, código
+  6.1.02.11 ocupado, última migración).
+
 ## 0.4.0 (2026-10-03) — Correcciones de la revisión de la etapa 2a
 
 Migraciones nuevas 017-020 (las 001-016 no se tocaron). 57 pruebas.

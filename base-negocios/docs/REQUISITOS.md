@@ -35,6 +35,10 @@ promociones con fechas, campos extra, clientes y límites de crédito, formas de
 pago, bancos, pagos fijos, metas de venta, aprobaciones hasta su tope, cierre
 de mes, alertas y reportes programados, Excel de ida y vuelta.
 
+Topes de gasto (0.5.0, valor inicial a confirmar con el dueño): el admin
+registra sin aprobación y aprueba hasta L 5,000.00; los demás puestos piden
+aprobación siempre. El dueño los cambia por puesto.
+
 Extras: panel "Mi negocio hoy", modo vacaciones (admin a cargo con límites y
 fechas), rol contador de solo lectura, deshacer el último cambio de Ajustes,
 página "Mi cuenta" (plan, módulos, próximo pago, pedir módulo).
@@ -67,6 +71,13 @@ dueño lo crea; nunca recibe permisos que muevan los libros.
 - Reportes: "¿Dónde está mi dinero hoy?", estado de cuenta de cualquier cuenta
   por fechas o mes, "seguir una venta" (venta, cobro, caja, depósito, banco),
   flujo de dinero del mes.
+- Hecho en 0.5.0 (sin ventas todavía): cuentas de dinero con su subcuenta,
+  rastro de cada entrada y salida, depósito / retiro / reposición / traslado
+  en una operación, depósito en tránsito con alerta (3 días por defecto, lo
+  cambia el dueño), comprobantes (foto o PDF, solo agregar), gastos, caja
+  chica con cuadre, pagos fijos, "¿dónde está mi dinero?" y estado de cuenta.
+  Pendiente: conciliación con CSV del banco, prueba diaria automática,
+  "seguir una venta", flujo del mes y cuentas en otra moneda (USD).
 
 ## Fondos y distribución de utilidades
 
@@ -153,6 +164,8 @@ bloquea sin borrar. Reabrir: solo dueño, con motivo, en orden.
 ## Ventas, caja y comisiones (decisiones para la etapa 2b)
 
 - Turno de caja POR CAJERO: cada cajero abre y cierra su turno con arqueo.
+  (Hecho en 0.5.0. Aclarado: una caja tiene un solo turno abierto a la vez y
+  el cajero no ve el esperado hasta cerrar, conteo a ciegas.)
 - Diferencia en el arqueo: queda como "diferencia pendiente"; el dueño o el
   admin decide, con motivo, si se cobra al cajero (cuenta por cobrar a
   empleado) o se envía a gasto.

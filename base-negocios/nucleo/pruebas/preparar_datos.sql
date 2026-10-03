@@ -174,6 +174,49 @@ CREATE FUNCTION pruebas.promedio(p_bodega text, p_producto text) RETURNS numeric
 CREATE FUNCTION pruebas.saldo_libros(p_empresa uuid, p_codigo text) RETURNS bigint LANGUAGE sql STABLE SECURITY DEFINER AS
   $$ SELECT saldo_centavos FROM public.v_saldo_cuenta WHERE empresa_id = p_empresa AND codigo = p_codigo $$;
 
+-- Etapa 2b-1: activa el módulo "dinero" en la empresa A y crea (como dueño):
+--   CAJA1   efectivo de la caja 001 (punto de emisión 001), saldo 0
+--   FUERTE  caja fuerte (efectivo sin caja), saldo inicial L 3,000.00 (300000)
+--   BANCO   BAC Credomatic cheques ****6789, saldo inicial L 10,000.00 (1000000)
+--   CCHICA  caja chica con fondo fijo L 2,000.00 (200000), saldo 0
+--   categorías de gasto CAT_LUZ (6.1.02.02), CAT_PAPEL (6.1.02.05), CAT_ALQ (6.1.02.01)
+-- Saldos iniciales con fecha 02/01/2026. Deja la sesión como dueno_a.
+CREATE FUNCTION pruebas.preparar_dinero() RETURNS void LANGUAGE plpgsql AS $$
+DECLARE e uuid := pruebas.empresa('A');
+BEGIN
+  PERFORM pruebas.como('superusuario');
+  INSERT INTO public.modulo_activo (empresa_id, modulo) VALUES (e, 'dinero')
+  ON CONFLICT (empresa_id, modulo) DO UPDATE SET activo = true;
+  PERFORM pruebas.guardar('CAJA001', (SELECT id FROM public.caja WHERE empresa_id = e AND punto_emision = '001'));
+  PERFORM pruebas.como('dueno_a');
+  PERFORM pruebas.guardar('CAJA1', (public.crear_cuenta_dinero(e, jsonb_build_object('tipo', 'efectivo_caja',
+    'nombre', 'Caja 1', 'caja_id', pruebas.id('CAJA001')))->>'cuenta_dinero_id')::uuid);
+  PERFORM pruebas.guardar('FUERTE', (public.crear_cuenta_dinero(e, '{"tipo": "efectivo_caja", "nombre": "Caja fuerte"}')->>'cuenta_dinero_id')::uuid);
+  PERFORM pruebas.guardar('BANCO', (public.crear_cuenta_dinero(e, '{"tipo": "banco", "nombre": "BAC cheques",
+    "banco": "BAC Credomatic", "numero_cuenta": "7301-2345-6789", "tipo_cuenta": "cheques"}')->>'cuenta_dinero_id')::uuid);
+  PERFORM pruebas.guardar('CCHICA', (public.crear_cuenta_dinero(e, '{"tipo": "caja_chica", "nombre": "Caja chica",
+    "fondo_fijo_centavos": 200000}')->>'cuenta_dinero_id')::uuid);
+  PERFORM public.registrar_saldo_inicial_dinero(e, jsonb_build_object('cuenta_dinero_id', pruebas.id('BANCO'),
+    'monto_centavos', 1000000, 'fecha', '2026-01-02', 'referencia', 'Estado de cuenta dic-2025'), gen_random_uuid());
+  PERFORM public.registrar_saldo_inicial_dinero(e, jsonb_build_object('cuenta_dinero_id', pruebas.id('FUERTE'),
+    'monto_centavos', 300000, 'fecha', '2026-01-02'), gen_random_uuid());
+  PERFORM pruebas.guardar('CAT_LUZ',   (public.crear_categoria_gasto(e, 'Energía eléctrica', '6.1.02.02')->>'categoria_id')::uuid);
+  PERFORM pruebas.guardar('CAT_PAPEL', (public.crear_categoria_gasto(e, 'Papelería', '6.1.02.05')->>'categoria_id')::uuid);
+  PERFORM pruebas.guardar('CAT_ALQ',   (public.crear_categoria_gasto(e, 'Alquiler', '6.1.02.01')->>'categoria_id')::uuid);
+END $$;
+
+-- Saldo de una cuenta de dinero (suma de su rastro) y de su subcuenta en los libros.
+-- (plpgsql: así este archivo también carga en bases viejas sin estas tablas, ver prueba 57)
+CREATE FUNCTION pruebas.dinero(p_clave text) RETURNS bigint LANGUAGE plpgsql STABLE SECURITY DEFINER AS
+  $$ BEGIN RETURN (SELECT coalesce(sum(monto_centavos), 0)::bigint FROM public.dinero_movimiento WHERE cuenta_dinero_id = pruebas.id(p_clave)); END $$;
+CREATE FUNCTION pruebas.dinero_libros(p_clave text) RETURNS bigint LANGUAGE plpgsql STABLE SECURITY DEFINER AS
+  $$ BEGIN RETURN (SELECT pruebas.saldo_libros(d.empresa_id, c.codigo) FROM public.cuenta_dinero d JOIN public.cuenta c ON c.id = d.cuenta_id
+                    WHERE d.id = pruebas.id(p_clave)); END $$;
+-- Un comprobante de prueba (ruta en la carpeta de la empresa A).
+CREATE FUNCTION pruebas.comprobante(p_nombre text) RETURNS jsonb LANGUAGE sql STABLE AS
+  $$ SELECT jsonb_build_object('ruta', pruebas.empresa('A')::text || '/comprobantes/' || p_nombre, 'tipo', 'image/jpeg',
+                               'sha256', encode(sha256(convert_to(p_nombre, 'UTF8')), 'hex')) $$;
+
 GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA pruebas TO anon, authenticated, service_role;
 
 -- ---------------------------------------------------------------------

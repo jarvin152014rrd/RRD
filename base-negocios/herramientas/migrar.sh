@@ -25,7 +25,8 @@
 #   * Solo hacia adelante: si una migración ya aplicada fue modificada,
 #     se detiene con error (cree una migración nueva para corregir).
 #
-# Variables opcionales (SOLO con base local de pruebas):
+# Variables opcionales (SOLO con la base local de pruebas: el socket de
+# base-negocios/.pgdata o el declarado en BASE_LOCAL_SOCKET; nunca localhost):
 #   SIN_PREGUNTAR=1   no pide confirmación
 #   SIN_RESPALDO=1    no hace respaldo
 #   DIR_RESPALDOS     carpeta de respaldos (defecto base-negocios/respaldos)
@@ -44,7 +45,7 @@ CADENA=""
 for arg in "$@"; do
   case "$arg" in
     --solo-mostrar) SOLO_MOSTRAR=1 ;;
-    -h|--ayuda)     sed -n '2,36p' "$0"; exit 0 ;;
+    -h|--ayuda)     sed -n '2,34p' "$0"; exit 0 ;;
     -*)             echo "ERROR: opción desconocida: $arg" >&2; exit 2 ;;
     *)              CADENA="$arg" ;;
   esac

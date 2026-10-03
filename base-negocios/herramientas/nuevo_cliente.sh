@@ -12,7 +12,8 @@
 #      tiene, y pide escribir un identificador único: la referencia del
 #      proyecto de Supabase, o el nombre de la empresa que ya está en esa
 #      base, o (base local nueva) el nombre de la base.
-#   4. Llama crear_empresa_inicial(ficha) en una transacción.
+#   4. Llama crear_empresa_inicial(ficha) en una transacción. La ficha va por
+#      la ENTRADA ESTÁNDAR de psql, nunca como argumento (no se ve con "ps").
 #      Con --solo-validar hace todo y al final DESHACE (no crea nada).
 #
 # A qué base se conecta (la clave nunca va como argumento de psql; ver conexion.sh):
@@ -26,7 +27,8 @@
 # (Authentication > Users) con el correo de la ficha.
 # Después: activar la licencia (sin licencia la empresa queda en solo lectura).
 #
-# Variable opcional: SIN_PREGUNTAR=1 (no pide confirmación; SOLO base local).
+# Variable opcional: SIN_PREGUNTAR=1 (no pide confirmación; SOLO la base local de
+# pruebas: el socket de base-negocios/.pgdata o el declarado en BASE_LOCAL_SOCKET).
 # =====================================================================
 set -euo pipefail
 
@@ -38,7 +40,7 @@ CADENA=""
 for arg in "$@"; do
   case "$arg" in
     --solo-validar) SOLO_VALIDAR=1 ;;
-    -h|--ayuda)     sed -n '2,34p' "$0"; exit 0 ;;
+    -h|--ayuda)     sed -n '2,32p' "$0"; exit 0 ;;
     -*)             echo "ERROR: opción desconocida: $arg" >&2; exit 2 ;;
     *)              if [ -z "$FICHA" ]; then FICHA="$arg"; else CADENA="$arg"; fi ;;
   esac
@@ -117,12 +119,23 @@ fi
 # 4) Crear (o validar y deshacer)
 # ---------------------------------------------------------------------
 FIN="COMMIT"; [ "$SOLO_VALIDAR" = "1" ] && FIN="ROLLBACK"
-if ! salida="$(psql_q -tA -v ficha="$(cat "$FICHA")" 2>&1 <<SQL
-BEGIN;
-SELECT public.crear_empresa_inicial(:'ficha'::jsonb);
-$FIN;
-SQL
-)"; then
+# La ficha (correos, RTN, nombres) va por la ENTRADA ESTÁNDAR de psql, nunca
+# como argumento (se vería con "ps" y en el historial). Se escribe como texto
+# entre $marca$ ... $marca$ con una marca al azar que no aparece en la ficha.
+script_sql() {
+  python3 - "$FICHA" "$FIN" <<'PY'
+import secrets, sys
+ficha = open(sys.argv[1], encoding="utf-8").read()
+while True:
+    marca = "ficha_" + secrets.token_hex(8)
+    if marca not in ficha:
+        break
+print("BEGIN;")
+print(f"SELECT public.crear_empresa_inicial(${marca}${ficha}${marca}$::jsonb);")
+print(sys.argv[2] + ";")
+PY
+}
+if ! salida="$(script_sql | psql_q -tA 2>&1)"; then
   echo "ERROR: la base rechazó la ficha:" >&2
   echo "$salida" | sed -n 's/^.*ERROR: *//p' | head -3 | sed 's/^/  /' >&2
   exit 1
