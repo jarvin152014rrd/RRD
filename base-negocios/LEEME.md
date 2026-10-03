@@ -127,7 +127,7 @@ Si algo falla, termina con error (código distinto de 0).
 | `cargar_saldo_inicial(empresa, bodega, fecha, lineas, id_operacion, motivo?)` | apertura del inventario | inventario.carga_inicial |
 | `registrar_compra(empresa, datos, id_operacion)` | compra contado / crédito | compras.registrar |
 | `anular_compra(compra, motivo, id_operacion, fecha?)` | contra-movimiento + contra-asiento | compras.anular |
-| `pagar_proveedor(empresa, compra, monto, fecha, forma_pago, id_operacion, referencia?)` | abono a CxP | compras.pagar |
+| `pagar_proveedor(empresa, compra, monto, fecha, forma_pago, id_operacion, referencia?, cuenta_pago?)` | abono a CxP desde la caja o banco elegido | compras.pagar |
 | `crear_empresa_inicial(ficha jsonb)` | instalar cliente | solo service_role |
 
 Vistas: `v_existencia` (inventario.ver; costos solo con inventario.costos),

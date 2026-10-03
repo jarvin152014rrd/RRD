@@ -1,4 +1,4 @@
--- PRUEBA: el admin administra usuarios, sucursales y catálogos; no nombra dueños, no se da más permisos ni cambia permisos de rol; permisos solo del dueño
+-- PRUEBA: el admin maneja cajeros y vendedores, sucursales y catálogos; no crea admins ni dueños, no se da más permisos ni cambia permisos de rol; permisos solo del dueño
 DO $$
 DECLARE
   e     uuid := pruebas.empresa('A');
@@ -23,10 +23,17 @@ BEGIN
   PERFORM pruebas.afirmar((r->>'nuevo')::boolean AND r->>'rol' = 'cajero', 'admin agrega cajero');
   PERFORM public.agregar_usuario_empresa(e, 'nuevo@prueba.hn', 'vendedor');
   PERFORM public.desactivar_usuario_empresa(e, nuevo, 'Prueba de desactivar');
-  -- Puede dar el rol admin (mismos permisos que él, no más).
-  PERFORM public.agregar_usuario_empresa(e, 'nuevo@prueba.hn', 'admin');
-  PERFORM pruebas.afirmar((SELECT rol FROM public.usuario_empresa WHERE user_id = nuevo AND empresa_id = e) = 'admin', 'admin da rol admin');
+  -- Crear o tocar administradores es solo del dueño.
+  PERFORM pruebas.debe_fallar(format('SELECT public.agregar_usuario_empresa(%L, %L, %L)', e, 'nuevo@prueba.hn', 'admin'), 'PROHIBIDO', 'admin crea admin');
   PERFORM public.agregar_usuario_empresa(e, 'nuevo@prueba.hn', 'cajero');
+  PERFORM pruebas.como('dueno_a');
+  PERFORM public.agregar_usuario_empresa(e, 'vendedor_a@prueba.hn', 'admin');     -- el dueño sí
+  PERFORM pruebas.como('admin_a');
+  PERFORM pruebas.debe_fallar(format('SELECT public.desactivar_usuario_empresa(%L, %L, %L)', e, pruebas.usuario('vendedor_a'), 'quitar admin'), 'PROHIBIDO', 'admin desactiva admin');
+  PERFORM pruebas.debe_fallar(format('SELECT public.agregar_usuario_empresa(%L, %L, %L)', e, 'vendedor_a@prueba.hn', 'cajero'), 'PROHIBIDO', 'admin baja a otro admin');
+  PERFORM pruebas.como('dueno_a');
+  PERFORM public.agregar_usuario_empresa(e, 'vendedor_a@prueba.hn', 'vendedor');
+  PERFORM pruebas.como('admin_a');
 
   -- No: dueños, proveedor, ni roles con más permisos que los suyos.
   PERFORM pruebas.debe_fallar(format('SELECT public.agregar_usuario_empresa(%L, %L, %L)', e, 'nuevo@prueba.hn', 'dueno'), 'PROHIBIDO', 'admin nombra dueño');

@@ -9,11 +9,13 @@ Números: MAYOR.MENOR.ARREGLO (ver `docs/CONVENCIONES.md`).
 Migraciones nuevas 012-016 (las 001-011 no se tocaron). 43 pruebas.
 
 **Roles (decisión del dueño, 012)**
-- El admin, por defecto: agrega y desactiva usuarios, sucursales, cajas y
+- El admin, por defecto: agrega y desactiva usuarios cajero y vendedor
+  (crear o desactivar administradores es solo del dueño), sucursales, cajas y
   bodegas; catálogos, precios, clientes y proveedores; crédito hasta el tope
   del dueño; compras, pagos, ajustes y traslados.
-- El admin nunca nombra ni toca dueños, no toca al proveedor y no da (ni
-  cambia o desactiva a alguien con) un rol con permisos que él no tiene.
+- El admin nunca nombra ni toca dueños ni administradores, no toca al
+  proveedor y no da (ni cambia o desactiva a alguien con) un rol con permisos
+  que él no tiene.
 - Solo del dueño, sin poder delegarse: `permisos.editar`, `periodos.reabrir`,
   `soporte.otorgar`, `empresa.configurar`.
 - `configurar_empresa`: tope de límite de crédito y permitir existencia negativa.
@@ -22,7 +24,7 @@ Migraciones nuevas 012-016 (las 001-011 no se tocaron). 43 pruebas.
 
 **Clientes y proveedores (013):** una tabla `tercero` con roles, RTN
 validado, teléfono, correo, límite de crédito (centavos) y plazo. Crear,
-editar, desactivar; historial en bitácora.
+editar, desactivar y reactivar; historial en bitácora.
 
 **Productos (014):** unidades, categorías (3 niveles), campos extra
 validados por empresa, productos con código interno y de barras únicos,
@@ -36,7 +38,8 @@ de apertura; búsqueda por código de barras; vistas `v_existencia` y `v_kardex`
 
 **Compras (016):** compras al contado o crédito (documento + kardex + asiento
 en una transacción), ISV crédito fiscal, anulación con contra-movimiento y
-contra-asiento, pagos a proveedores sin pasar el saldo, vistas
+contra-asiento, pagos a proveedores sin pasar el saldo; el dinero sale de la
+caja o banco elegido (subcuenta de 1.1.01) y la anulación vuelve a ella; vistas
 `v_cxp_documento` y `v_cxp_proveedor` con antigüedad.
 
 **Cuadre con la contabilidad:** con inventario o compras activos, las

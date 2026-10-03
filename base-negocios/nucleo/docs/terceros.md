@@ -14,6 +14,7 @@ El RTN no se repite dentro de la empresa.
 | `crear_tercero(empresa, datos, id_operacion)` | terceros.editar |
 | `editar_tercero(empresa, tercero, datos, motivo?)` | terceros.editar |
 | `desactivar_tercero(empresa, tercero, motivo)` | terceros.desactivar |
+| reactivar: `editar_tercero(..., {"activo": true}, motivo)` | terceros.desactivar |
 
 Ejemplo de `datos`: `{"nombre":"Ferretería Lara","es_proveedor":true,"rtn":"0801-1999-000012","telefono":"9999-8888","plazo_dias":30}`.
 El RTN y el teléfono aceptan guiones, espacios y paréntesis; se guardan solo dígitos.

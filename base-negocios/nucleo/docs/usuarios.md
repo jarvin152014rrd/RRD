@@ -6,12 +6,14 @@
   configurar la empresa (`empresa.configurar`: tope de crédito, inventario
   negativo) y administrar dueños. Estos permisos no se le pueden dar a otro
   rol (ni el dueño puede).
-- **Admin:** agrega y desactiva usuarios, sucursales, cajas y bodegas;
+- **Admin:** agrega, cambia y desactiva usuarios **cajero y vendedor** (crear
+  o desactivar administradores es solo del dueño); sucursales, cajas y bodegas;
   catálogos (categorías, unidades, campos extra, productos, precios,
   clientes y proveedores); límites de crédito hasta el tope del dueño;
-  compras, pagos, ajustes y traslados. Nunca: nombrar o tocar dueños, tocar
-  al usuario del proveedor, ni dar un rol que tenga algún permiso que él no
-  tiene (tampoco cambiar o desactivar a quien tenga un rol así).
+  compras, pagos, ajustes y traslados. Nunca: nombrar o tocar dueños ni
+  administradores, tocar al usuario del proveedor, ni dar un rol que tenga
+  algún permiso que él no tiene (tampoco cambiar o desactivar a quien tenga
+  un rol así; pasa si el dueño le da al cajero un permiso extra).
 - **Cajero / vendedor:** ven cantidades de inventario (no costos) y
   registran clientes.
 

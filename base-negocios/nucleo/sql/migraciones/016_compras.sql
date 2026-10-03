@@ -13,6 +13,9 @@
 --   o si la compra ya tiene pagos.
 -- pagar_proveedor: abono a una compra al crédito, nunca más que su saldo.
 --   Dr Proveedores / Cr Caja o Bancos.
+-- De qué cuenta sale el dinero: "caja" = 1.1.01.01, "banco" = 1.1.01.03, o
+--   la subcuenta que se indique (ej. 1.1.01.04 "Banco Atlántida"): cualquier
+--   cuenta de detalle activa bajo 1.1.01 (Efectivo y equivalentes).
 --
 -- Montos: centavos. Costo unitario: centavos por unidad con 6 decimales.
 --   subtotal de línea = round(cantidad x costo_unitario)
@@ -52,6 +55,7 @@ CREATE TABLE public.compra (
   fecha_contable           date NOT NULL,
   condicion                text NOT NULL CHECK (condicion IN ('contado', 'credito')),
   forma_pago               text CHECK (forma_pago IN ('caja', 'banco')),
+  cuenta_pago_id           uuid,                      -- contado: de qué cuenta salió el dinero
   fecha_vencimiento        date,
   subtotal_centavos        bigint NOT NULL CHECK (subtotal_centavos >= 0),
   isv_centavos             bigint NOT NULL CHECK (isv_centavos >= 0),
@@ -77,6 +81,8 @@ CREATE TABLE public.compra (
   FOREIGN KEY (empresa_id, asiento_id)           REFERENCES public.asiento(empresa_id, id),
   FOREIGN KEY (empresa_id, asiento_anulacion_id) REFERENCES public.asiento(empresa_id, id),
   CHECK ((condicion = 'contado') = (forma_pago IS NOT NULL)),
+  CHECK ((condicion = 'contado') = (cuenta_pago_id IS NOT NULL)),
+  FOREIGN KEY (empresa_id, cuenta_pago_id)       REFERENCES public.cuenta(empresa_id, id),
   CHECK ((condicion = 'credito') = (fecha_vencimiento IS NOT NULL)),
   CHECK (fecha_vencimiento IS NULL OR fecha_vencimiento >= fecha_contable),
   CHECK ((anulada_en IS NULL) = (motivo_anulacion IS NULL)),
@@ -112,6 +118,7 @@ CREATE TABLE public.pago_proveedor (
   proveedor_id     uuid NOT NULL,
   fecha_contable   date NOT NULL,
   forma_pago       text NOT NULL CHECK (forma_pago IN ('caja', 'banco')),
+  cuenta_pago_id   uuid NOT NULL,               -- de qué cuenta salió el dinero
   monto_centavos   bigint NOT NULL CHECK (monto_centavos > 0),
   referencia       text,                        -- n.º de cheque, transferencia...
   asiento_id       uuid NOT NULL,
@@ -122,7 +129,8 @@ CREATE TABLE public.pago_proveedor (
   UNIQUE (empresa_id, id_operacion),
   FOREIGN KEY (empresa_id, compra_id)    REFERENCES public.compra(empresa_id, id),
   FOREIGN KEY (empresa_id, proveedor_id) REFERENCES public.tercero(empresa_id, id),
-  FOREIGN KEY (empresa_id, asiento_id)   REFERENCES public.asiento(empresa_id, id)
+  FOREIGN KEY (empresa_id, asiento_id)   REFERENCES public.asiento(empresa_id, id),
+  FOREIGN KEY (empresa_id, cuenta_pago_id) REFERENCES public.cuenta(empresa_id, id)
 );
 CREATE INDEX pago_proveedor_compra ON public.pago_proveedor (compra_id);
 
@@ -151,6 +159,21 @@ CREATE TRIGGER inmutable BEFORE UPDATE OR DELETE ON public.pago_proveedor
 CREATE TRIGGER auditar AFTER INSERT OR UPDATE OR DELETE ON public.compra FOR EACH ROW EXECUTE FUNCTION interno.auditar();
 CREATE TRIGGER auditar AFTER INSERT ON public.pago_proveedor              FOR EACH ROW EXECUTE FUNCTION interno.auditar();
 
+-- Cuenta de la que sale el dinero: la indicada (código) o la de la forma de
+-- pago. Debe ser de detalle, activa y de "Efectivo y equivalentes" (1.1.01).
+CREATE FUNCTION interno.cuenta_de_pago(p_empresa_id uuid, p_forma text, p_codigo text) RETURNS public.cuenta
+LANGUAGE plpgsql STABLE SECURITY DEFINER SET search_path = '' AS $$
+DECLARE c public.cuenta;
+BEGIN
+  SELECT * INTO c FROM public.cuenta x
+   WHERE x.empresa_id = p_empresa_id AND x.codigo = coalesce(nullif(trim(p_codigo), ''), interno.cuenta_sistema(p_forma));
+  IF c.id IS NULL OR NOT c.es_detalle OR NOT c.activa OR c.codigo NOT LIKE '1.1.01.%' THEN
+    RAISE EXCEPTION 'CUENTA_INVALIDA: la cuenta de pago "%" debe ser una cuenta de detalle activa de efectivo o bancos (1.1.01...).',
+      coalesce(p_codigo, p_forma);
+  END IF;
+  RETURN c;
+END $$;
+
 -- Tasa de ISV por tipo de impuesto.
 CREATE FUNCTION interno.tasa_isv(p_tipo text) RETURNS numeric
 LANGUAGE sql IMMUTABLE SET search_path = '' AS $$
@@ -171,6 +194,7 @@ $$;
 --   "proveedor_id": "...", "bodega_id": "...", "numero_documento": "000-001-01-00001234",
 --   "fecha": "2026-01-15", "condicion": "credito" | "contado",
 --   "forma_pago": "caja" | "banco"            (solo contado),
+--   "cuenta_pago": "1.1.01.04"                (contado, opcional: qué banco o caja),
 --   "fecha_vencimiento": "2026-02-14"         (crédito; si no, fecha + plazo del proveedor),
 --   "notas": "...",
 --   "lineas": [{"producto_id":"...","cantidad":10,"costo_unitario":1250.5,"isv_centavos":1876}, ...]
@@ -188,6 +212,7 @@ DECLARE
   v_venc   date;
   v_cond   text;
   v_forma  text;
+  v_cta    public.cuenta;
   v_doc    text;
   l        jsonb;
   i        integer := 0;
@@ -218,7 +243,7 @@ BEGIN
 
   -- Cabecera
   PERFORM interno.exigir_claves(p_datos, ARRAY['proveedor_id','bodega_id','numero_documento','fecha','condicion',
-                                               'forma_pago','fecha_vencimiento','notas','lineas']);
+                                               'forma_pago','cuenta_pago','fecha_vencimiento','notas','lineas']);
   SELECT * INTO v_prov FROM public.tercero t
    WHERE t.empresa_id = p_empresa_id AND t.id = interno.json_uuid(p_datos->'proveedor_id', 'proveedor_id');
   IF v_prov.id IS NULL OR NOT v_prov.es_proveedor OR NOT v_prov.activo THEN
@@ -242,6 +267,11 @@ BEGIN
   v_forma := interno.json_texto(p_datos->'forma_pago', 'forma_pago', 10);
   IF v_cond = 'contado' AND (v_forma IS NULL OR v_forma NOT IN ('caja', 'banco')) THEN
     RAISE EXCEPTION 'DATO_INVALIDO: en una compra de contado indique la forma de pago: "caja" o "banco".';
+  END IF;
+  IF v_cond = 'contado' THEN
+    v_cta := interno.cuenta_de_pago(p_empresa_id, v_forma, interno.json_texto(p_datos->'cuenta_pago', 'cuenta_pago', 30));
+  ELSIF p_datos ? 'cuenta_pago' AND p_datos->'cuenta_pago' <> 'null'::jsonb THEN
+    RAISE EXCEPTION 'DATO_INVALIDO: una compra al crédito no lleva cuenta de pago.';
   END IF;
   IF v_cond = 'credito' THEN
     IF v_forma IS NOT NULL THEN
@@ -312,14 +342,14 @@ BEGIN
     jsonb_build_array(
       jsonb_build_object('uso', 'inventario',  'debe', v_tsub::bigint),
       jsonb_build_object('uso', 'isv_credito', 'debe', v_tisv::bigint),
-      jsonb_build_object('uso', CASE WHEN v_cond = 'credito' THEN 'cxp' ELSE v_forma END,
-                         'haber', (v_tsub + v_tisv)::bigint)));
+      CASE WHEN v_cond = 'credito' THEN jsonb_build_object('uso', 'cxp', 'haber', (v_tsub + v_tisv)::bigint)
+           ELSE jsonb_build_object('cuenta', v_cta.codigo, 'haber', (v_tsub + v_tisv)::bigint) END));
 
   INSERT INTO public.compra (id, empresa_id, numero, proveedor_id, numero_documento, sucursal_id, bodega_id,
-    fecha_contable, condicion, forma_pago, fecha_vencimiento, subtotal_centavos, isv_centavos, total_centavos,
+    fecha_contable, condicion, forma_pago, cuenta_pago_id, fecha_vencimiento, subtotal_centavos, isv_centavos, total_centavos,
     notas, asiento_id, id_operacion, creado_por)
   VALUES (v_id, p_empresa_id, v_num, v_prov.id, v_doc, v_b.sucursal_id, v_b.id,
-    v_fecha, v_cond, v_forma, v_venc, v_tsub::bigint, v_tisv::bigint, (v_tsub + v_tisv)::bigint,
+    v_fecha, v_cond, v_forma, v_cta.id, v_venc, v_tsub::bigint, v_tisv::bigint, (v_tsub + v_tisv)::bigint,
     interno.json_texto(p_datos->'notas', 'notas', 500), v_asto, p_id_operacion, auth.uid())
   RETURNING * INTO v_c;
 
@@ -402,8 +432,9 @@ BEGIN
     'ANULACIÓN compra #' || v_c.numero || ' (factura ' || v_c.numero_documento || '): ' || trim(p_motivo),
     'anulacion_compra', p_id_operacion,
     jsonb_build_array(
-      jsonb_build_object('uso', CASE WHEN v_c.condicion = 'credito' THEN 'cxp' ELSE v_c.forma_pago END,
-                         'debe', v_c.total_centavos),
+      CASE WHEN v_c.condicion = 'credito' THEN jsonb_build_object('uso', 'cxp', 'debe', v_c.total_centavos)
+           ELSE jsonb_build_object('cuenta', (SELECT x.codigo FROM public.cuenta x WHERE x.id = v_c.cuenta_pago_id),
+                                   'debe', v_c.total_centavos) END,
       jsonb_build_object('uso', 'isv_credito', 'haber', v_c.isv_centavos),
       jsonb_build_object('uso', 'inventario',  'haber', v_sale),
       jsonb_build_object('uso', 'perdida_inventario', 'haber', greatest(v_dif, 0), 'descripcion', 'Ajuste de costo'),
@@ -426,7 +457,7 @@ END $$;
 -- ---------------------------------------------------------------------
 CREATE FUNCTION public.pagar_proveedor(p_empresa_id uuid, p_compra_id uuid, p_monto_centavos bigint,
                                        p_fecha date, p_forma_pago text, p_id_operacion uuid,
-                                       p_referencia text DEFAULT NULL)
+                                       p_referencia text DEFAULT NULL, p_cuenta_pago text DEFAULT NULL)
 RETURNS jsonb
 LANGUAGE plpgsql SECURITY DEFINER SET search_path = '' AS $$
 DECLARE
@@ -436,6 +467,7 @@ DECLARE
   v_num   bigint;
   v_asto  uuid;
   v_suc   uuid;
+  v_cta   public.cuenta;
 BEGIN
   PERFORM interno.exigir_escritura(p_empresa_id, 'compras.pagar', 'compras');
   IF p_id_operacion IS NULL THEN
@@ -451,6 +483,7 @@ BEGIN
   IF p_forma_pago IS NULL OR p_forma_pago NOT IN ('caja', 'banco') THEN
     RAISE EXCEPTION 'DATO_INVALIDO: la forma de pago es "caja" o "banco".';
   END IF;
+  v_cta := interno.cuenta_de_pago(p_empresa_id, p_forma_pago, p_cuenta_pago);
   PERFORM interno.exigir_fecha_contable(p_empresa_id, p_fecha);
 
   PERFORM interno.bloquear_libros(p_empresa_id);
@@ -487,11 +520,11 @@ BEGIN
       || coalesce(' ref. ' || nullif(trim(p_referencia), ''), ''),
     'pago_proveedor', p_id_operacion,
     jsonb_build_array(jsonb_build_object('uso', 'cxp', 'debe', p_monto_centavos),
-                      jsonb_build_object('uso', p_forma_pago, 'haber', p_monto_centavos)));
+                      jsonb_build_object('cuenta', v_cta.codigo, 'haber', p_monto_centavos)));
 
   INSERT INTO public.pago_proveedor (empresa_id, numero, compra_id, proveedor_id, fecha_contable, forma_pago,
-    monto_centavos, referencia, asiento_id, id_operacion, creado_por)
-  VALUES (p_empresa_id, v_num, v_c.id, v_c.proveedor_id, p_fecha, p_forma_pago, p_monto_centavos,
+    cuenta_pago_id, monto_centavos, referencia, asiento_id, id_operacion, creado_por)
+  VALUES (p_empresa_id, v_num, v_c.id, v_c.proveedor_id, p_fecha, p_forma_pago, v_cta.id, p_monto_centavos,
     nullif(trim(p_referencia), ''), v_asto, p_id_operacion, auth.uid())
   RETURNING * INTO v_pago;
 
@@ -552,10 +585,10 @@ GRANT SELECT ON public.v_cxp_documento, public.v_cxp_proveedor TO authenticated,
 REVOKE EXECUTE ON FUNCTION
   public.registrar_compra(uuid, jsonb, uuid),
   public.anular_compra(uuid, text, uuid, date),
-  public.pagar_proveedor(uuid, uuid, bigint, date, text, uuid, text)
+  public.pagar_proveedor(uuid, uuid, bigint, date, text, uuid, text, text)
 FROM PUBLIC, anon, service_role;
 GRANT EXECUTE ON FUNCTION
   public.registrar_compra(uuid, jsonb, uuid),
   public.anular_compra(uuid, text, uuid, date),
-  public.pagar_proveedor(uuid, uuid, bigint, date, text, uuid, text)
+  public.pagar_proveedor(uuid, uuid, bigint, date, text, uuid, text, text)
 TO authenticated;

@@ -9,6 +9,7 @@
 --   crear_tercero(empresa, datos, id_operacion)       terceros.editar
 --   editar_tercero(empresa, tercero, datos, motivo?)   terceros.editar
 --        límite de crédito y plazo además piden        terceros.credito
+--        "activo": true/false (reactivar) pide         terceros.desactivar + motivo
 --        (y quien no es dueño no pasa el tope de la empresa)
 --   desactivar_tercero(empresa, tercero, motivo)       terceros.desactivar
 --
@@ -300,6 +301,7 @@ LANGUAGE plpgsql SECURITY DEFINER SET search_path = '' AS $$
 DECLARE
   v_antes public.tercero;
   t       public.tercero;
+  v_datos jsonb := p_datos;
 BEGIN
   PERFORM interno.exigir_escritura(p_empresa_id, 'terceros.editar', NULL);
   SELECT * INTO v_antes FROM public.tercero
@@ -307,7 +309,21 @@ BEGIN
   IF v_antes.id IS NULL THEN
     RAISE EXCEPTION 'NO_EXISTE: el cliente o proveedor no existe en esta empresa.';
   END IF;
-  t := interno.aplicar_datos_tercero(v_antes, p_datos);
+  t := v_antes;
+  -- "activo": true/false reactiva o desactiva (permiso terceros.desactivar y motivo).
+  IF jsonb_typeof(p_datos) = 'object' AND p_datos ? 'activo' THEN
+    t.activo := interno.json_si_no(p_datos->'activo', 'activo');
+    IF t.activo IS DISTINCT FROM v_antes.activo THEN
+      IF NOT public.tiene_permiso('terceros.desactivar', p_empresa_id) THEN
+        RAISE EXCEPTION 'SIN_PERMISO: su rol no tiene el permiso "terceros.desactivar".';
+      END IF;
+      IF length(trim(coalesce(p_motivo, ''))) < 5 THEN
+        RAISE EXCEPTION 'FALTA_MOTIVO: escriba por qué se activa o desactiva (mínimo 5 letras).';
+      END IF;
+    END IF;
+    v_datos := v_datos - 'activo';
+  END IF;
+  t := interno.aplicar_datos_tercero(t, v_datos);
   PERFORM interno.revisar_credito(p_empresa_id, t, v_antes);
 
   PERFORM set_config('app.motivo', coalesce(trim(p_motivo), ''), true);
@@ -315,7 +331,7 @@ BEGIN
     UPDATE public.tercero SET
       es_cliente = t.es_cliente, es_proveedor = t.es_proveedor, tipo_persona = t.tipo_persona,
       nombre = t.nombre, rtn = t.rtn, telefono = t.telefono, correo = t.correo, direccion = t.direccion,
-      limite_credito_centavos = t.limite_credito_centavos, plazo_dias = t.plazo_dias
+      limite_credito_centavos = t.limite_credito_centavos, plazo_dias = t.plazo_dias, activo = t.activo
     WHERE id = p_tercero_id;
   EXCEPTION WHEN unique_violation THEN
     RAISE EXCEPTION 'YA_EXISTE: ya hay otro cliente o proveedor con el RTN %.', t.rtn;

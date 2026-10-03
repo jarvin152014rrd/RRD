@@ -71,6 +71,14 @@ BEGIN
   PERFORM pruebas.afirmar(NOT (r->>'activo')::boolean AND NOT (r->>'ya_estaba')::boolean, 'desactivado');
   r := public.desactivar_tercero(e, t1, 'Cerró su negocio');
   PERFORM pruebas.afirmar((r->>'ya_estaba')::boolean, 'reintento seguro');
+  -- Reactivar: con permiso de desactivar y motivo.
+  PERFORM pruebas.como('vendedor_a');
+  PERFORM pruebas.debe_fallar(format('SELECT public.editar_tercero(%L, %L, %L, %L)', e, t1, '{"activo": true}', 'Volvió a comprar'), 'SIN_PERMISO', 'vendedor reactiva');
+  PERFORM pruebas.como('admin_a');
+  PERFORM pruebas.debe_fallar(format('SELECT public.editar_tercero(%L, %L, %L)', e, t1, '{"activo": true}'), 'FALTA_MOTIVO', 'reactivar sin motivo');
+  PERFORM public.editar_tercero(e, t1, '{"activo": true}', 'Volvió a comprar');
+  PERFORM pruebas.afirmar((SELECT activo FROM public.tercero WHERE id = t1), 'reactivado');
+  PERFORM public.desactivar_tercero(e, t1, 'Cerró su negocio otra vez');
   PERFORM pruebas.como('superusuario');
   PERFORM pruebas.debe_fallar(format('DELETE FROM public.tercero WHERE id = %L', t1), 'PROHIBIDO', 'borrar a la fuerza');
   PERFORM pruebas.debe_fallar(format('UPDATE public.tercero SET empresa_id = %L WHERE id = %L', pruebas.empresa('B'), t1), 'PROHIBIDO', 'mover de empresa');

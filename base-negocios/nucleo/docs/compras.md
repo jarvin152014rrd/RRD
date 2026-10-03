@@ -9,7 +9,9 @@ documento + entradas al kardex + asiento.
  "fecha":"2026-01-15","condicion":"credito","fecha_vencimiento":"2026-02-14",
  "lineas":[{"producto_id":"...","cantidad":10,"costo_unitario":1250.5}]}
 ```
-- Contado: `"condicion":"contado","forma_pago":"caja"|"banco"`.
+- Contado: `"condicion":"contado","forma_pago":"caja"|"banco"` y, si se quiere,
+  `"cuenta_pago":"1.1.01.04"` (qué caja o banco: subcuenta de detalle activa de 1.1.01).
+  Sin ella: caja = 1.1.01.01, banco = 1.1.01.03. La anulación devuelve a la misma cuenta.
 - Crédito: vence en `fecha_vencimiento` o en fecha + plazo del proveedor.
 - Línea: subtotal = round(cantidad × costo_unitario); ISV = round(subtotal × 15% / 18%)
   según el producto (EXENTO = 0). Se puede mandar `"isv_centavos"` para cuadrar
@@ -25,9 +27,10 @@ original. Se rechaza si dejaría existencia negativa, si ya se anuló o si
 la compra tiene pagos. Si la bodega queda vacía sale todo su valor y la
 diferencia contra el costo original va a 5.1.01.02 (ajuste de costo).
 
-**`pagar_proveedor(empresa, compra, monto_centavos, fecha, forma_pago, id_operacion, referencia?)`**
+**`pagar_proveedor(empresa, compra, monto_centavos, fecha, forma_pago, id_operacion, referencia?, cuenta_pago?)`**
 (compras.pagar): abono a una compra al crédito. Nunca más que su saldo
-(`PAGO_EXCEDE_SALDO`). Asiento Dr 2.1.01.01 / Cr Caja o Bancos.
+(`PAGO_EXCEDE_SALDO`). Asiento Dr 2.1.01.01 / Cr la cuenta de pago (caja, bancos o
+la subcuenta indicada, ej. "Banco Atlántida").
 
 **Lectura** (piden `compras.ver`):
 - `v_cxp_documento`: facturas al crédito con saldo: total, pagado, saldo,
