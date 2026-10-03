@@ -110,6 +110,7 @@ GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA pruebas TO anon, authenticated, service
 -- Empresas (con la llave del proveedor: service_role)
 -- ---------------------------------------------------------------------
 SET ROLE service_role;
+SELECT set_config('request.jwt.claims', '{"role":"service_role"}', false);
 SELECT set_config('pruebas.emp_a', public.crear_empresa_inicial(
   'Ferretería El Martillo', '08011999000001',
   'a0000000-0000-0000-0000-000000000001', 'a0000000-0000-0000-0000-000000000005')::text, false);
@@ -121,6 +122,7 @@ INSERT INTO public.licencia (empresa_id, vence_el)
 VALUES (current_setting('pruebas.emp_a')::uuid, public.hoy_local() + 30),
        (current_setting('pruebas.emp_b')::uuid, public.hoy_local() + 30);
 RESET ROLE;
+SELECT set_config('request.jwt.claims', '', false);
 
 INSERT INTO pruebas.dato (clave, valor) VALUES
   ('A', current_setting('pruebas.emp_a')::uuid),

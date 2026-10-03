@@ -35,7 +35,7 @@ DECLARE
 BEGIN
   v_empresa := CASE WHEN TG_TABLE_NAME = 'empresa' THEN v_fila->>'id' ELSE v_fila->>'empresa_id' END;
   v_id_op   := coalesce(v_fila->>'id_operacion', nullif(current_setting('app.id_operacion', true), ''));
-  v_rol     := coalesce(auth.role(), session_user::text);
+  v_rol     := coalesce(auth.role(), nullif(current_setting('role'), 'none'), session_user::text);
 
   INSERT INTO public.bitacora (empresa_id, usuario_id, rol_sesion, accion, tabla,
                                registro_id, antes, despues, id_operacion, motivo)

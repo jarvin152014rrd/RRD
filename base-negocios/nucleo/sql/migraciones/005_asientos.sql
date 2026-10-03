@@ -97,12 +97,18 @@ CREATE TRIGGER antes_de_insertar BEFORE INSERT ON public.asiento_linea
 CREATE FUNCTION interno.revisar_cuadre() RETURNS trigger
 LANGUAGE plpgsql SECURITY DEFINER SET search_path = '' AS $$
 DECLARE
-  v_id     uuid := CASE WHEN TG_TABLE_NAME = 'asiento' THEN NEW.id ELSE NEW.asiento_id END;
+  v_id     uuid;
   v_total  bigint;
   v_debe   numeric;
   v_haber  numeric;
   v_lineas integer;
 BEGIN
+  -- Se usa jsonb porque cada tabla tiene columnas distintas.
+  IF TG_TABLE_NAME = 'asiento' THEN
+    v_id := (to_jsonb(NEW)->>'id')::uuid;
+  ELSE
+    v_id := (to_jsonb(NEW)->>'asiento_id')::uuid;
+  END IF;
   SELECT a.total_centavos INTO v_total FROM public.asiento a WHERE a.id = v_id;
   SELECT coalesce(sum(debe_centavos), 0), coalesce(sum(haber_centavos), 0), count(*)
     INTO v_debe, v_haber, v_lineas

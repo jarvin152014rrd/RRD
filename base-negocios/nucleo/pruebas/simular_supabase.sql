@@ -35,12 +35,12 @@ CREATE TABLE IF NOT EXISTS auth.users (
 -- Igual que Supabase: el usuario sale del JWT (claim "sub").
 CREATE OR REPLACE FUNCTION auth.uid() RETURNS uuid
 LANGUAGE sql STABLE AS $$
-  SELECT nullif(current_setting('request.jwt.claims', true)::json->>'sub', '')::uuid
+  SELECT (nullif(current_setting('request.jwt.claims', true), '')::json->>'sub')::uuid
 $$;
 
 CREATE OR REPLACE FUNCTION auth.role() RETURNS text
 LANGUAGE sql STABLE AS $$
-  SELECT nullif(current_setting('request.jwt.claims', true)::json->>'role', '')::text
+  SELECT (nullif(current_setting('request.jwt.claims', true), '')::json->>'role')::text
 $$;
 
 GRANT USAGE ON SCHEMA auth TO anon, authenticated, service_role;
