@@ -274,3 +274,43 @@ a dar seguimiento el primer día, sin trabas.
 - Lista general de clientes: paquete, módulos, vencimiento de licencia y
   versión del núcleo.
 - Más adelante: panel web del proveedor con lo mismo por clics.
+
+## Límites del contrato controlados por el proveedor (ingreso por crecimiento)
+
+- La ficha de cada cliente define límites: usuarios, cajas, sucursales,
+  bodegas (y otros que se necesiten). El servidor los hace cumplir; dueño y
+  admin crean hasta ese número.
+- Al llegar al límite: mensaje "Llegaste al máximo de tu plan. Solicita una
+  ampliación a tu proveedor." No se muestran planes ni precios.
+- Botón "Solicitar ampliación" (y "Solicitar módulo"): crea una solicitud con
+  lo que el cliente necesita y notifica al proveedor.
+- El proveedor cambia el número en la ficha y aplica con aplicar_ficha.sh.
+  La lista de clientes muestra quién está cerca de su límite.
+- Nunca se bloquea el trabajo diario ni se pierden datos por un límite; solo
+  se impide agregar más.
+
+## Crecimiento del negocio
+
+- Usuarios restringidos por sucursal (el dueño ve todo).
+- Reportes por sucursal y consolidados.
+- Traslados de dinero y mercadería entre sucursales con rastro.
+- Precios por sucursal (opcional).
+- Prueba de volumen (cientos de miles de ventas) para confirmar velocidad.
+- Aviso al proveedor cuando la base se acerque al límite de su plan de
+  Supabase.
+
+## Centro de control del dueño
+
+- Panel en vivo: ventas de hoy vs meta, ayer y mes pasado; dónde está el
+  dinero; quién debe y a quién se debe; cajas abiertas y quién está; ganancia
+  del mes.
+- Alertas al celular: diferencias de arqueo, descuentos/anulaciones/créditos
+  sobre tope, depósitos en tránsito, inventario bajo, CAI por vencer, pagos
+  fijos por vencer, cuentas en negativo, movimientos fuera de horario.
+- Aprobaciones con un toque desde el celular, con motivo.
+- Vigilancia por empleado: ventas y ganancia, descuentos dados, anulaciones
+  pedidas, diferencias de caja acumuladas, horario de uso.
+- Bitácora legible con filtros (persona, fecha, tipo).
+- Control remoto: cerrar sesión, desactivar usuario al instante, bloquear
+  acceso fuera de horario.
+- Reportes automáticos diario y semanal.
