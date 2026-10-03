@@ -1,15 +1,19 @@
 # Ventas (028_ventas, 029_cotizaciones_lecturas) — módulo "ventas"
 
-Necesita también "inventario" (ahí vive el catálogo) y, para cobrar dinero,
-"dinero". La factura con CAI es del régimen fiscal (`cai.md`); sin régimen
-activo toda venta sale con **ticket interno** (T-001-001-00000001).
+Necesita solo "contabilidad" (0.8.0, ver `modulos.md`). Sin "inventario" la
+venta **solo acepta servicios** (un bien da `MODULO_INACTIVO`); el catálogo se
+edita igual con "ventas". Sin "dinero" solo se vende **al crédito** (el
+contado necesita una cuenta de dinero). La factura con CAI es del régimen
+fiscal (`cai.md`, módulo `fiscal_hn`, que necesita ventas); sin régimen activo
+toda venta sale con **ticket interno** (T-001-001-00000001).
 
 ## Registrar — `registrar_venta(empresa, datos, id_operacion)`
 
 TODO o NADA: documento + salida del kardex a costo promedio + asiento + rastro del dinero.
 
 ```json
-{"lineas":[{"producto_id":"...","cantidad":10,"descuento_porcentaje":5},
+{"lineas":[{"producto_id":"...","cantidad":10,"promocion_id":"..."},
+           {"producto_id":"...","cantidad":1,"descuento_porcentaje":5},
            {"producto_id":"<servicio>","cantidad":2}],
  "pagos":[{"forma":"efectivo","monto_centavos":10000,"recibido_centavos":20000},
           {"forma":"tarjeta","monto_centavos":5000,"referencia":"Voucher 123"},
@@ -29,7 +33,7 @@ TODO o NADA: documento + salida del kardex a costo promedio + asiento + rastro d
   | tarjeta | cuenta "POS por liquidar" (la indicada, la única, o se crea) | se liquida al banco con `trasladar_dinero` |
   | transferencia | cuenta "Transferencias por confirmar" | `confirmar_transferencia_venta` la pasa al banco elegido |
   | credito | Clientes 1.1.02.01 (CxC) | vence = fecha + plazo del cliente (fecha local) |
-- **Quién cobra:** con efectivo, tarjeta o transferencia se pide además `ventas.cobrar` (cajero, admin, dueño). El vendedor vende al crédito o hace una **cotización** que el cajero cobra.
+- **Quién cobra:** con efectivo, tarjeta o transferencia se pide además `ventas.cobrar` (cajero, admin, dueño). El vendedor vende al crédito o hace una **cotización** que el cajero cobra, salvo que la empresa tenga **vendedor que cobra** (ver abajo).
 - **Existencia:** la política de siempre (negativo solo con la configuración de la empresa o el permiso `inventario.negativo`). Los **servicios** no tocan el kardex.
 - **Respuesta:** venta_id, número, estado, documento, totales, vuelto, aprobación; el costo solo a quien tiene `inventario.costos`.
 
@@ -46,22 +50,55 @@ TODO o NADA: documento + salida del kardex a costo promedio + asiento + rastro d
 Ejemplo (prueba 79): 10 tornillos a L 15.00 con ISV + 2.5 lb de arroz exento a L 22.00:
 15,000 → 13,043 + 1,957; arroz 5,500; total 20,500; costo 10 x 1,000 + 2.5 x 1,500 = 13,750.
 
+## Promociones: nunca descuento sobre descuento (0.8.0, decisión del dueño)
+
+- Cada línea lleva **a lo más un descuento**: promoción, o descuento manual de
+  la línea, o su parte del descuento de factura. Nunca dos.
+- Si a una línea le aplican **varias promociones** vigentes (de su categoría o
+  de una categoría madre), la venta **no elige sola**: quien vende ve la lista
+  con `promociones_aplicables(empresa, producto, fecha?, cantidad?)` (de la que
+  más descuenta a la que menos) y manda `"promocion_id"` en la línea. Sin
+  elegir: `PROMOCION_A_ELEGIR` con los nombres, ids y descuento de cada una.
+  Si aplica **una sola**, se aplica sola. Una promoción que no aplica a ese
+  producto en esa fecha: `PROMOCION_INVALIDA`.
+- Una línea con promoción **no admite** descuento manual (`DESCUENTO_DOBLE`).
+- El **descuento de factura** (porcentaje o monto) se reparte **solo entre las
+  líneas sin otro descuento**; las de promoción o descuento manual quedan
+  fuera (decisión: excluirlas, no rechazar la venta). Si ninguna línea queda
+  libre: `DESCUENTO_DOBLE`. Un monto mayor que esas líneas: `DATO_INVALIDO`.
+- Ejemplo (prueba 90): tornillos con promoción 13,500; galón con 2 % manual
+  44,100; servicio sin descuento 23,000; factura 10 % → solo el servicio:
+  round(23,000 × 10 %) = 2,300 → total 13,500 + 44,100 + 20,700 = 78,300.
+- La cotización usa la misma regla. Una cotización de antes de 0.8.0 con
+  "precios respetados" se convierte con lo que se cotizó.
+
+## Vendedor que cobra (0.8.0, decisión del dueño)
+
+`empresa.vendedor_cobra` (por defecto **false**): con `true` el vendedor recibe
+efectivo, tarjeta y transferencia como el cajero, con las mismas reglas de
+turno (`interno.cuenta_efectivo_cobro`: si la empresa exige turnos, sin turno
+abierto da `SIN_TURNO_ABIERTO`). Con `false`, como siempre: cobra el cajero.
+Lo cambia **solo el dueño** con `configurar_empresa(empresa,
+'{"vendedor_cobra": true}', motivo)` (queda en la bitácora). El perfil
+**pequeño** lo sugiere en `true`; mediano y grande en `false`. `mi_perfil()`
+lo trae en `empresa.vendedor_cobra`.
+
 ## Cálculo por línea (`interno.calcular_venta`)
 
 En los términos del precio (con impuesto si el precio lo incluye):
 1. bruto = round(cantidad × precio)
-2. **promoción** de su categoría o de una categoría madre, vigente en la fecha: la que más descuenta (% o monto por unidad)
-3. **artículo**: `descuento_porcentaje` o `descuento_centavos`
-4. **factura**: porcentaje (por línea) o monto con impuesto, repartido por el total con impuesto de cada línea (resto mayor, al centavo); si el precio no incluye impuesto se pasa a sin impuesto con round(parte / (1 + tasa)) (puede variar ±1 centavo)
+2. **promoción** de su categoría o de una categoría madre, vigente en la fecha: la única que aplica o la elegida con `promocion_id` (% o monto por unidad)
+3. **artículo** (solo si la línea no tiene promoción): `descuento_porcentaje` o `descuento_centavos`
+4. **factura** (solo líneas sin promoción ni descuento de artículo): porcentaje (por línea) o monto con impuesto, repartido por el total con impuesto de cada línea libre (resto mayor, al centavo); si el precio no incluye impuesto se pasa a sin impuesto con round(parte / (1 + tasa)) (puede variar ±1 centavo)
 5. neto → regla de siempre (`public.precio_con_tasa`, tasa de la tabla de impuestos): base sin impuesto, impuesto y total. El impuesto se calcula sobre el precio ya rebajado.
 
 `descuento_manual_porcentaje` = (artículo + factura, sin impuesto) / (precio con promoción, sin impuesto) × 100: es lo que se compara con el tope del puesto. Las promociones no cuentan (las autorizó el admin al crearlas).
-Ejemplo (prueba 80): 10 tornillos, promoción 10 % y 5 % del artículo → 12,825 con ISV; manual 5.00 % (justo el tope del cajero).
+Ejemplo (prueba 80, 0.8.0): 10 tornillos con promoción 10 % → 13,500 con ISV (descuento 1,304 sin ISV, todo de promoción); con además 5 % del artículo → `DESCUENTO_DOBLE`.
 
 ## Topes y aprobaciones
 
-- Topes de descuento por puesto (`configurar_tope_descuento(empresa, rol, sin_aprobacion %, aprueba_hasta %, motivo)`, solo el dueño). **Valores iniciales a confirmar:** cajero y vendedor 5 %; admin 10 % y aprueba hasta 20 %.
-- Crédito y anulación (`configurar_tope_rol(..., 'credito' | 'anulacion_venta', 0, aprueba_hasta, motivo)`): admin aprueba hasta L 5,000.00 (a confirmar).
+- Topes de descuento por puesto (`configurar_tope_descuento(empresa, rol, sin_aprobacion %, aprueba_hasta %, motivo)`, solo el dueño). **Confirmados por el dueño (0.8.0):** cajero y vendedor 5 %; admin 10 % y aprueba hasta 20 %.
+- Crédito y anulación (`configurar_tope_rol(..., 'credito' | 'anulacion_venta', 0, aprueba_hasta, motivo)`): admin aprueba hasta L 5,000.00 (**confirmado**).
 - Sobre el tope (o crédito que lo pide) la venta queda **pendiente_aprobacion** SIN mover dinero, inventario ni número CAI. `resolver_aprobacion(aprobacion, true/false, motivo, id_operacion)` (`ventas.aprobar`): aprobar la EMITE en ese momento (fecha de hoy) con las formas de pago registradas (el efectivo entra al mismo turno; si ese turno ya cerró: `TURNO_CERRADO`); rechazar pide motivo. `cancelar_venta(venta, motivo, id)`: quien la registró o quien aprueba.
 - Nadie aprueba lo que pidió (salvo el dueño). El dueño no tiene topes.
 - **Doble aprobación** (`empresa.doble_aprobacion`, perfil grande): se fija al pedir; dos personas distintas (la primera queda anotada y la solicitud sigue pendiente); **el dueño aprueba solo**; un rechazo basta. Vale para gastos, ventas y anulaciones.
@@ -91,7 +128,7 @@ Mes cerrado: `PERIODO_CERRADO` (se corregirá con nota de crédito en 2b-2b).
 `crear_cotizacion(empresa, {"lineas","descuento_factura","cliente_id","vigente_hasta"}, id)` (`ventas.cotizar`):
 no mueve inventario, dinero ni número; vigencia por defecto `empresa.cotizacion_dias_vigencia` (15).
 `convertir_cotizacion_a_venta(cotizacion, {"pagos","caja_id",...}, id)`: la venta queda a nombre del
-vendedor de la cotización. **Decisión (a confirmar):** `cotizacion_precios = 'respetar'` (defecto): vigente → precios y descuentos COTIZADOS; vencida → precios del día. `'recalcular'`: siempre precios del día. El tope de descuento se revisa con el puesto de quien la convierte. `anular_cotizacion`. Si su venta se rechaza o cancela, se puede convertir otra vez.
+vendedor de la cotización. Vigencia de 15 días (configurable, **confirmado por el dueño**). **Decisión:** `cotizacion_precios = 'respetar'` (defecto): vigente → precios y descuentos COTIZADOS; vencida → precios del día. `'recalcular'`: siempre precios del día. El tope de descuento se revisa con el puesto de quien la convierte. `anular_cotizacion`. Si su venta se rechaza o cancela, se puede convertir otra vez.
 
 ## Lecturas
 

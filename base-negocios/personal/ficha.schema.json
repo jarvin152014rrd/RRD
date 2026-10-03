@@ -1,71 +1,380 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "ficha.schema.json",
-  "title": "Ficha de un cliente (empresa nueva)",
-  "description": "Datos para crear una empresa con herramientas/nuevo_cliente.sh. La base vuelve a validar todo en crear_empresa_inicial(jsonb).",
-  "type": "object",
-  "additionalProperties": false,
-  "required": ["nombre", "fecha_inicio", "dueno"],
-  "properties": {
-    "$schema": { "type": "string" },
-    "nombre": {
-      "description": "Nombre del negocio como aparecerá en la app y los reportes.",
-      "type": "string", "minLength": 1, "pattern": "\\S"
-    },
-    "rtn": {
-      "description": "RTN de 14 dígitos, sin guiones.",
-      "type": ["string", "null"], "pattern": "^[0-9]{14}$"
-    },
-    "rubro": {
-      "description": "A qué se dedica (ferretería, pulpería, farmacia...).",
-      "type": ["string", "null"]
-    },
-    "moneda": {
-      "description": "Código ISO 4217 de 3 letras mayúsculas.",
-      "type": "string", "pattern": "^[A-Z]{3}$", "default": "HNL"
-    },
-    "pais": {
-      "description": "Código ISO 3166-1 de 2 letras mayúsculas.",
-      "type": "string", "pattern": "^[A-Z]{2}$", "default": "HN"
-    },
-    "zona_horaria": {
-      "description": "Zona horaria IANA.",
-      "type": "string", "default": "America/Tegucigalpa"
-    },
-    "fecha_inicio": {
-      "description": "Primer día que se registra en el sistema (AAAA-MM-DD). No se aceptan asientos antes.",
-      "type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$", "format": "date"
-    },
-    "dias_futuro_max": {
-      "description": "Cuántos días al futuro se permite fechar un asiento.",
-      "type": "integer", "minimum": 0, "maximum": 31, "default": 3
-    },
-    "perfil": {
-      "description": "Tamaño del negocio: configura turnos obligatorios, contabilidad visible en el menú, doble aprobación y topes (ver docs/PERSONALIZAR.md). Sin perfil queda como siempre. El dueño lo cambia después con aplicar_perfil.",
-      "enum": ["pequeno", "mediano", "grande", null]
-    },
-    "modulos": {
-      "description": "Módulos activos. 'contabilidad' siempre se activa. Si no se indica y hay 'perfil', se activan los que sugiere el perfil.",
-      "type": "array", "uniqueItems": true,
-      "items": { "enum": ["contabilidad", "ventas", "inventario", "compras", "dinero"] }
-    },
-    "dueno":     { "$ref": "#/$defs/usuario", "description": "Dueño del negocio (debe estar registrado en Supabase)." },
-    "proveedor": { "$ref": "#/$defs/usuario", "description": "Usuario del proveedor (opcional)." },
-    "tema": {
-      "description": "Colores y logo de la app. La base no lo usa.",
-      "type": "object"
-    }
+  "title": "Ficha de un cliente",
+  "description": "Formato 2 (con \"negocio\"): clientes/<cliente>/ficha.json, para nuevo_cliente.sh, aplicar_ficha.sh y lista_clientes.sh. Formato 1 (plano, sin \"negocio\"): el de antes, solo para crear con nuevo_cliente.sh. La base vuelve a validar todo.",
+  "if": {
+    "type": "object",
+    "required": [
+      "negocio"
+    ]
+  },
+  "then": {
+    "$ref": "#/$defs/ficha"
+  },
+  "else": {
+    "$ref": "#/$defs/ficha_formato_1"
   },
   "$defs": {
+    "ficha": {
+      "description": "Formato 2: clientes/<cliente>/ficha.json (nuevo_cliente.sh, aplicar_ficha.sh, lista_clientes.sh).",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "cliente",
+        "paquete",
+        "negocio",
+        "modulos",
+        "dueno"
+      ],
+      "properties": {
+        "$schema": {
+          "type": "string"
+        },
+        "cliente": {
+          "description": "Identificador corto del cliente = nombre de su carpeta en clientes/. Se escribe para confirmar cambios.",
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9_-]{1,40}$"
+        },
+        "paquete": {
+          "description": "Solo informativo (guía de venta, docs/PAQUETES.md). No activa nada por sí solo.",
+          "enum": [
+            "esencial",
+            "completo"
+          ]
+        },
+        "negocio": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "nombre",
+            "fecha_inicio"
+          ],
+          "properties": {
+            "nombre": {
+              "description": "Nombre del negocio como aparecerá en la app y los reportes.",
+              "type": "string",
+              "minLength": 1,
+              "pattern": "\\S"
+            },
+            "rtn": {
+              "description": "RTN de 14 dígitos, sin guiones.",
+              "type": [
+                "string",
+                "null"
+              ],
+              "pattern": "^[0-9]{14}$"
+            },
+            "rubro": {
+              "description": "A qué se dedica (ferretería, pulpería, farmacia...).",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "moneda": {
+              "description": "Código ISO 4217 de 3 letras mayúsculas.",
+              "type": "string",
+              "pattern": "^[A-Z]{3}$",
+              "default": "HNL"
+            },
+            "pais": {
+              "description": "Código ISO 3166-1 de 2 letras mayúsculas.",
+              "type": "string",
+              "pattern": "^[A-Z]{2}$",
+              "default": "HN"
+            },
+            "zona_horaria": {
+              "description": "Zona horaria IANA.",
+              "type": "string",
+              "default": "America/Tegucigalpa"
+            },
+            "fecha_inicio": {
+              "description": "Primer día que se registra en el sistema (AAAA-MM-DD). No se aceptan asientos antes.",
+              "type": "string",
+              "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$",
+              "format": "date"
+            },
+            "dias_futuro_max": {
+              "description": "Cuántos días al futuro se permite fechar un asiento.",
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 31,
+              "default": 3
+            },
+            "empresa_id": {
+              "description": "Id de la empresa en la base (lo da nuevo_cliente.sh). Si falta, aplicar_ficha.sh la busca por el nombre exacto.",
+              "type": [
+                "string",
+                "null"
+              ],
+              "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
+            }
+          }
+        },
+        "perfil": {
+          "description": "Tamaño del negocio: configura turnos obligatorios, contabilidad visible en el menú, doble aprobación y topes (ver docs/PERSONALIZAR.md). Sin perfil queda como siempre. El dueño lo cambia después con aplicar_perfil.",
+          "enum": [
+            "pequeno",
+            "mediano",
+            "grande",
+            null
+          ]
+        },
+        "modulos": {
+          "description": "Cada módulo con true (activo) o false (apagado). Lo que no aparece no cambia. 'contabilidad' siempre true. El régimen fiscal va aparte en 'regimen_fiscal'.",
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "contabilidad": {
+              "const": true
+            },
+            "ventas": {
+              "type": "boolean"
+            },
+            "inventario": {
+              "type": "boolean"
+            },
+            "compras": {
+              "type": "boolean"
+            },
+            "dinero": {
+              "type": "boolean"
+            }
+          }
+        },
+        "regimen_fiscal": {
+          "description": "'fiscal_hn' = facturas con CAI (Honduras, necesita ventas). 'ninguno' = ticket interno.",
+          "enum": [
+            "ninguno",
+            "fiscal_hn"
+          ]
+        },
+        "licencia": {
+          "description": "Vencimiento de la licencia y días de gracia (0 a 60).",
+          "type": [
+            "object",
+            "null"
+          ],
+          "additionalProperties": false,
+          "required": [
+            "vence_el"
+          ],
+          "properties": {
+            "vence_el": {
+              "type": "string",
+              "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$",
+              "format": "date"
+            },
+            "dias_gracia": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 60
+            }
+          }
+        },
+        "limites": {
+          "description": "Límites del contrato: cuántos activos a la vez. null = sin límite. Lo que no aparece no cambia.",
+          "type": [
+            "object",
+            "null"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "usuarios": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "minimum": 0,
+              "maximum": 100000
+            },
+            "cajas": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "minimum": 0,
+              "maximum": 100000
+            },
+            "sucursales": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "minimum": 0,
+              "maximum": 100000
+            },
+            "bodegas": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "minimum": 0,
+              "maximum": 100000
+            }
+          }
+        },
+        "conexion": {
+          "description": "Cadena de conexión SIN clave (postgresql://postgres@db.<ref>.supabase.co:5432/postgres). La clave nunca va aquí.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^postgres(ql)?://"
+        },
+        "dueno": {
+          "$ref": "#/$defs/usuario",
+          "description": "Dueño del negocio (debe estar registrado en Supabase)."
+        },
+        "proveedor": {
+          "$ref": "#/$defs/usuario",
+          "description": "Usuario del proveedor (opcional)."
+        },
+        "tema": {
+          "description": "Colores y logo de la app. La base no lo usa.",
+          "type": "object"
+        },
+        "notas": {
+          "description": "Notas del proveedor (no van a la base).",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    },
+    "ficha_formato_1": {
+      "description": "Formato 1 (de antes, plano). Se sigue aceptando en nuevo_cliente.sh.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "nombre",
+        "fecha_inicio",
+        "dueno"
+      ],
+      "properties": {
+        "$schema": {
+          "type": "string"
+        },
+        "nombre": {
+          "description": "Nombre del negocio como aparecerá en la app y los reportes.",
+          "type": "string",
+          "minLength": 1,
+          "pattern": "\\S"
+        },
+        "rtn": {
+          "description": "RTN de 14 dígitos, sin guiones.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^[0-9]{14}$"
+        },
+        "rubro": {
+          "description": "A qué se dedica (ferretería, pulpería, farmacia...).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "moneda": {
+          "description": "Código ISO 4217 de 3 letras mayúsculas.",
+          "type": "string",
+          "pattern": "^[A-Z]{3}$",
+          "default": "HNL"
+        },
+        "pais": {
+          "description": "Código ISO 3166-1 de 2 letras mayúsculas.",
+          "type": "string",
+          "pattern": "^[A-Z]{2}$",
+          "default": "HN"
+        },
+        "zona_horaria": {
+          "description": "Zona horaria IANA.",
+          "type": "string",
+          "default": "America/Tegucigalpa"
+        },
+        "fecha_inicio": {
+          "description": "Primer día que se registra en el sistema (AAAA-MM-DD). No se aceptan asientos antes.",
+          "type": "string",
+          "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$",
+          "format": "date"
+        },
+        "dias_futuro_max": {
+          "description": "Cuántos días al futuro se permite fechar un asiento.",
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 31,
+          "default": 3
+        },
+        "perfil": {
+          "description": "Tamaño del negocio: configura turnos obligatorios, contabilidad visible en el menú, doble aprobación y topes (ver docs/PERSONALIZAR.md). Sin perfil queda como siempre. El dueño lo cambia después con aplicar_perfil.",
+          "enum": [
+            "pequeno",
+            "mediano",
+            "grande",
+            null
+          ]
+        },
+        "modulos": {
+          "description": "Módulos activos. 'contabilidad' siempre se activa. Si no se indica y hay 'perfil', se activan los que sugiere el perfil. Deben venir con lo que necesitan (ver nucleo/docs/modulos.md).",
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "enum": [
+              "contabilidad",
+              "ventas",
+              "inventario",
+              "compras",
+              "dinero",
+              "fiscal_hn"
+            ]
+          }
+        },
+        "dueno": {
+          "$ref": "#/$defs/usuario",
+          "description": "Dueño del negocio (debe estar registrado en Supabase)."
+        },
+        "proveedor": {
+          "$ref": "#/$defs/usuario",
+          "description": "Usuario del proveedor (opcional)."
+        },
+        "tema": {
+          "description": "Colores y logo de la app. La base no lo usa.",
+          "type": "object"
+        }
+      }
+    },
     "usuario": {
       "type": "object",
       "additionalProperties": false,
       "properties": {
-        "correo":  { "type": "string", "format": "email", "pattern": "^[^@\\s]+@[^@\\s]+$" },
-        "user_id": { "type": "string", "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$" },
-        "nombre":  { "type": "string" }
+        "correo": {
+          "type": "string",
+          "format": "email",
+          "pattern": "^[^@\\s]+@[^@\\s]+$"
+        },
+        "user_id": {
+          "type": "string",
+          "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
+        },
+        "nombre": {
+          "type": "string"
+        }
       },
-      "anyOf": [ { "required": ["correo"] }, { "required": ["user_id"] } ]
+      "anyOf": [
+        {
+          "required": [
+            "correo"
+          ]
+        },
+        {
+          "required": [
+            "user_id"
+          ]
+        }
+      ]
     }
   }
 }

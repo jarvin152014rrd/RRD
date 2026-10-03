@@ -28,22 +28,25 @@ BEGIN
          'porcentaje', 10, 'fecha_inicio', to_char(public.hoy_local(e) - 1, 'YYYY-MM-DD'),
          'fecha_fin', to_char(public.hoy_local(e) + 1, 'YYYY-MM-DD')))->>'promocion_id')::uuid;
 
-  -- 2) Venta A (cajero): 10 tornillos con promoción 10 % y 5 % del artículo (su tope: 5 %).
+  -- 2) Venta A (cajero): 10 tornillos con promoción 10 %. (0.8.0: nunca descuento sobre descuento:
+  --    la línea con promoción NO admite además el 5 % del artículo.)
   PERFORM pruebas.como('cajero_a');
-  v := public.registrar_venta(e, jsonb_build_object('lineas', jsonb_build_array(
+  PERFORM pruebas.debe_fallar(format('SELECT public.registrar_venta(%L, %L, gen_random_uuid())', e, jsonb_build_object('lineas', jsonb_build_array(
          jsonb_build_object('producto_id', pruebas.id('P1'), 'cantidad', 10, 'descuento_porcentaje', 5)),
+         'pagos', '[{"forma":"efectivo"}]'::jsonb)), 'DESCUENTO_DOBLE', 'promoción + descuento del artículo');
+  v := public.registrar_venta(e, jsonb_build_object('lineas', jsonb_build_array(
+         jsonb_build_object('producto_id', pruebas.id('P1'), 'cantidad', 10)),
          'pagos', '[{"forma":"efectivo"}]'::jsonb), gen_random_uuid());
-  -- A mano: bruto 15,000; promoción 1,500 -> 13,500; artículo round(13,500 x 5 %) = 675 -> 12,825 (con ISV).
-  -- Sin ISV: bruto 13,043; con promoción round(13,500/1.15) = 11,739; neto round(12,825/1.15) = 11,152; ISV 1,673.
-  -- Descuento manual = (11,739 - 11,152) / 11,739 = 5.00 % (justo el tope: no pide aprobación).
-  PERFORM pruebas.afirmar(v->>'estado' = 'emitida' AND (v->>'total_centavos')::bigint = 12825 AND (v->>'impuesto_centavos')::bigint = 1673
-    AND (v->>'subtotal_centavos')::bigint = 13043 AND (v->>'descuento_centavos')::bigint = 1891
-    AND (v->>'descuento_manual_porcentaje')::numeric = 5.00, 'venta A: ' || v::text);
+  -- A mano: bruto 15,000; promoción 1,500 -> 13,500 (con ISV).
+  -- Sin ISV: bruto round(15,000/1.15) = 13,043; neto round(13,500/1.15) = 11,739; ISV 1,761; descuento 1,304 (todo promoción).
+  PERFORM pruebas.afirmar(v->>'estado' = 'emitida' AND (v->>'total_centavos')::bigint = 13500 AND (v->>'impuesto_centavos')::bigint = 1761
+    AND (v->>'subtotal_centavos')::bigint = 13043 AND (v->>'descuento_centavos')::bigint = 1304
+    AND (v->>'descuento_manual_porcentaje')::numeric = 0, 'venta A: ' || v::text);
   PERFORM pruebas.como('dueno_a');
   PERFORM pruebas.afirmar((SELECT descuento_promocion_centavos || '/' || descuento_manual_centavos FROM public.venta WHERE id = (v->>'venta_id')::uuid)
-    = '1304/587', 'promoción 1,304 y manual 587 (sin ISV)');
+    = '1304/0', 'promoción 1,304 y manual 0 (sin ISV)');
   PERFORM pruebas.afirmar((SELECT promocion_id FROM public.venta_linea WHERE venta_id = (v->>'venta_id')::uuid) = pr, 'línea con su promoción');
-  PERFORM pruebas.afirmar(pruebas.saldo_libros(e, '4.1.01.03') = 1891 AND pruebas.saldo_libros(e, '4.1.01.01') = 13043, 'Dr descuentos / Cr ventas brutas');
+  PERFORM pruebas.afirmar(pruebas.saldo_libros(e, '4.1.01.03') = 1304 AND pruebas.saldo_libros(e, '4.1.01.01') = 13043, 'Dr descuentos / Cr ventas brutas');
 
   -- 3) Venta B: descuento de factura de L 20.00 (con ISV) entre tornillos (con promoción) y un galón.
   PERFORM pruebas.como('cajero_a');
@@ -51,15 +54,16 @@ BEGIN
          jsonb_build_object('producto_id', pruebas.id('P1'), 'cantidad', 10),
          jsonb_build_object('producto_id', pruebas.id('P3'), 'cantidad', 1)),
          'descuento_factura', '{"monto_centavos": 2000}'::jsonb, 'pagos', '[{"forma":"efectivo"}]'::jsonb), gen_random_uuid());
-  -- A mano: totales con ISV antes del descuento 13,500 y 45,000 (suma 58,500). Partes: 2,000 x 13,500/58,500 = 461.54 y
-  -- 2,000 x 45,000/58,500 = 1,538.46 -> 461 + 1,538 = 1,999; el centavo que falta va al resto mayor (0.54): 462 y 1,538.
-  -- Tornillos 13,038 -> 11,337 + 1,701; galón 43,462 -> round(43,462/1.18) = 36,832 + 6,630. Total 56,500 = 58,500 - 2,000.
-  PERFORM pruebas.afirmar((v->>'total_centavos')::bigint = 56500 AND (v->>'impuesto_centavos')::bigint = 1701 + 6630, 'venta B: ' || v::text);
+  -- 0.8.0: el descuento de factura solo va a las líneas SIN otro descuento: los tornillos (con promoción)
+  -- quedan fuera y los L 20.00 van completos al galón.
+  -- A mano: tornillos 13,500 -> 11,739 + 1,761; galón 45,000 - 2,000 = 43,000 -> round(43,000/1.18) = 36,441 + 6,559.
+  -- Total 56,500 = 58,500 - 2,000.
+  PERFORM pruebas.afirmar((v->>'total_centavos')::bigint = 56500 AND (v->>'impuesto_centavos')::bigint = 1761 + 6559, 'venta B: ' || v::text);
   PERFORM pruebas.como('dueno_a');
   SELECT * INTO l1 FROM public.venta_linea WHERE venta_id = (v->>'venta_id')::uuid AND linea = 1;
   SELECT * INTO l2 FROM public.venta_linea WHERE venta_id = (v->>'venta_id')::uuid AND linea = 2;
-  PERFORM pruebas.afirmar(l1.descuento_factura_centavos = 462 AND l2.descuento_factura_centavos = 1538
-    AND l1.base_centavos = 11337 AND l2.base_centavos = 36832, 'prorrateo por línea');
+  PERFORM pruebas.afirmar(l1.descuento_factura_centavos = 0 AND l2.descuento_factura_centavos = 2000
+    AND l1.base_centavos = 11739 AND l2.base_centavos = 36441, 'factura solo en la línea sin otro descuento');
 
   -- 4) Descuento sobre el tope: pendiente SIN número, sin inventario y sin dinero.
   PERFORM pruebas.como('cajero_a');
@@ -72,7 +76,7 @@ BEGIN
   vd := public.registrar_venta(e, jsonb_build_object('lineas', jsonb_build_array(
           jsonb_build_object('producto_id', pruebas.id('P3'), 'cantidad', 1, 'descuento_porcentaje', 25)),
           'pagos', '[{"forma":"efectivo"}]'::jsonb), gen_random_uuid());
-  PERFORM pruebas.afirmar(pruebas.existencia('B1', 'P3') = 9 AND pruebas.dinero('CAJA1') = 12825 + 56500, 'pendientes no mueven nada');
+  PERFORM pruebas.afirmar(pruebas.existencia('B1', 'P3') = 9 AND pruebas.dinero('CAJA1') = 13500 + 56500, 'pendientes no mueven nada');
   PERFORM pruebas.debe_fallar(format('SELECT public.resolver_aprobacion(%L, true, %L, gen_random_uuid())', vc->>'aprobacion_id', 'ok'),
     'SIN_PERMISO', 'el cajero no aprueba');
   PERFORM pruebas.como('admin_a');
@@ -86,16 +90,16 @@ BEGIN
   PERFORM pruebas.como('dueno_a');
   r := public.resolver_aprobacion((vd->>'aprobacion_id')::uuid, true, NULL, gen_random_uuid());
   PERFORM pruebas.afirmar(r->>'numero_documento' = '001-001-01-00000004', 'el dueño aprueba sin tope');
-  PERFORM pruebas.afirmar(pruebas.existencia('B1', 'P3') = 7 AND pruebas.dinero('CAJA1') = 12825 + 56500 + 36000 + 33750,
+  PERFORM pruebas.afirmar(pruebas.existencia('B1', 'P3') = 7 AND pruebas.dinero('CAJA1') = 13500 + 56500 + 36000 + 33750,
     'al aprobar sale la mercadería y entra el dinero (36,000 y 33,750)');
 
   -- 5) Rechazar (con motivo) y cancelar: sin número ni movimiento.
   PERFORM pruebas.como('cajero_a');
   vc := public.registrar_venta(e, jsonb_build_object('lineas', jsonb_build_array(
-          jsonb_build_object('producto_id', pruebas.id('P1'), 'cantidad', 1, 'descuento_centavos', 500)),
+          jsonb_build_object('producto_id', pruebas.id('P2'), 'cantidad', 1, 'descuento_centavos', 500)),
           'pagos', '[{"forma":"efectivo"}]'::jsonb), gen_random_uuid());
   vd := public.registrar_venta(e, jsonb_build_object('lineas', jsonb_build_array(
-          jsonb_build_object('producto_id', pruebas.id('P1'), 'cantidad', 1, 'descuento_centavos', 500)),
+          jsonb_build_object('producto_id', pruebas.id('P2'), 'cantidad', 1, 'descuento_centavos', 500)),
           'pagos', '[{"forma":"efectivo"}]'::jsonb), gen_random_uuid());
   PERFORM pruebas.como('admin_a');
   PERFORM pruebas.debe_fallar(format('SELECT public.resolver_aprobacion(%L, false, %L, gen_random_uuid())', vc->>'aprobacion_id', 'no'),
@@ -116,7 +120,7 @@ BEGIN
   PERFORM public.configurar_tope_descuento(e, 'cajero', 0, 0, 'Sin descuentos sin aprobación');
   PERFORM pruebas.como('cajero_a');
   r := public.registrar_venta(e, jsonb_build_object('lineas', jsonb_build_array(
-         jsonb_build_object('producto_id', pruebas.id('P1'), 'cantidad', 1, 'descuento_porcentaje', 1)),
+         jsonb_build_object('producto_id', pruebas.id('P3'), 'cantidad', 1, 'descuento_porcentaje', 1)),
          'pagos', '[{"forma":"efectivo"}]'::jsonb), gen_random_uuid());
   PERFORM pruebas.afirmar(r->>'estado' = 'pendiente_aprobacion', 'tope 0 %: cualquier descuento manual pide aprobación');
   r := public.registrar_venta(e, pruebas.venta('P1', 1), gen_random_uuid());
@@ -133,7 +137,7 @@ BEGIN
   PERFORM public.configurar_empresa(e, '{"doble_aprobacion": true}', 'Empresa grande');
   PERFORM pruebas.como('cajero_a');
   vc := public.registrar_venta(e, jsonb_build_object('lineas', jsonb_build_array(
-          jsonb_build_object('producto_id', pruebas.id('P1'), 'cantidad', 2, 'descuento_porcentaje', 10)),
+          jsonb_build_object('producto_id', pruebas.id('P3'), 'cantidad', 1, 'descuento_porcentaje', 10)),
           'pagos', '[{"forma":"efectivo"}]'::jsonb), gen_random_uuid());
   PERFORM pruebas.como('admin_a');
   r := public.resolver_aprobacion((vc->>'aprobacion_id')::uuid, true, 'Primera', gen_random_uuid());
@@ -148,7 +152,7 @@ BEGIN
                              FROM public.aprobacion WHERE id = (vc->>'aprobacion_id')::uuid) = '2/true/true', 'quién aprobó cada paso');
   PERFORM pruebas.como('cajero_a');
   vc := public.registrar_venta(e, jsonb_build_object('lineas', jsonb_build_array(
-          jsonb_build_object('producto_id', pruebas.id('P1'), 'cantidad', 2, 'descuento_porcentaje', 10)),
+          jsonb_build_object('producto_id', pruebas.id('P3'), 'cantidad', 1, 'descuento_porcentaje', 10)),
           'pagos', '[{"forma":"efectivo"}]'::jsonb), gen_random_uuid());
   PERFORM pruebas.como('dueno_a');
   r := public.resolver_aprobacion((vc->>'aprobacion_id')::uuid, true, NULL, gen_random_uuid());

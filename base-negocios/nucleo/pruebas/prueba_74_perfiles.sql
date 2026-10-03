@@ -37,13 +37,14 @@ BEGIN
   v := public.vista_previa_perfil(e, 'pequeno');
   PERFORM pruebas.afirmar(v->'cambios' = '[{"campo": "perfil", "nuevo": "pequeno", "actual": null},
       {"campo": "turnos_obligatorios", "nuevo": false, "actual": true},
-      {"campo": "contabilidad_visible", "nuevo": false, "actual": true}]'::jsonb, 'cambios: ' || (v->'cambios')::text);
+      {"campo": "contabilidad_visible", "nuevo": false, "actual": true},
+      {"campo": "vendedor_cobra", "nuevo": true, "actual": false}]'::jsonb, 'cambios: ' || (v->'cambios')::text);
   PERFORM pruebas.afirmar(v->'topes' = '[{"rol": "admin", "tipo": "gasto", "actual_sin_aprobacion_centavos": 300000,
       "nuevo_sin_aprobacion_centavos": 500000, "actual_aprueba_hasta_centavos": 300000, "nuevo_aprueba_hasta_centavos": 500000}]'::jsonb,
     'topes: ' || (v->'topes')::text);
   PERFORM pruebas.afirmar(v->'modulos'->'activos' = '["contabilidad", "dinero"]' AND v->'modulos'->'faltan' = '["inventario", "ventas"]'
     AND v->'modulos'->'activos_no_sugeridos' = '[]', 'módulos: ' || (v->'modulos')::text);
-  PERFORM pruebas.afirmar((v->>'hay_cambios')::boolean AND jsonb_array_length(v->'avisos') = 3, 'avisos: ' || (v->'avisos')::text);
+  PERFORM pruebas.afirmar((v->>'hay_cambios')::boolean AND jsonb_array_length(v->'avisos') = 4, 'avisos: ' || (v->'avisos')::text);
   PERFORM pruebas.como('superusuario');
   PERFORM pruebas.afirmar((SELECT perfil IS NULL AND turnos_obligatorios AND contabilidad_visible FROM public.empresa WHERE id = e)
     AND (SELECT sin_aprobacion_centavos FROM public.tope_rol WHERE empresa_id = e AND rol = 'admin') = 300000, 'la vista previa no cambió nada');
@@ -73,14 +74,14 @@ BEGIN
   PERFORM pruebas.como('dueno_a');
   PERFORM pruebas.afirmar(NOT (public.vista_previa_perfil(e, 'pequeno')->>'hay_cambios')::boolean, 'mismo perfil: sin cambios');
   PERFORM pruebas.como('superusuario');
-  INSERT INTO public.modulo_activo (empresa_id, modulo) VALUES (e, 'compras');
+  INSERT INTO public.modulo_activo (empresa_id, modulo) VALUES (e, 'inventario'), (e, 'compras');  -- 0.8.0: compras necesita inventario
   PERFORM pruebas.como('dueno_a');
   v := public.vista_previa_perfil(e, 'pequeno');
   PERFORM pruebas.afirmar(v->'modulos'->'activos_no_sugeridos' = '["compras"]' AND NOT (v->>'hay_cambios')::boolean, 'compras no se desactiva');
   r := public.aplicar_perfil(e, 'grande', 'Abrimos otra sucursal');
   PERFORM pruebas.afirmar(r->'cambios' @> '[{"campo": "doble_aprobacion", "nuevo": true}]' AND r->'topes' = '[]', 'grande: ' || (r->'cambios')::text);
   PERFORM pruebas.afirmar(public.mi_perfil(e)->'empresa' @> '{"perfil": "grande", "turnos_obligatorios": true, "contabilidad_visible": true, "doble_aprobacion": true}', 'flags de grande');
-  PERFORM pruebas.afirmar(public.mi_perfil(e)->'modulos' = '["compras", "contabilidad", "dinero"]', 'módulos intactos');
+  PERFORM pruebas.afirmar(public.mi_perfil(e)->'modulos' = '["compras", "contabilidad", "dinero", "inventario"]', 'módulos intactos');
   -- Después cada cosa se cambia sola (el perfil solo es el punto de partida).
   PERFORM public.configurar_empresa(e, '{"contabilidad_visible": false}', 'Esconder la contabilidad');
   PERFORM pruebas.afirmar(NOT (public.mi_perfil(e)->'empresa'->>'contabilidad_visible')::boolean, 'cambio individual');
@@ -93,20 +94,22 @@ BEGIN
   e2 := public.crear_empresa_inicial('{"nombre": "Pulpería Pequeña", "fecha_inicio": "2026-01-01", "perfil": "pequeno",
     "dueno": {"correo": "perfil1@prueba.hn"}}');
   e3 := public.crear_empresa_inicial('{"nombre": "Distribuidora Grande", "fecha_inicio": "2026-01-01", "perfil": "grande",
-    "modulos": ["contabilidad", "compras"], "dueno": {"correo": "perfil2@prueba.hn"}}');
+    "modulos": ["contabilidad", "inventario", "compras"], "dueno": {"correo": "perfil2@prueba.hn"}}');
   e4 := public.crear_empresa_inicial('{"nombre": "Sin perfil", "fecha_inicio": "2026-01-01", "perfil": null,
     "dueno": {"correo": "perfil3@prueba.hn"}}');
   PERFORM pruebas.debe_fallar('SELECT public.crear_empresa_inicial(''{"nombre": "X", "fecha_inicio": "2026-01-01", "perfil": "enorme", "dueno": {"correo": "perfil1@prueba.hn"}}'')',
     'FICHA_INVALIDA', 'perfil inventado en la ficha');
   PERFORM pruebas.debe_fallar('SELECT public.crear_empresa_inicial(''{"nombre": "X", "fecha_inicio": "2026-01-01", "perfiles": "grande", "dueno": {"correo": "perfil1@prueba.hn"}}'')',
     'no se reconoce', 'campo mal escrito');
+  PERFORM pruebas.debe_fallar('SELECT public.crear_empresa_inicial(''{"nombre": "X", "fecha_inicio": "2026-01-01", "modulos": ["compras"], "dueno": {"correo": "perfil1@prueba.hn"}}'')',
+    'MODULO_DEPENDENCIA', '0.8.0: compras sin inventario en la ficha');
   PERFORM pruebas.como('superusuario');
   PERFORM pruebas.afirmar((SELECT string_agg(modulo, ',' ORDER BY modulo) FROM public.modulo_activo WHERE empresa_id = e2)
     = 'contabilidad,dinero,inventario,ventas', 'sin "modulos" en la ficha: los del perfil');
   PERFORM pruebas.afirmar((SELECT perfil = 'pequeno' AND NOT turnos_obligatorios AND NOT contabilidad_visible AND NOT doble_aprobacion
                              FROM public.empresa WHERE id = e2), 'empresa pequeña');
   PERFORM pruebas.afirmar((SELECT string_agg(modulo, ',' ORDER BY modulo) FROM public.modulo_activo WHERE empresa_id = e3)
-    = 'compras,contabilidad', 'con "modulos" en la ficha: los de la ficha');
+    = 'compras,contabilidad,inventario', 'con "modulos" en la ficha: los de la ficha');
   PERFORM pruebas.afirmar((SELECT perfil = 'grande' AND turnos_obligatorios AND contabilidad_visible AND doble_aprobacion
                              FROM public.empresa WHERE id = e3), 'empresa grande');
   PERFORM pruebas.afirmar((SELECT perfil IS NULL AND turnos_obligatorios AND contabilidad_visible AND NOT doble_aprobacion

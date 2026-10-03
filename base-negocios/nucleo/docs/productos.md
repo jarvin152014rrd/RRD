@@ -1,4 +1,8 @@
-# Catálogo de productos (014_productos) — módulo "inventario"
+# Catálogo de productos (014_productos) — módulo "inventario" o "ventas"
+
+Desde 0.8.0 el catálogo (productos, categorías, unidades, campos extra y
+precios) también se edita con solo el módulo "ventas" (negocio de solo
+servicios, ver `modulos.md`). Bodegas y existencias siguen siendo de "inventario".
 
 - **Unidades** (`unidad`): comunes para todos (UND, KG, G, LB, LT, ML, GAL,
   M, CAJA, PAQ, DOC, PAR) + propias de la empresa (`crear_unidad`).

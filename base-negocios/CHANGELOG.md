@@ -4,6 +4,75 @@ Formato: versión (fecha) y lista de cambios. La versión vive en `VERSION_NUCLE
 y queda guardada en cada base al migrar (vista `version_esquema`).
 Números: MAYOR.MENOR.ARREGLO (ver `docs/CONVENCIONES.md`).
 
+## 0.8.0 (2026-10-03) — Módulos sin romper los números, ficha del proveedor, límites y decisiones de ventas
+
+Migraciones nuevas 030-032 (las 001-029 no se tocaron). 93 pruebas (nuevas 88-93).
+
+**Dependencias entre módulos como datos (030)** — tabla `modulo_dependencia`: inventario, dinero y
+ventas -> contabilidad; compras -> inventario; fiscal_hn -> ventas. No se activa un módulo sin lo que
+necesita ni se apaga uno que otro activo usa (`MODULO_DEPENDENCIA` dice cuál); se revisa al final de
+cada sentencia (trigger de restricción). Ventas ya NO exige inventario: sin él solo vende servicios
+(un bien da `MODULO_INACTIVO`); sin dinero solo vende al crédito. El catálogo (productos, categorías,
+unidades, precios) también se edita con solo "ventas" (`interno.modulo_alterno`).
+
+**Apagar = solo impide lo nuevo (030)** — `interno.exigir_escritura` deja pasar, con el módulo apagado
+(si estuvo activo), las correcciones de `interno.modulo_apagado_permite`: anular compras, pagos y
+saldos iniciales de proveedores, documentos de inventario, operaciones de dinero, gastos y ventas
+(solicitar y aprobar), cancelar ventas pendientes, anular cotizaciones, cerrar un turno abierto,
+resolver diferencias, confirmar depósitos y transferencias. Las cuentas del módulo (1.1.03.01,
+1.1.02.01, 2.1.01.01, 1.1.02.04) siguen sin asientos manuales aunque esté apagado
+(`modulo_activo.estuvo_activo`). Nunca se borra nada.
+
+**Decisiones del dueño sobre ventas (031)** — nunca descuento sobre descuento: con varias promociones
+vigentes quien vende elige una (`"promocion_id"` por línea; si no, `PROMOCION_A_ELEGIR` con la lista;
+`PROMOCION_INVALIDA` si no aplica); una línea con promoción no admite descuento manual y el descuento
+de factura va solo a las líneas sin otro descuento (`DESCUENTO_DOBLE`). `promociones_aplicables(...)`.
+`empresa.vendedor_cobra` (falso por defecto; solo el dueño con `configurar_empresa`, motivo y
+bitácora; perfil pequeño = true; respeta turnos). Confirmados sin cambios: topes de descuento 5 % /
+10 % / 20 %, el admin aprueba créditos y anulaciones hasta L 5,000, cotizaciones de 15 días.
+
+**Límites del contrato y solicitudes (032)** — `limite_contrato` (usuarios, cajas, sucursales,
+bodegas; null = sin límite) que escribe solo el proveedor; crear o reactivar de más da
+`LIMITE_CONTRATO` ("Llegaste al máximo de tu plan. Solicita una ampliación a tu proveedor."); los
+desactivados y el usuario del proveedor no cuentan; bajar un límite no desactiva nada.
+`solicitud_proveedor`, `solicitar_al_proveedor` (dueño y admin, aun con licencia vencida),
+`responder_solicitud_proveedor` (llave del proveedor). `mi_perfil()` trae `limites` (límite y uso) y
+`empresa.vendedor_cobra`. Permiso nuevo `proveedor.solicitar`.
+
+**Ficha del proveedor (032 y herramientas)** — `vista_previa_ficha` / `aplicar_ficha` (solo
+service_role): módulos en el orden de las dependencias, perfil, licencia y límites, todo o nada, con
+bitácora. Ficha formato 2 en `clientes/<cliente>/ficha.json` (ignorada por git salvo
+`clientes/ejemplo/ficha.json`; `personal/ficha.schema.json` acepta los dos formatos).
+`herramientas/aplicar_ficha.sh` (valida, vista previa, prueba y deshace, confirma con el identificador
+del cliente, respaldo cifrado, aplica; `--solo-mostrar`), `herramientas/lista_clientes.sh` (paquete,
+módulos, licencia, núcleo, uso/límite con `(!)` al 80 %, solicitudes pendientes; sin acceso muestra
+la ficha), `herramientas/ficha.py` (lo usan las tres). `nuevo_cliente.sh` acepta el formato 2 y pone
+licencia y límites en la misma transacción. `conexion.sh`: `CONEX_SIN_PEDIR_CLAVE=1`.
+
+**Pruebas nuevas:** 88 dependencias y apagado, 89 combinaciones de módulos con cuadre global (14),
+90 promociones y vendedor que cobra, 91 límites y solicitudes, 92 herramientas de la ficha,
+93 actualizar desde 0.7.0 con datos.
+
+**Cambios que rompen (para quien ya usaba 0.7.0 en pruebas)**
+- Una línea con promoción + descuento manual, o el descuento de factura sobre líneas con otro
+  descuento, ahora da `DESCUENTO_DOBLE` o se reparte solo en las líneas libres; con dos promociones
+  vigentes hay que mandar `promocion_id`. Se ajustó la prueba 80 (cifras rehechas a mano).
+- Activar compras sin inventario o fiscal_hn sin ventas, o apagar inventario/ventas con compras/
+  fiscal_hn activos, ahora da `MODULO_DEPENDENCIA`: se ajustaron las pruebas 45, 74 y 85.
+- El admin tiene un permiso más (`proveedor.solicitar`) y el perfil un cambio más (`vendedor_cobra`):
+  se ajustaron las pruebas 31 y 74.
+- `calcular_venta`, `registrar_venta_base`, `configurar_empresa`, `cambios_perfil`, `guardar_perfil`,
+  `perfiles_negocio`, `mi_perfil`, `resolver_aprobacion`, `exigir_escritura`,
+  `revisar_cuenta_controlada` y `tipo_operacion_2b` se reemplazaron con la misma firma.
+
+**Ventas pendientes y módulos apagados (031):** aprobar una venta pendiente la emite, así que pide
+"inventario" (si lleva bienes) y "dinero" (si se cobra al contado) como una venta nueva
+(`resolver_aprobacion` reemplazada con la misma firma); rechazarla o cancelarla sí se puede.
+
+**Pendiente (honesto):** aviso automático al proveedor de las solicitudes (hoy en
+`lista_clientes.sh`); la doble revisión de límites con dos personas a la vez no tiene prueba de
+concurrencia propia (la protege el candado de la fila de límites).
+
 ## 0.7.0 (2026-10-03) — Etapa 2b-2a: ventas, CAI, impuestos como datos y servicios
 
 Migraciones nuevas 026-029 (las 001-025 no se tocaron). 87 pruebas (nuevas 77-87).

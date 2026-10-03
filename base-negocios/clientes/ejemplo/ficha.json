@@ -1,0 +1,31 @@
+{
+  "$schema": "../../personal/ficha.schema.json",
+  "cliente": "ejemplo",
+  "paquete": "esencial",
+  "negocio": {
+    "nombre": "Ferretería Ejemplo S. de R.L.",
+    "rtn": "08011999000000",
+    "rubro": "Ferretería",
+    "moneda": "HNL",
+    "pais": "HN",
+    "zona_horaria": "America/Tegucigalpa",
+    "fecha_inicio": "2026-01-01",
+    "dias_futuro_max": 3
+  },
+  "perfil": "pequeno",
+  "modulos": {
+    "contabilidad": true,
+    "ventas": true,
+    "inventario": true,
+    "compras": false,
+    "dinero": true
+  },
+  "regimen_fiscal": "fiscal_hn",
+  "licencia": { "vence_el": "2026-12-31", "dias_gracia": 5 },
+  "limites": { "usuarios": 5, "cajas": 1, "sucursales": 1, "bodegas": 1 },
+  "conexion": "postgresql://postgres@db.REFERENCIA.supabase.co:5432/postgres",
+  "dueno": { "correo": "dueno@ejemplo.hn", "nombre": "Juan Pérez" },
+  "proveedor": { "correo": "soporte@proveedor.hn", "nombre": "Soporte" },
+  "tema": { "color_principal": "#1f6feb", "logo": "logo.png" },
+  "notas": "Ficha de muestra. Copie esta carpeta a clientes/<cliente>/ y cambie los datos."
+}

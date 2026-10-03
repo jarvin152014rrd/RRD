@@ -21,13 +21,18 @@ base-negocios/
 │   └── docs/               una hoja corta por módulo del núcleo
 ├── personal/               lo propio de cada cliente (ficha, tema, plantillas)
 │   ├── ficha.schema.json   reglas de la ficha (JSON Schema)
-│   └── ficha.ejemplo.json  ficha de ejemplo
+│   └── ficha.ejemplo.json  ficha de ejemplo (formato 1, el de antes)
+├── clientes/               una carpeta por cliente con su ficha.json (NO se sube a git,
+│   └── ejemplo/ficha.json  salvo esta muestra del formato 2)
 ├── app/                    aquí irá la PWA
 ├── respaldos/              respaldos de migrar.sh (NO se sube a git)
 └── herramientas/
     ├── probar.sh           corre todas las pruebas
     ├── migrar.sh           respalda (cifrado) y aplica migraciones pendientes
     ├── nuevo_cliente.sh    crea la empresa de un cliente desde su ficha
+    ├── aplicar_ficha.sh    lleva a la base lo que dice la ficha (módulos, perfil, licencia, límites)
+    ├── lista_clientes.sh   tabla de clientes: paquete, módulos, licencia, núcleo, uso/límite
+    ├── ficha.py            (lo usan los otros) lee y valida fichas
     ├── respaldar.sh        respaldo completo cifrado (age o gpg)
     ├── restaurar.sh        restaura un respaldo en una base NUEVA y la revisa
     ├── conexion.sh         (lo usan los otros) conexión sin exponer la clave
@@ -63,6 +68,13 @@ Qué hace cada migración:
 | 023_caja_turnos | turnos de caja por cajero, arqueo (conteo por denominación), diferencias pendientes y su resolución |
 | 024_gastos | categorías de gasto, gastos con ISV, topes por puesto, aprobaciones (genéricas), caja chica (cuadre), pagos fijos |
 | 025_arranque_facil | saldo negativo por cuenta (solo el dueño), turnos obligatorios o no, perfiles pequeño/mediano/grande, asistente de arranque, empezar en cero |
+| 026_impuestos_servicios | impuestos como datos por empresa, servicios (sin kardex) |
+| 027_fiscal_hn | régimen fiscal de Honduras: CAI por caja, numeración, alertas |
+| 028_ventas | ventas todo-o-nada, descuentos y topes, crédito, anulación aprobada, doble aprobación |
+| 029_cotizaciones_lecturas | cotizaciones, vistas de ventas y CxC, documento impreso, "seguir una venta" |
+| 030_modulos_dependencias | dependencias entre módulos como datos, apagar sin romper (correcciones permitidas), cuentas controladas con el módulo apagado |
+| 031_ventas_decisiones_dueno | una promoción por línea (se elige), nunca descuento sobre descuento, vendedor que cobra, ventas de servicios sin inventario |
+| 032_limites_ficha_proveedor | límites del contrato, solicitudes al proveedor, `aplicar_ficha` / `vista_previa_ficha` |
 
 Detalle de cada módulo: `nucleo/docs/` (dinero, caja, gastos y arranque en `dinero.md`, `caja.md`, `gastos.md`, `arranque.md`).
 
@@ -171,6 +183,10 @@ Si algo falla, termina con error (código distinto de 0).
 | `cuadre_caja_chica(cuenta, contado?)` | fondo, gastos con y sin comprobante, esperado | dinero.ver |
 | `crear_pago_fijo` / `editar_pago_fijo` / `registrar_pago_fijo` / `pagos_fijos_proximos` / `reporte_pagos_fijos` | plantillas, próximos y vencidos, gasto real, total mensual | dinero.administrar / gastos.registrar / dinero.ver |
 | `crear_empresa_inicial(ficha jsonb)` | instalar cliente | solo service_role |
+| `vista_previa_ficha(empresa, cambios)` / `aplicar_ficha(empresa, cambios, motivo)` | módulos, perfil, licencia y límites del contrato (aplicar_ficha.sh) | solo service_role |
+| `solicitar_al_proveedor(empresa, tipo, detalle, id_operacion)` | pedir ampliación, módulo u otra cosa | proveedor.solicitar (dueño, admin) |
+| `responder_solicitud_proveedor(solicitud, estado, respuesta)` | atender o rechazar una solicitud | solo service_role |
+| `promociones_aplicables(empresa, producto, fecha?, cantidad?)` | promociones que puede elegir quien vende | ventas.vender / ventas.cotizar |
 
 Vistas: `v_existencia` (inventario.ver; costos solo con inventario.costos),
 `v_kardex` (inventario.costos), `v_cxp_documento` y `v_cxp_proveedor` (compras.ver),

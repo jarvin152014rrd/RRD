@@ -38,12 +38,15 @@ BEGIN
 
   -- 4) Sin el módulo: no se vende; leer sí.
   PERFORM pruebas.como('superusuario');
+  -- (0.8.0: fiscal_hn depende de ventas: se apaga primero)
+  UPDATE public.modulo_activo SET activo = false WHERE empresa_id = e AND modulo = 'fiscal_hn';
   UPDATE public.modulo_activo SET activo = false WHERE empresa_id = e AND modulo = 'ventas';
   PERFORM pruebas.como('cajero_a');
   PERFORM pruebas.debe_fallar(format('SELECT public.registrar_venta(%L, %L, gen_random_uuid())', e, pruebas.venta('P1', 1)), 'MODULO_INACTIVO', 'módulo apagado');
   PERFORM pruebas.afirmar((SELECT count(*) FROM public.v_venta) = 1, 'el cajero sigue viendo su venta');
   PERFORM pruebas.como('superusuario');
   UPDATE public.modulo_activo SET activo = true WHERE empresa_id = e AND modulo = 'ventas';
+  UPDATE public.modulo_activo SET activo = true WHERE empresa_id = e AND modulo = 'fiscal_hn';
   -- Licencia vencida: solo lectura.
   UPDATE public.licencia SET vence_el = public.hoy_local(e) - 30 WHERE empresa_id = e;
   PERFORM pruebas.como('cajero_a');

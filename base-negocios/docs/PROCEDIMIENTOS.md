@@ -40,11 +40,19 @@ gpg o age instalado (para el respaldo cifrado, ver P-03).
    respaldo cifrado (o use la llave age, P-03).
 3. En Supabase > Authentication > Users, crear (o invitar) al dueño con el
    correo de la ficha. Igual para el usuario del proveedor.
-4. Copiar `personal/ficha.ejemplo.json` a `personal/<cliente>.json`, llenarla.
+4. Copiar la carpeta `clientes/ejemplo/` a `clientes/<cliente>/` (`<cliente>` =
+   identificador corto en minúsculas, igual a `"cliente"` dentro de la ficha) y
+   llenar `ficha.json`: negocio, paquete (solo informativo), perfil, módulos con
+   true/false (ver `nucleo/docs/modulos.md` y `docs/PAQUETES.md`), régimen
+   fiscal, licencia, límites del contrato y `conexion` (la cadena SIN clave).
+   La carpeta `clientes/` no se sube a git.
 5. Probar la ficha sin crear nada:
-   `bash herramientas/nuevo_cliente.sh --solo-validar personal/<cliente>.json "postgresql://postgres@db.<ref>.supabase.co:5432/postgres"`
-6. Crearla: el mismo comando sin `--solo-validar`. Anotar el id de empresa.
-7. Activar la licencia (SQL Editor de Supabase):
+   `bash herramientas/nuevo_cliente.sh --solo-validar clientes/<cliente>/ficha.json "postgresql://postgres@db.<ref>.supabase.co:5432/postgres"`
+6. Crearla: el mismo comando sin `--solo-validar`. Crea la empresa, sus módulos,
+   el perfil, la licencia y los límites en una sola transacción. Anotar el id
+   de empresa en la ficha (`negocio.empresa_id`).
+7. Solo si la ficha no trae `licencia` (o es una ficha del formato 1 de antes):
+   activar la licencia (SQL Editor de Supabase):
    `INSERT INTO public.licencia (empresa_id, vence_el) VALUES ('<id>', '2026-12-31');`
 8. Entrar a la app con el dueño y revisar `mi_perfil`: rol dueño, licencia activa.
 9. Si el cliente ya traía contabilidad o existencias, seguir P-07 antes de
@@ -180,7 +188,9 @@ y cuándo se revocó. Anotar el caso y la solución.
 
 ## P-05 Revisión mensual
 
-1. Licencias por vencer (`SELECT * FROM licencia ORDER BY vence_el`).
+1. `bash herramientas/lista_clientes.sh`: licencias por vencer, versión del
+   núcleo de cada cliente, quién está al 80 % de un límite `(!)` y solicitudes
+   pendientes. (En cada base también: `SELECT * FROM licencia ORDER BY vence_el`.)
 2. `SELECT * FROM verificar_bitacora();` en cada cliente: debe salir vacío.
    Si sale algo, **no tocar nada**, sacar un respaldo y avisar al dueño.
 3. Guardar fuera de la base la huella de la última fila de bitácora de cada
@@ -259,3 +269,66 @@ proveedor (activar el módulo).
 
 **Registro:** fecha, cuentas creadas, saldos iniciales con su comprobante
 (quedan en bitácora con usuario y hora).
+
+---
+
+## P-09 Agregar o quitar un módulo a un cliente (y cambiar perfil o licencia)
+
+**Objetivo:** que la base del cliente tenga exactamente lo que dice su ficha,
+sin perder datos. **Responsable:** proveedor. **Se necesita:** la ficha del
+cliente (`clientes/<cliente>/ficha.json`), la clave de la base en el gestor de
+contraseñas y gpg o age (respaldo cifrado).
+
+1. Cambiar la ficha: el módulo en `true` (agregar) o `false` (quitar), el
+   `regimen_fiscal`, el `perfil` o la `licencia`. Lo que no se cambia, no se toca.
+   Respetar las dependencias (`nucleo/docs/modulos.md`): compras necesita
+   inventario; fiscal_hn necesita ventas. Ventas NO necesita inventario (solo
+   servicios) ni dinero (solo crédito).
+2. Ver qué va a pasar, sin cambiar nada:
+   `bash herramientas/aplicar_ficha.sh --solo-mostrar clientes/<cliente>/ficha.json`
+   Muestra módulos a activar y desactivar, perfil, licencia y límites (uso /
+   límite), y PRUEBA el cambio deshaciéndolo. Si sale un PROBLEMA o un error
+   (`MODULO_DEPENDENCIA`, `MODULO_CON_SALDO`), corregir la ficha o seguir P-07
+   antes de volver a intentar.
+3. Aplicar: el mismo comando sin `--solo-mostrar`. Revisar el servidor que
+   muestra, escribir el **identificador del cliente** (el `"cliente"` de la
+   ficha) para confirmar. Respalda cifrado en `respaldos/` antes de aplicar
+   (si el respaldo falla, no aplica nada) y aplica todo o nada.
+4. Revisar con `bash herramientas/lista_clientes.sh` que la fila del cliente
+   diga lo nuevo.
+
+**Quitar un módulo nunca borra datos:** solo impide operaciones nuevas. Lo ya
+registrado sigue en reportes y contabilidad, y se puede corregir (anular) lo
+que haga falta (lista en `nucleo/docs/modulos.md`). Antes de quitar `compras`,
+avisar al dueño que los pagos a proveedores pendientes ya no se registrarán en
+el sistema; antes de quitar `dinero`, que no podrá cobrar al contado.
+Volver a encender un módulo no necesita nada especial: sus cuentas quedaron
+cuadradas.
+
+**Registro:** la bitácora guarda cada cambio con el motivo "Ficha del cliente
+<cliente> aplicada con aplicar_ficha.sh" (o el de `MOTIVO=...`), el respaldo
+usado y la fecha. Guardar la ficha anterior (copia con fecha) en la carpeta
+del cliente.
+
+---
+
+## P-10 Límites del contrato y solicitudes del cliente
+
+**Objetivo:** que el cliente use lo que contrató (usuarios, cajas, sucursales,
+bodegas) y pueda pedir más. **Responsable:** proveedor.
+
+1. Los límites van en la ficha (`"limites"`, `null` = sin límite) y se aplican
+   con P-09. Al llegar al límite, el cliente ve "Llegaste al máximo de tu plan.
+   Solicita una ampliación a tu proveedor." y nada más se bloquea.
+2. Bajar un límite por debajo de lo que el cliente ya tiene **no desactiva
+   nada** (la vista previa lo avisa); solo impide agregar más. Si hay que
+   desactivar algo, lo hace el dueño desde la app.
+3. Las solicitudes del cliente ("Solicitar ampliación" / "Solicitar módulo")
+   salen en `lista_clientes.sh` (columna FUENTE). Para verlas:
+   `SELECT numero, tipo, detalle, solicitado_en FROM solicitud_proveedor WHERE estado = 'pendiente';`
+4. Atender: cambiar la ficha y aplicar (P-09), cobrar según el contrato, y
+   responder con la llave del proveedor:
+   `SELECT responder_solicitud_proveedor('<id>', 'atendida', 'Caja 2 activada');`
+   (o `'rechazada'` con el motivo). Se responde una sola vez.
+
+**Registro:** bitácora (límites y solicitudes), fecha de la respuesta.

@@ -197,6 +197,19 @@ bloquea sin borrar. Reabrir: solo dueño, con motivo, en orden.
   "seguir una venta"; primera venta del asistente. Pendiente 2b-2b: cobros,
   saldos iniciales de clientes, apartados, devoluciones / notas de crédito,
   comisiones.
+- Decisiones del dueño (hechas en 0.8.0):
+  - Promociones: nunca descuento sobre descuento. Si a una línea le aplican
+    varias promociones, quien vende elige una (`promocion_id`; sin elegir:
+    PROMOCION_A_ELEGIR con la lista). Una línea con promoción no admite
+    descuento manual. El descuento de factura se reparte solo entre las líneas
+    sin otro descuento (las demás quedan fuera). Ninguna línea con más de un
+    descuento.
+  - Vendedor que cobra: configurable por empresa (`vendedor_cobra`, falso por
+    defecto); solo el dueño lo cambia, con motivo y bitácora; el perfil
+    pequeño lo sugiere en sí. Respeta los turnos obligatorios o no.
+  - Confirmados sin cambios: topes de descuento (cajero y vendedor 5 %; admin
+    10 % y aprueba hasta 20 %), el admin aprueba créditos y anulaciones hasta
+    L 5,000.00, cotizaciones de 15 días (configurables).
 
 ## Arranque fácil para cualquier tamaño de negocio
 
@@ -264,6 +277,16 @@ a dar seguimiento el primer día, sin trabas.
   reportes y contabilidad. Nunca borra datos.
 - Prueba automática de combinaciones de módulos (incluido apagar a mitad de
   mes) con cuadre global en cada una. Si una falla, no se entrega.
+- Hecho en 0.8.0: tabla `modulo_dependencia` (inventario, dinero y ventas ->
+  contabilidad; compras -> inventario; fiscal_hn -> ventas). Ventas no exige
+  inventario (sin él solo vende servicios) ni dinero (sin él solo vende al
+  crédito). Apagado: se rechaza lo nuevo; se permiten lecturas, reportes,
+  contabilidad y correcciones (anular compras, pagos, gastos, ventas,
+  documentos de inventario y operaciones de dinero; cerrar un turno abierto;
+  confirmar depósitos y transferencias). Las cuentas del módulo siguen sin
+  asientos manuales aunque esté apagado. Pagar a proveedores o aprobar ventas
+  y gastos pendientes con el módulo apagado: no (son operaciones nuevas).
+  Prueba 89: 14 combinaciones con cuadre global. Ver nucleo/docs/modulos.md.
 
 ## Edición fácil para el proveedor
 
@@ -274,6 +297,12 @@ a dar seguimiento el primer día, sin trabas.
 - Lista general de clientes: paquete, módulos, vencimiento de licencia y
   versión del núcleo.
 - Más adelante: panel web del proveedor con lo mismo por clics.
+- Hecho en 0.8.0: `clientes/<cliente>/ficha.json` (formato 2, ignorado por git
+  salvo `clientes/ejemplo/`), `aplicar_ficha.sh` (vista previa con prueba y
+  deshacer, confirmación con el identificador del cliente, respaldo cifrado,
+  todo o nada, bitácora; `--solo-mostrar`), `lista_clientes.sh` (consulta la
+  base si hay acceso sin preguntar; si no, muestra la ficha) y
+  `nuevo_cliente.sh` con el mismo formato (el de antes sigue sirviendo).
 
 ## Límites del contrato controlados por el proveedor (ingreso por crecimiento)
 
@@ -288,6 +317,13 @@ a dar seguimiento el primer día, sin trabas.
   La lista de clientes muestra quién está cerca de su límite.
 - Nunca se bloquea el trabajo diario ni se pierden datos por un límite; solo
   se impide agregar más.
+- Hecho en 0.8.0: tabla `limite_contrato` (usuarios, cajas, sucursales,
+  bodegas; null = sin límite) que solo escribe el proveedor; LIMITE_CONTRATO
+  al crear o reactivar de más (desactivados y el usuario del proveedor no
+  cuentan); bajar un límite no desactiva nada; `solicitud_proveedor` con
+  `solicitar_al_proveedor` (dueño y admin) y respuesta del proveedor;
+  `mi_perfil()` trae límite y uso. Pendiente: aviso automático al proveedor
+  (hoy lo ve en lista_clientes.sh). Ver nucleo/docs/limites.md.
 
 ## Crecimiento del negocio
 

@@ -8,10 +8,12 @@ todos sin perder lo propio de nadie.
 
 | Qué | Dónde | Quién |
 |---|---|---|
-| Nombre, RTN, rubro, moneda, país, zona horaria | ficha del cliente (`personal/*.json`) al instalar | proveedor |
+| Nombre, RTN, rubro, moneda, país, zona horaria | ficha del cliente (`clientes/<cliente>/ficha.json`, `negocio`) al instalar | proveedor |
 | Fecha de inicio en el sistema | ficha (`fecha_inicio`) | proveedor, con el dueño |
 | Días al futuro permitidos para fechas (0-31, defecto 3) | ficha (`dias_futuro_max`) | proveedor |
-| Módulos activos (contabilidad, ventas, inventario, compras, dinero) | ficha (`modulos`) | proveedor |
+| Módulos activos (contabilidad, ventas, inventario, compras, dinero; fiscal_hn en `regimen_fiscal`) | ficha (`modulos` con true/false) y `aplicar_ficha.sh` (P-09) | proveedor |
+| Licencia y límites del contrato (usuarios, cajas, sucursales, bodegas) | ficha (`licencia`, `limites`) y `aplicar_ficha.sh` | proveedor |
+| Vendedor que cobra (sí/no) | `configurar_empresa` (`vendedor_cobra`); el perfil pequeño lo sugiere | dueño |
 | Colores y logo | ficha (`tema`) | proveedor |
 | Usuarios y su rol | app: `agregar_usuario_empresa` / `desactivar_usuario_empresa` | dueño (admin: solo cajero y vendedor) |
 | Usuario contador (solo lectura, ve costos) | app: `agregar_usuario_empresa(..., 'contador')` | solo el dueño |

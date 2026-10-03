@@ -136,9 +136,12 @@ BEGIN
   -- Inventario 50,000 y proveedores 30,000 otra vez; apertura en 0 (Dr 50,000 + 30,000 = Cr 30,000 + 50,000).
   PERFORM pruebas.afirmar(pruebas.saldo_libros(b, '1.1.03.01') = 50000 AND pruebas.saldo_libros(b, '2.1.01.01') = 30000
     AND pruebas.saldo_libros(b, '3.3.01.03') = 0, 'saldos de B después de la carga inicial');
-  -- Apagar y volver a encender con todo cuadrado: se permite.
+  -- Apagar y volver a encender con todo cuadrado: se permite (0.8.0: compras
+  -- depende de inventario, así que se apaga primero compras y se enciende después).
   PERFORM pruebas.como('superusuario');
+  UPDATE public.modulo_activo SET activo = false WHERE empresa_id = b AND modulo = 'compras';
   UPDATE public.modulo_activo SET activo = false WHERE empresa_id = b AND modulo = 'inventario';
   UPDATE public.modulo_activo SET activo = true  WHERE empresa_id = b AND modulo = 'inventario';
+  UPDATE public.modulo_activo SET activo = true  WHERE empresa_id = b AND modulo = 'compras';
   PERFORM pruebas.afirmar(NOT EXISTS (SELECT 1 FROM public.verificar_bitacora()), 'bitácora intacta');
 END $$;

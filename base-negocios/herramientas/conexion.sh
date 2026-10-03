@@ -2,7 +2,7 @@
 # =====================================================================
 # conexion.sh  -  Conexión segura a una base y respaldos cifrados.
 # No se ejecuta solo: lo cargan con "source" migrar.sh, nuevo_cliente.sh,
-# respaldar.sh y restaurar.sh.
+# respaldar.sh, restaurar.sh, aplicar_ficha.sh y lista_clientes.sh.
 #
 # Secretos (regla): la clave NUNCA va como argumento visible de psql o
 # pg_dump (se vería con "ps" y queda en el historial). Se guarda en un
@@ -28,6 +28,7 @@
 #   RESPALDO_CLAVE_ARCHIVO     archivo (permisos 600) con la frase de gpg; si no
 #                              está, la frase se pide en la terminal (dos veces)
 #   RESPALDO_SIN_CIFRAR=1      solo base local de pruebas, si no hay age ni gpg
+#   CONEX_SIN_PEDIR_CLAVE=1    no pide la clave (usa solo ~/.pgpass o PGPASSFILE)
 #   BASE_LOCAL_SOCKET          carpeta del socket de OTRA base local de pruebas
 #                              que se quiere tratar como local (por defecto solo
 #                              cuenta el socket de base-negocios/.pgdata)
@@ -141,8 +142,10 @@ print("\x1f".join(["OK", host, port, user, db, ssl, "1" if pw else "0"]))
     return 1
   fi
 
-  # Sin clave, base remota y sin archivo pgpass propio: pedirla sin mostrarla.
-  if [ ! -s "$clave" ] && ! conexion_es_local && [ -z "${PGPASSFILE:-}" ] && [ ! -f "$HOME/.pgpass" ]; then
+  # Sin clave, base remota y sin archivo pgpass propio: pedirla sin mostrarla
+  # (salvo CONEX_SIN_PEDIR_CLAVE=1: lista_clientes.sh no pregunta nada).
+  if [ ! -s "$clave" ] && ! conexion_es_local && [ -z "${PGPASSFILE:-}" ] && [ ! -f "$HOME/.pgpass" ] \
+     && [ "${CONEX_SIN_PEDIR_CLAVE:-0}" != "1" ]; then
     if conexion_hay_terminal; then
       local c=""
       IFS= read -rs -p "Clave de la base para ${PGUSER:-postgres}@${PGHOST} (no se muestra): " c < /dev/tty || true
