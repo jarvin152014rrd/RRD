@@ -214,3 +214,17 @@ a dar seguimiento el primer día, sin trabas.
   confirmados (L 5,000, arqueo a ciegas, solo la moneda de la empresa).
   Pendiente: la doble aprobación solo se guarda; se aplicará en 2b-2. El paso
   "primera venta" se marcará solo cuando exista ventas (2b-2).
+
+## Mercado amplio: productos, servicios y otros países
+
+- El catálogo maneja BIENES y SERVICIOS con el mismo control de ventas,
+  cobros, descuentos, comisiones y reportes. Un servicio no mueve inventario;
+  puede tener costo estimado para medir margen y comisiones. Una factura puede
+  mezclar bienes y servicios (ej.: taller: mano de obra + repuestos).
+- Impuestos como datos configurables por empresa (código, nombre, tasa,
+  cuentas), sembrados para Honduras con ISV 15 %, ISV 18 % y exento. Otro país
+  solo cambia datos.
+- Lo fiscal propio de Honduras (CAI, formato SAR, leyendas) va aislado como
+  régimen "fiscal_hn" activable. Sin régimen fiscal se usa numeración interna.
+- Módulos futuros pensados para servicios (se venden aparte): órdenes de
+  trabajo, citas/agenda, cobros recurrentes (mensualidades, membresías).
