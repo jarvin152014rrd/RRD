@@ -4,6 +4,53 @@ Formato: versión (fecha) y lista de cambios. La versión vive en `VERSION_NUCLE
 y queda guardada en cada base al migrar (vista `version_esquema`).
 Números: MAYOR.MENOR.ARREGLO (ver `docs/CONVENCIONES.md`).
 
+## 0.3.0 (2026-10-03) — Etapa 2a
+
+Migraciones nuevas 012-016 (las 001-011 no se tocaron). 43 pruebas.
+
+**Roles (decisión del dueño, 012)**
+- El admin, por defecto: agrega y desactiva usuarios, sucursales, cajas y
+  bodegas; catálogos, precios, clientes y proveedores; crédito hasta el tope
+  del dueño; compras, pagos, ajustes y traslados.
+- El admin nunca nombra ni toca dueños, no toca al proveedor y no da (ni
+  cambia o desactiva a alguien con) un rol con permisos que él no tiene.
+- Solo del dueño, sin poder delegarse: `permisos.editar`, `periodos.reabrir`,
+  `soporte.otorgar`, `empresa.configurar`.
+- `configurar_empresa`: tope de límite de crédito y permitir existencia negativa.
+- Contraseñas: quedan en Supabase Auth; alta con clave temporal y
+  restablecer por Edge Function (pendiente, ver `nucleo/docs/usuarios.md`).
+
+**Clientes y proveedores (013):** una tabla `tercero` con roles, RTN
+validado, teléfono, correo, límite de crédito (centavos) y plazo. Crear,
+editar, desactivar; historial en bitácora.
+
+**Productos (014):** unidades, categorías (3 niveles), campos extra
+validados por empresa, productos con código interno y de barras únicos,
+ISV15/ISV18/EXENTO, precio en centavos, historial de precios con motivo.
+
+**Inventario (015):** bodegas; kardex solo-agregar con costo promedio
+ponderado y saldos por bodega actualizados en la misma transacción con
+candado; existencia negativa solo con configuración o permiso (con alerta);
+ajustes por conteo físico con asiento; traslados; carga inicial con asiento
+de apertura; búsqueda por código de barras; vistas `v_existencia` y `v_kardex`.
+
+**Compras (016):** compras al contado o crédito (documento + kardex + asiento
+en una transacción), ISV crédito fiscal, anulación con contra-movimiento y
+contra-asiento, pagos a proveedores sin pasar el saldo, vistas
+`v_cxp_documento` y `v_cxp_proveedor` con antigüedad.
+
+**Cuadre con la contabilidad:** con inventario o compras activos, las
+cuentas 1.1.03.01 y 2.1.01.01 no aceptan asientos manuales
+(`CUENTA_CONTROLADA`), y `anular_asiento` no anula asientos de un módulo.
+
+**Cambios que rompen (para quien ya usaba 0.2.0 en pruebas)**
+- El admin ya tiene `usuarios.administrar` y `sucursales.administrar`;
+  cajero y vendedor tienen `inventario.ver` y `terceros.editar` (se dan
+  también a las empresas ya instaladas).
+- Asientos manuales a 1.1.03.01 / 2.1.01.01 se rechazan si el módulo
+  inventario / compras está activo.
+- Se ajustaron las pruebas 19, 31 y 32 a los permisos nuevos.
+
 ## 0.2.0 (2026-10-03) — Etapa 1.5
 
 Las migraciones 001-007 se corrigieron directamente (ningún cliente las tenía

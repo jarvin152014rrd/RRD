@@ -117,9 +117,10 @@ BEGIN
   PERFORM pruebas.debe_fallar('TRUNCATE public.inventario_movimiento CASCADE', 'PROHIBIDO', 'vaciar kardex');
   PERFORM pruebas.afirmar(NOT EXISTS (
     SELECT 1 FROM public.inventario_saldo s
-     WHERE (s.cantidad, s.valor_centavos) IS DISTINCT FROM
-           (SELECT coalesce(sum(m.cantidad), 0), coalesce(sum(m.valor_centavos), 0) FROM public.inventario_movimiento m
-             WHERE m.bodega_id = s.bodega_id AND m.producto_id = s.producto_id)), 'saldo = suma del kardex');
+     LEFT JOIN (SELECT m.bodega_id, m.producto_id, sum(m.cantidad) AS q, sum(m.valor_centavos) AS v
+                  FROM public.inventario_movimiento m GROUP BY 1, 2) k
+            ON k.bodega_id = s.bodega_id AND k.producto_id = s.producto_id
+     WHERE (s.cantidad, s.valor_centavos) IS DISTINCT FROM (coalesce(k.q, 0), coalesce(k.v, 0))), 'saldo = suma del kardex');
 
   -- 12) Mes cerrado: no se ajusta ni traslada con esa fecha.
   PERFORM pruebas.como('dueno_a');

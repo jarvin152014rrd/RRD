@@ -2,9 +2,10 @@
 -- 012_roles_admin.sql  -  Lo que puede el administrador y lo que es
 -- SOLO del dueño (decisión del dueño, etapa 2a). Configuración de empresa.
 --
--- * El admin, por defecto: agrega y desactiva usuarios (nunca dueños ni
---   al proveedor, nunca da el rol dueño ni un rol con más permisos que
---   el suyo), crea y desactiva sucursales y cajas. (Bodegas, catálogos,
+-- * El admin, por defecto: agrega y desactiva usuarios CAJERO y VENDEDOR
+--   (crear o desactivar administradores y dueños es solo del dueño; nunca
+--   toca al proveedor ni da un rol con permisos que él no tiene), crea y
+--   desactiva sucursales y cajas. (Bodegas, catálogos,
 --   terceros y precios se le dan en 013-016.)
 -- * SOLO del dueño (ni el dueño se los puede dar a otro rol):
 --   permisos.editar, periodos.reabrir, soporte.otorgar, empresa.configurar.
@@ -88,8 +89,9 @@ $$;
 
 -- ---------------------------------------------------------------------
 -- agregar_usuario_empresa (reemplaza la de 010; misma firma).
--- Nuevo: quien no es dueño no puede dar un rol con más permisos que el
--- suyo, ni tocar a alguien cuyo rol tenga más permisos que el suyo.
+-- Nuevo: quien no es dueño solo da los puestos cajero o vendedor, y no
+-- da un rol con permisos que él no tiene, ni toca a alguien cuyo rol sea
+-- otro o tenga permisos que él no tiene.
 -- ---------------------------------------------------------------------
 CREATE OR REPLACE FUNCTION public.agregar_usuario_empresa(p_empresa_id uuid, p_correo text, p_rol text,
                                                           p_nombre text DEFAULT NULL)
@@ -111,6 +113,9 @@ BEGIN
   END IF;
   IF p_rol = 'dueno' AND v_yo <> 'dueno' THEN
     RAISE EXCEPTION 'PROHIBIDO: solo un dueño puede nombrar a otro dueño.';
+  END IF;
+  IF v_yo <> 'dueno' AND p_rol NOT IN ('cajero', 'vendedor') THEN
+    RAISE EXCEPTION 'PROHIBIDO: solo el dueño crea administradores; usted puede dar los puestos cajero o vendedor.';
   END IF;
   IF v_yo <> 'dueno' AND interno.rol_supera(p_empresa_id, p_rol, v_yo) THEN
     RAISE EXCEPTION 'PROHIBIDO: el rol "%" tiene permisos que usted no tiene; solo el dueño puede asignarlo.', p_rol;
@@ -137,6 +142,9 @@ BEGIN
   IF v_ue.rol = 'dueno' AND v_yo <> 'dueno' THEN
     RAISE EXCEPTION 'PROHIBIDO: solo un dueño puede cambiar a otro dueño.';
   END IF;
+  IF v_yo <> 'dueno' AND v_ue.rol NOT IN ('cajero', 'vendedor') THEN
+    RAISE EXCEPTION 'PROHIBIDO: solo el dueño cambia a un administrador.';
+  END IF;
   IF v_yo <> 'dueno' AND interno.rol_supera(p_empresa_id, v_ue.rol, v_yo) THEN
     RAISE EXCEPTION 'PROHIBIDO: ese usuario tiene un rol con permisos que usted no tiene; solo el dueño puede cambiarlo.';
   END IF;
@@ -148,8 +156,8 @@ BEGIN
 END $$;
 
 -- desactivar_usuario_empresa (reemplaza la de 010; misma firma).
--- Nuevo: quien no es dueño tampoco desactiva al proveedor ni a alguien
--- con más permisos que él.
+-- Nuevo: quien no es dueño solo desactiva cajeros y vendedores (y no a
+-- quien tenga permisos que él no tiene); nunca al proveedor.
 CREATE OR REPLACE FUNCTION public.desactivar_usuario_empresa(p_empresa_id uuid, p_user_id uuid, p_motivo text)
 RETURNS jsonb
 LANGUAGE plpgsql SECURITY DEFINER SET search_path = '' AS $$
@@ -176,6 +184,9 @@ BEGIN
   END IF;
   IF v_ue.rol = 'proveedor' AND v_yo <> 'dueno' THEN
     RAISE EXCEPTION 'PROHIBIDO: solo el dueño puede desactivar al usuario del proveedor.';
+  END IF;
+  IF v_yo <> 'dueno' AND v_ue.rol NOT IN ('cajero', 'vendedor') THEN
+    RAISE EXCEPTION 'PROHIBIDO: solo el dueño desactiva a un administrador.';
   END IF;
   IF v_yo <> 'dueno' AND interno.rol_supera(p_empresa_id, v_ue.rol, v_yo) THEN
     RAISE EXCEPTION 'PROHIBIDO: ese usuario tiene un rol con permisos que usted no tiene; solo el dueño puede desactivarlo.';

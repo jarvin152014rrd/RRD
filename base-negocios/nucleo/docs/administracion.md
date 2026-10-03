@@ -7,11 +7,12 @@ nombre), `empresas` (todas las del usuario), `empresa` (datos, `hoy`),
 `soporte_vigente_hasta`, `hora_servidor`. Si el usuario tiene varias
 empresas y no indica una, `empresa` viene vacía: la app pide elegir.
 
-**Usuarios** (`usuarios.administrar`, por defecto solo el dueño):
+**Usuarios** (`usuarios.administrar`: dueño y admin desde 0.3.0; ver `usuarios.md`):
 `agregar_usuario_empresa` (agrega, reactiva o cambia rol; el usuario debe
 estar registrado) y `desactivar_usuario_empresa` (con motivo; nunca borra).
 Nadie se cambia a sí mismo; solo un dueño toca a otro dueño; el rol
-proveedor solo se da al instalar. Desactivar funciona en solo lectura.
+proveedor solo se da al instalar. Quien no es dueño no da un rol con
+permisos que él no tiene. Desactivar funciona en solo lectura.
 
 **Sucursales y cajas** (`sucursales.administrar`): `crear_sucursal`
 (código SAR de 3 dígitos), `desactivar_sucursal` (también sus cajas; no la
@@ -19,3 +20,7 @@ proveedor solo se da al instalar. Desactivar funciona en solo lectura.
 activa), `desactivar_caja`.
 
 **Subcuentas** (`catalogo.editar`): `crear_subcuenta`.
+
+**Configuración** (`empresa.configurar`, solo dueño, 012):
+`configurar_empresa(empresa, datos, motivo)` con
+`{"tope_credito_centavos": 500000, "permite_existencia_negativa": false}`.

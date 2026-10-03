@@ -18,7 +18,12 @@ cabe en estas reglas, se discute antes de programarlo.
 - Dinero **siempre en centavos enteros** (`bigint`), columnas terminadas en
   `_centavos`. L 115.00 = `11500`. Nunca `numeric` ni decimales para dinero.
 - Tope por monto: 9,007,199,254,740,991 (el mayor entero exacto en JavaScript).
-- Cantidades (unidades, kilos) sí pueden llevar decimales.
+- Cantidades (unidades, kilos) sí pueden llevar decimales: `numeric(18,4)`.
+- Costo unitario (centavos por unidad): `numeric(18,6)`, columnas
+  `costo_unitario` / `costo_promedio` (única excepción a "centavos enteros":
+  el valor total que llega a los libros siempre se redondea a centavos).
+- Datos de documentos (compras, terceros, productos) llegan en `jsonb` con
+  claves conocidas; una clave que no se reconoce es error.
 - Moneda de la empresa: código ISO 4217 (`HNL`, `USD`).
 
 ## Fechas y horas
@@ -45,6 +50,16 @@ cabe en estas reglas, se discute antes de programarlo.
 - Todo `RAISE EXCEPTION` empieza con una CLAVE en mayúsculas y dos puntos:
   `'NO_CUADRA: el debe ... '`. La clave va en `error_catalogo` con su
   mensaje sencillo y qué hacer (en la misma migración que la usa).
+
+## Cuentas de los módulos
+- Las cuentas que usa un módulo están en `interno.cuenta_sistema` (un solo
+  lugar). Si `modulo_controla` está activo, esa cuenta no acepta asientos
+  manuales. Los asientos de un módulo se anulan desde su documento.
+
+## Vistas
+- Por defecto `security_invoker = true` (respetan RLS).
+- Si hay que ocultar columnas según el permiso (ej. costos), vista "del
+  sistema" con filtro explícito `public.puede_leer(empresa, permiso)`.
 
 ## Funciones
 - `SECURITY DEFINER` siempre con `SET search_path = ''` y nombres completos

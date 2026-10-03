@@ -19,6 +19,10 @@ todos sin perder lo propio de nadie.
 | Subcuentas del catálogo | app: `crear_subcuenta` (solo de detalle) | dueño |
 | Cerrar / reabrir meses | app | dueño (reabrir), admin (cerrar) |
 | Acceso de soporte temporal | app: `otorgar_acceso_soporte` | solo el dueño |
+| Tope de crédito que puede dar el admin; permitir inventario negativo | app: `configurar_empresa` | solo el dueño |
+| Bodegas, categorías, unidades, campos extra de productos | app | dueño o admin |
+| Productos y precios (con historial) | app | dueño o admin |
+| Clientes y proveedores | app | dueño, admin (crédito hasta el tope); cajero y vendedor registran |
 | Licencia (vencimiento, gracia, suspensión) | tabla `licencia` con la llave service_role | proveedor |
 
 ## No se toca NUNCA (ni por un cliente "especial")

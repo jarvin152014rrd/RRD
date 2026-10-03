@@ -6,7 +6,7 @@ La app será una PWA (página web instalable) y los datos vivirán en Supabase
 funciones SQL que guardan todo o nada. El navegador solo muestra y llama
 esas funciones.
 
-Versión del núcleo: ver `VERSION_NUCLEO` (hoy 0.2.0, etapa 1.5). Cambios: `CHANGELOG.md`.
+Versión del núcleo: ver `VERSION_NUCLEO` (hoy 0.3.0, etapa 2a). Cambios: `CHANGELOG.md`.
 
 ## Carpetas
 
@@ -46,6 +46,11 @@ Qué hace cada migración:
 | 009_soporte | acceso de soporte temporal del proveedor (lo da el dueño) |
 | 010_administracion | `mi_perfil`, usuarios, sucursales, cajas, subcuentas |
 | 011_reportes | `saldo_cuentas(desde, hasta)` para los estados mensuales |
+| 012_roles_admin | lo que puede el admin, permisos solo del dueño, `configurar_empresa` |
+| 013_terceros | clientes y proveedores (una tabla) |
+| 014_productos | unidades, categorías, campos extra, productos, historial de precios |
+| 015_inventario | bodegas, kardex con costo promedio, ajustes, traslados, carga inicial, existencias |
+| 016_compras | compras, anulación, pagos a proveedores, CxP con antigüedad |
 
 Detalle de cada módulo: `nucleo/docs/`.
 
@@ -89,6 +94,9 @@ Si algo falla, termina con error (código distinto de 0).
 12. **Meses en orden.** Se cierran en orden y se reabren del último hacia atrás.
 13. **Bitácora a prueba de manos.** Cada fila lleva una huella encadenada;
     `verificar_bitacora()` avisa si alguien la alteró por fuera.
+14. **Kardex = contabilidad.** El valor del inventario es igual al saldo de
+    la cuenta de inventario, y las CxP por proveedor al de proveedores. Esas
+    cuentas no aceptan asientos manuales si su módulo está activo.
 
 ## Funciones que usará la app (RPC)
 
@@ -108,7 +116,23 @@ Si algo falla, termina con error (código distinto de 0).
 | `crear_caja(empresa, sucursal, nombre, punto_emision)` / `desactivar_caja(empresa, caja, motivo)` | cajas | sucursales.administrar |
 | `crear_subcuenta(empresa, codigo_madre, codigo, nombre, naturaleza?)` | subcuenta de detalle | catalogo.editar |
 | `otorgar_acceso_soporte(empresa, vence_en, motivo)` / `revocar_acceso_soporte(empresa, motivo)` | soporte temporal | soporte.otorgar (solo dueño) |
+| `configurar_empresa(empresa, datos, motivo)` | tope de crédito, inventario negativo | empresa.configurar (solo dueño) |
+| `crear_tercero` / `editar_tercero` / `desactivar_tercero` | clientes y proveedores | terceros.editar / .credito / .desactivar |
+| `crear_unidad`, `crear_categoria`, `crear_campo_extra`, `crear_producto`, `editar_producto`, `desactivar_producto` | catálogo | productos.editar |
+| `cambiar_precio_producto(empresa, producto, precio, motivo)` | precio con historial | productos.precios |
+| `buscar_producto_por_codigo(empresa, codigo)` | escáner / cámara | miembro de la empresa |
+| `crear_bodega` / `desactivar_bodega` | bodegas | bodegas.administrar |
+| `ajustar_inventario(empresa, bodega, fecha, lineas, motivo, id_operacion)` | conteo físico + asiento | inventario.ajustar |
+| `trasladar_inventario(empresa, origen, destino, fecha, lineas, id_operacion, nota?)` | traslado entre bodegas | inventario.trasladar |
+| `cargar_saldo_inicial(empresa, bodega, fecha, lineas, id_operacion, motivo?)` | apertura del inventario | inventario.carga_inicial |
+| `registrar_compra(empresa, datos, id_operacion)` | compra contado / crédito | compras.registrar |
+| `anular_compra(compra, motivo, id_operacion, fecha?)` | contra-movimiento + contra-asiento | compras.anular |
+| `pagar_proveedor(empresa, compra, monto, fecha, forma_pago, id_operacion, referencia?)` | abono a CxP | compras.pagar |
 | `crear_empresa_inicial(ficha jsonb)` | instalar cliente | solo service_role |
+
+Vistas: `v_existencia` (inventario.ver; costos solo con inventario.costos),
+`v_kardex` (inventario.costos), `v_cxp_documento` y `v_cxp_proveedor` (compras.ver).
+Detalle de cada módulo en `nucleo/docs/` (terceros, productos, inventario, compras, usuarios).
 
 Formato de `lineas` (montos en centavos):
 `[{"cuenta":"1.1.01.01","debe":11500},{"cuenta":"4.1.01.01","haber":10000},{"cuenta":"2.1.02.01","haber":1500}]`
@@ -126,7 +150,10 @@ busca ahí. Claves de hoy: `SIN_SESION`, `NO_PERTENECE`, `SIN_PERMISO`,
 `FECHA_MUY_FUTURA`, `PERIODO_CERRADO`, `PERIODO_INVALIDO`, `MES_NO_TERMINADO`,
 `MES_ANTERIOR_ABIERTO`, `REABRIR_EN_ORDEN`, `SUCURSAL_INVALIDA`,
 `SIN_SUCURSAL_ACTIVA`, `ULTIMA_SUCURSAL`, `ZONA_INVALIDA`, `FICHA_INVALIDA`,
-`USUARIO_NO_EXISTE`, `VENCIMIENTO_INVALIDO`.
+`USUARIO_NO_EXISTE`, `VENCIMIENTO_INVALIDO`, `TOPE_CREDITO`, `RTN_INVALIDO`,
+`TERCERO_INVALIDO`, `PRODUCTO_INVALIDO`, `CAMPO_EXTRA_INVALIDO`, `BODEGA_INVALIDA`,
+`CANTIDAD_INVALIDA`, `EXISTENCIA_INSUFICIENTE`, `SALDO_INICIAL_YA_CARGADO`,
+`CUENTA_CONTROLADA`, `PAGO_EXCEDE_SALDO`.
 
 **Regla:** si una migración usa una clave nueva, la agrega a `error_catalogo`
 en ese mismo archivo. La prueba 17 falla si alguna falta.
