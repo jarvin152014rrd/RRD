@@ -149,3 +149,30 @@ comprobante, aprobaciones y alertas.
 Selector de cualquier mes anterior con estado de resultados, flujo, saldos de
 clientes, inventario valorizado y balance, descargables en PDF y Excel. Cerrar
 bloquea sin borrar. Reabrir: solo dueño, con motivo, en orden.
+
+## Ventas, caja y comisiones (decisiones para la etapa 2b)
+
+- Turno de caja POR CAJERO: cada cajero abre y cierra su turno con arqueo.
+- Diferencia en el arqueo: queda como "diferencia pendiente"; el dueño o el
+  admin decide, con motivo, si se cobra al cajero (cuenta por cobrar a
+  empleado) o se envía a gasto.
+- Venta al crédito CONFIGURABLE en Ajustes: según límite del cliente (pide
+  aprobación si lo pasa o si es cliente nuevo) o siempre con aprobación.
+- Anular venta: el vendedor solo la solicita; aprueba admin o dueño con
+  motivo, mientras el mes esté abierto. La factura conserva su número y queda
+  ANULADA.
+- Cliente NO obligatorio: sin cliente la venta queda como "Consumidor final".
+  El crédito, el apartado y el saldo a favor sí requieren cliente.
+- Devoluciones: el dueño activa en Ajustes cuáles permite: devolver dinero
+  (de la caja o banco elegido), cambio por otro producto (se cobra o devuelve
+  la diferencia) y nota de crédito. Nota de crédito sin cliente = vale con
+  código para una próxima compra.
+- Extras incluidos: cotizaciones (no mueven inventario ni dinero; se
+  convierten en venta) y apartados con anticipo (reservan mercadería).
+- Descuentos de tres tipos: por categoría (promociones con fecha de inicio y
+  fin), por artículo y por factura. Tope por puesto; si se pasa, pide
+  aprobación en el momento.
+- Comisiones: interruptor de encendido/apagado; porcentaje por empleado; base
+  elegida por el dueño: sobre la GANANCIA (precio sin ISV menos costo,
+  recomendado) o sobre el precio sin ISV. Nunca sobre el ISV. Se ganan cuando
+  la venta está cobrada completa y se ajustan con devoluciones.
