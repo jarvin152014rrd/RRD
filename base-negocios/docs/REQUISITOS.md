@@ -41,9 +41,7 @@ página "Mi cuenta" (plan, módulos, próximo pago, pedir módulo).
 
 ## Ayuda dentro del programa
 
-- Botón "?" en cada pantalla con guía corta en texto (funciona sin internet).
-- Enlace opcional a video en YouTube (no listado). Los videos NO van dentro
-  del programa: solo se guarda el enlace.
+- NO lleva botón "?" ni videos de ayuda (decisión del dueño).
 
 ## Rastreo del dinero (obligatorio)
 
