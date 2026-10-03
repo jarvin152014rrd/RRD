@@ -95,7 +95,7 @@ En los términos del precio (con impuesto si el precio lo incluye):
 5. neto → regla de siempre (`public.precio_con_tasa`, tasa de la tabla de impuestos): base sin impuesto, impuesto y total. El impuesto se calcula sobre el precio ya rebajado.
 
 `descuento_manual_porcentaje` = (artículo + factura, sin impuesto) / (precio con promoción, sin impuesto) × 100: es lo que se compara con el tope del puesto. Las promociones no cuentan (las autorizó el admin al crearlas).
-**0.9.1: el tope vale también POR LÍNEA:** (descuento del artículo + su parte del de factura) / precio de la línea con promoción, con 1 centavo de tolerancia por redondeo (`interno.descuento_linea_sobre_tope`). Al vender o apartar sobre el tope de una línea pide aprobación; quien aprueba tampoco pasa su tope en una línea (`TOPE_APROBACION`; el dueño sí). Ejemplo (prueba 105): 100 % en un flete de L 500 dentro de una factura de L 20,000 es 2.5 % del total, pero 100 % en la línea: el cajero (5 %) pide aprobación, el admin (20 %) no la aprueba, el dueño sí.
+**0.9.1: el tope vale también POR LÍNEA:** (descuento del artículo + su parte del de factura) / precio de la línea con promoción, con 2 centavos de tolerancia por redondeo (`interno.descuento_linea_sobre_tope`; 0.9.2, antes 1: el ajuste del último centavo del descuento de factura en monto podía pedir aprobación por 1 o 2 centavos en una línea chica, prueba 118). Al vender o apartar sobre el tope de una línea pide aprobación; quien aprueba tampoco pasa su tope en una línea (`TOPE_APROBACION`; el dueño sí). Ejemplo (prueba 105): 100 % en un flete de L 500 dentro de una factura de L 20,000 es 2.5 % del total, pero 100 % en la línea: el cajero (5 %) pide aprobación, el admin (20 %) no la aprueba, el dueño sí.
 
 **Descuento de factura en monto exacto (0.9.1):** el descuento con impuesto suma exactamente el monto pedido. Con precios SIN ISV el reparto más el ISV recalculado podía dar 1 centavo de más o de menos por línea; ahora se ajusta la última línea que puede dar el monto exacto (una con precio con ISV o exenta siempre puede). Ejemplo (prueba 110): 10.00 + 3.33 + 7.77 sin ISV (2,427 con ISV), descuento de 1.07 → total 23.20 (antes 23.19).
 Ejemplo (prueba 80, 0.8.0): 10 tornillos con promoción 10 % → 13,500 con ISV (descuento 1,304 sin ISV, todo de promoción); con además 5 % del artículo → `DESCUENTO_DOBLE`.
@@ -170,7 +170,15 @@ Clientes (1.1.02.01) no acepta asientos manuales con el módulo activo; activar
   un lote solo paga ventas de su misma empresa y cliente.
 - **0.9.1:** `"vendedor_id"` (a quien se le paga la comisión) solo puede ser un usuario activo de la
   empresa cuyo puesto vende (`ventas.vender`); si no, `DATO_INVALIDO`. Sin `vendedor_id`, quien registra.
+  **0.9.2:** esa regla vale solo cuando el vendedor se ELIGE en el momento. Al convertir una cotización o
+  completar un apartado el vendedor se hereda del documento guardado y se respeta aunque hoy esté dado de
+  baja o su puesto solo cotice (antes esos documentos quedaban trabados); la comisión sigue yendo a él
+  (`comisiones.md`). Prueba 114.
 - **0.9.1:** anular una venta pagada en efectivo sigue la regla de turnos (`caja.md`): sale del turno
   de quien aprueba (o del de quien la pidió, si sigue abierto); nunca del turno de otro cajero.
+  **0.9.2:** quien aprueba puede elegir de dónde sale el efectivo con un último parámetro opcional:
+  `resolver_aprobacion(aprobacion, true, motivo, id_operacion, fecha?, cuenta_salida_id?)` (caja fuerte,
+  banco, caja chica o la caja de su propio turno; la de otro cajero: `TURNO_AJENO`). Solo para la
+  anulación de una venta (en otra aprobación: `DATO_INVALIDO`). Ver `caja.md`.
   `interno.registrar_venta_base` tiene un parámetro más (el apartado que se completa);
   `interno.emitir_venta` y `interno.anular_venta_base` se reemplazaron con la misma firma.

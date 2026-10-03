@@ -183,7 +183,7 @@ Si algo falla, termina con error (código distinto de 0).
 | `resolver_diferencia(turno, destino, motivo, id_operacion, fecha?)` | faltante al cajero o a gasto; sobrante a otros ingresos | caja.supervisar |
 | `crear_categoria_gasto` / `desactivar_categoria_gasto` / `reactivar_categoria_gasto` | categorías ligadas a cuentas de gasto | dinero.administrar |
 | `registrar_gasto(empresa, datos, id_operacion)` / `anular_gasto(gasto, motivo, id_operacion, fecha?)` | gasto con ISV y comprobante (sobre el tope queda pendiente) | gastos.registrar / gastos.anular |
-| `resolver_aprobacion(aprobacion, aprobar, motivo, id_operacion, fecha?)` | aprobar o rechazar (dentro del tope del puesto) | gastos.aprobar |
+| `resolver_aprobacion(aprobacion, aprobar, motivo, id_operacion, fecha?, cuenta_salida_id?)` (0.9.2: la cuenta solo al anular una venta) | aprobar o rechazar (dentro del tope del puesto) | gastos.aprobar |
 | `configurar_tope_rol(empresa, rol, tipo, sin_aprobacion, aprueba_hasta, motivo)` | topes por puesto | empresa.configurar (solo dueño) |
 | `cuadre_caja_chica(cuenta, contado?)` | fondo, gastos con y sin comprobante, esperado | dinero.ver |
 | `crear_pago_fijo` / `editar_pago_fijo` / `registrar_pago_fijo` / `pagos_fijos_proximos` / `reporte_pagos_fijos` | plantillas, próximos y vencidos, gasto real, total mensual | dinero.administrar / gastos.registrar / dinero.ver |
@@ -192,7 +192,7 @@ Si algo falla, termina con error (código distinto de 0).
 | `solicitar_al_proveedor(empresa, tipo, detalle, id_operacion)` | pedir ampliación, módulo u otra cosa | proveedor.solicitar (dueño, admin) |
 | `responder_solicitud_proveedor(solicitud, estado, respuesta)` | atender o rechazar una solicitud | solo service_role |
 | `promociones_aplicables(empresa, producto, fecha?, cantidad?)` | promociones que puede elegir quien vende | ventas.vender / ventas.cotizar |
-| `registrar_cobro(empresa, datos, id_operacion)` / `anular_cobro(cobro, motivo, id_operacion, fecha?)` / `confirmar_transferencia_cobro` | cobros a clientes y su anulación (`nucleo/docs/cobros.md`) | ventas.cobrar / cobros.anular / dinero.trasladar |
+| `registrar_cobro(empresa, datos, id_operacion)` / `anular_cobro(cobro, motivo, id_operacion, fecha?, cuenta_salida_id?)` / `confirmar_transferencia_cobro` | cobros a clientes y su anulación (`nucleo/docs/cobros.md`) | ventas.cobrar / cobros.anular / dinero.trasladar |
 | `condonar_saldo_cxc` / `anular_condonacion` | redondeo explícito con motivo | cobros.condonar / cobros.anular |
 | `registrar_saldo_inicial_cxc` / `anular_saldo_inicial_cxc` | facturas que los clientes ya debían | ventas.saldo_inicial (solo dueño) |
 | `consultar_vale(empresa, codigo)` / `estado_cuenta_cliente(empresa, cliente, desde?, hasta?)` | saldo de un vale / estado de cuenta | ventas.vender / ventas.ver |

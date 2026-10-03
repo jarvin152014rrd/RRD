@@ -14,6 +14,11 @@ Necesita **ventas**. Además del módulo (lo activa el proveedor), el dueño tie
   por empleado con fecha desde (historial; vale el de la fecha de la venta).
   **0.9.1: no es retroactivo:** `desde` es hoy (por defecto) o una fecha futura; una fecha
   pasada da `FECHA_INVALIDA` (lo ya vendido conserva su porcentaje).
+  **0.9.2: el porcentaje queda guardado en la venta al emitirla** (`venta.comision_porcentaje`) y
+  ese es el que se usa al devengar: si el dueño cambia hoy el porcentaje, una venta al crédito
+  emitida hoy y cobrada después conserva el de su emisión (prueba 116: 10 % → 130; la venta
+  nueva al 20 % → 261). Las ventas de antes de 0.9.2 (sin porcentaje guardado) siguen con la
+  regla anterior: el vigente en su fecha al momento de cobrarse (prueba 119).
 
 > **Aviso para el dueño (base "ganancia"):** con esta base la comisión depende del
 > **costo** de lo vendido (ganancia = precio sin ISV − costo). El vendedor no ve costos
@@ -37,6 +42,11 @@ Necesita **ventas**. Además del módulo (lo activa el proveedor), el dueño tie
   descontar del próximo pago.
 - Con el interruptor o el módulo apagado no se devengan comisiones nuevas; las ya
   devengadas se siguen ajustando.
+- **Vendedor dado de baja (0.9.2, recomendado):** la venta que viene de un apartado o una
+  cotización suya queda a su nombre y su comisión **se genera igual** (la ganó cuando hizo
+  el documento). El dueño decide al liquidar: `pagar_comisiones` funciona aunque el usuario
+  ya no esté activo (prueba 114). Si decide no pagarla, hoy queda en Comisiones por pagar
+  (no hay una función para condonarla: la corrige el contador con un asiento).
 - Cada movimiento tiene asiento: Dr 6.1.01.04 Comisiones sobre ventas / Cr 2.1.03.04
   Comisiones por pagar (al revés si baja).
 

@@ -126,6 +126,9 @@ cabe en estas reglas, se discute antes de programarlo.
   (turno abierto de quien hace la operación; nunca el turno de otro cajero:
   `TURNO_AJENO`) y, antes de `rastrear_dinero`, `set_config('app.turno_origen', <turno original>, true)`
   (se limpia después) para que el movimiento lleve `turno_origen_id`.
+  0.9.2: quien anula puede ELEGIR la cuenta de salida (parámetro opcional al final,
+  `p_cuenta_salida_id`); se valida con `interno.cuenta_salida_elegida` (se paga desde ella y,
+  si es una caja con turnos, solo la del turno propio).
 - Comprobantes: `"comprobante": {"ruta","tipo","sha256"}` en los datos o
   `agregar_adjunto`; la ruta empieza con el id de la empresa.
 

@@ -4,6 +4,45 @@ Formato: versión (fecha) y lista de cambios. La versión vive en `VERSION_NUCLE
 y queda guardada en cada base al migrar (vista `version_esquema`).
 Números: MAYOR.MENOR.ARREGLO (ver `docs/CONVENCIONES.md`).
 
+## 0.9.2 (2026-10-03) — Correcciones de la revisión de 0.9.1
+
+Migración nueva 039 (las 001-038 no se tocaron). 119 pruebas (nuevas 114-119; las 114 a 118 fallan contra 0.9.1 y
+pasan con 0.9.2, con las cifras hechas a mano en sus comentarios; la 119 actualiza una base 0.9.1 con datos).
+
+**Importante**
+- **Vendedor heredado (114):** la regla de `vendedor_id` (activo y con puesto que vende) vale solo cuando el vendedor
+  se elige en el momento. Al completar un apartado o convertir una cotización se respeta el vendedor del documento
+  guardado aunque hoy esté dado de baja o su puesto solo cotice (antes quedaban trabados con `DATO_INVALIDO`). Su
+  comisión se genera igual y el dueño decide al liquidar (`pagar_comisiones` funciona con el usuario inactivo).
+
+**Menores**
+- **Cuenta de salida elegida (115):** `anular_cobro(..., fecha?, cuenta_salida_id?)` y
+  `resolver_aprobacion(..., fecha?, cuenta_salida_id?)` (solo al aprobar la anulación de una venta): el efectivo sale
+  de la caja fuerte, un banco, la caja chica o la caja del turno propio (`interno.cuenta_salida_elegida`); sigue
+  prohibido el turno de otro cajero (`TURNO_AJENO`) y hace falta el permiso de anular. Devolver dinero de una
+  devolución y el anticipo de un apartado ya pedían la cuenta.
+- **Porcentaje de comisión guardado (116):** columna nueva `venta.comision_porcentaje`, se llena al emitir (trigger
+  `comision_al_emitir`) y se usa al devengar; un cambio hecho hoy ya no toca las ventas de hoy no cobradas. Las ventas
+  de antes (sin porcentaje) siguen la regla anterior (119).
+- **Destino de devolución en la aprobación (117):** `definir_destino_devolucion` pone el destino actual en el texto de
+  la solicitud (`| Destino: ...`) y, con doble aprobación, reinicia la primera aprobación (`aprobacion_reiniciada`).
+  Sin cambio real no toca nada.
+- **Tolerancia del tope por línea (118):** 2 centavos (antes 1). Revisado con 237 facturas de 4 líneas (con y sin ISV
+  incluido) y cada monto de descuento de 1 centavo hasta el tope (5 % y 10 %): con 1 centavo de tolerancia, 252 casos
+  pedían aprobación solo por el redondeo; con 2, ninguno. Un descuento de línea 3 centavos sobre el tope la sigue pidiendo.
+
+**Cambios que rompen (para quien ya usaba 0.9.1 en pruebas)**
+- `public.anular_cobro` y `public.resolver_aprobacion` se reemplazaron (DROP + CREATE) con un parámetro opcional más
+  al final; las llamadas de antes (4 o 5 argumentos) funcionan igual.
+- Se reemplazaron con la misma firma: `interno.descuento_linea_sobre_tope`, `interno.proteger_venta`,
+  `interno.recalcular_comision`, `interno.proteger_aprobacion`, `interno.anular_venta_base`,
+  `interno.registrar_venta_base`, `public.definir_destino_devolucion`.
+
+**Pendiente (honesto):** una comisión de un vendedor dado de baja que el dueño decide no pagar no tiene función para
+anularla (la corrige el contador con un asiento); al reiniciar una primera aprobación su `id_operacion` queda libre
+(un reintento viejo con ese id cuenta como una aprobación nueva del destino actual); no se consultó a los agentes
+constructor-maestro y revisor (esta sesión no los tiene): el revisor debe confirmar estas correcciones.
+
 ## 0.9.1 (2026-10-03) — Correcciones de la revisión de la etapa 2
 
 Migración nueva 038 (las 001-037 no se tocaron). 113 pruebas (nuevas 102-113; cada una falla contra 0.9.0

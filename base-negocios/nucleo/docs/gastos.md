@@ -32,7 +32,7 @@ Tipo, documento, monto, solicitante, aprobador, estado (`pendiente`,
 `aprobada`, `rechazada`, `cancelada`) y motivo. Hoy la usa el gasto; la
 etapa 2b-2 la usará para crédito, descuentos y anulación de ventas.
 
-`resolver_aprobacion(aprobacion, aprobar, motivo, id_operacion, fecha?)`:
+`resolver_aprobacion(aprobacion, aprobar, motivo, id_operacion, fecha?)` (0.9.2: un sexto parámetro opcional, `cuenta_salida_id`, solo para anular ventas; ver `caja.md`):
 - Gasto: pide gastos.aprobar y el monto dentro de lo que su puesto aprueba
   (`TOPE_APROBACION`); el dueño sin tope. Nadie resuelve lo que él pidió (salvo el dueño).
 - Rechazar pide motivo. Aprobar mueve el dinero con la fecha del gasto (o

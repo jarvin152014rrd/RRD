@@ -34,7 +34,8 @@ abono se anula con `anular_cobro` mientras el apartado esté vigente.
 Cobra lo que falta y lo convierte en **venta** (factura CAI si fiscal_hn) con los precios
 del apartado, aplicando los anticipos como forma de pago `anticipo` (Dr Anticipos de
 clientes). En ese momento sale del kardex y se reconocen ingreso e ISV. La venta queda a
-nombre del vendedor del apartado. Un apartado vencido se puede completar si todavía hay
+nombre del vendedor del apartado (0.9.2: aunque hoy esté dado de baja; su comisión se genera igual y
+el dueño decide al liquidar, ver `comisiones.md`). Un apartado vencido se puede completar si todavía hay
 existencia. Si la venta pidiera aprobación (por ejemplo crédito sobre el límite):
 `APROBACION_REQUERIDA`.
 

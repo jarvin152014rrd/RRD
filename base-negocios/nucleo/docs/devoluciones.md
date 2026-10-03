@@ -93,6 +93,13 @@ pendiente, con motivo (bitácora), respetando los tipos que permite el dueño y 
 efectivo. Después se vuelve a aprobar con `resolver_aprobacion` (o se rechaza con motivo).
 Ejemplo (prueba 109).
 
+**0.9.2:** si el destino cambia de verdad, el texto de la solicitud de aprobación termina en
+`| Destino: devolver dinero de "Caja fuerte"` o `| Destino: saldo a favor del cliente (nota de
+crédito)` con el motivo del cambio, para que quien aprueba vea el destino actual. Con doble
+aprobación, una primera aprobación ya dada (era para el destino anterior) **se reinicia** y hay
+que aprobar otra vez (la respuesta trae `aprobacion_reiniciada`). Poner el mismo destino no
+cambia nada. Queda en la bitácora con el motivo. Prueba 117.
+
 ## Con otras partes
 
 - Una venta con devoluciones ya no se anula completa (`VENTA_CON_DEVOLUCIONES`).

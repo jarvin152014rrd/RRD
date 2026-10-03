@@ -1,9 +1,28 @@
-# Pendientes (núcleo 0.9.1, 113 pruebas OK)
+# Pendientes (núcleo 0.9.2, 119 pruebas OK)
 
 Estado: etapa 2 terminada. Las correcciones de la revisión de la etapa 2 están
-HECHAS en la migración 038 (núcleo 0.9.1), cada una con su prueba (falla
-contra 0.9.0 y pasa con 0.9.1). Falta que el revisor las confirme antes de la
+HECHAS en la migración 038 (núcleo 0.9.1) y las de la revisión de 0.9.1 en la
+migración 039 (núcleo 0.9.2), cada una con su prueba (falla contra la versión
+anterior y pasa con la nueva). Falta que el revisor las confirme antes de la
 etapa 3.
+
+## Corregir de la revisión de 0.9.1 (todo HECHO en 0.9.2)
+
+IMPORTANTE
+1. HECHO (prueba 114). Vendedor heredado: la regla de `vendedor_id` solo vale
+   cuando se elige en el momento; al completar un apartado o convertir una
+   cotización se respeta el vendedor del documento (aunque esté dado de baja o
+   su puesto solo cotice). Su comisión se genera igual; el dueño decide al liquidar.
+
+MENOR
+2. HECHO (prueba 115). Cuenta de salida elegida: `anular_cobro` y
+   `resolver_aprobacion` (anular venta) aceptan `cuenta_salida_id` (caja fuerte,
+   banco, caja chica o turno propio); nunca el turno de otro cajero.
+3. HECHO (prueba 116; 119 para ventas de antes). El porcentaje de comisión
+   queda guardado en la venta al emitirla y se usa al devengar.
+4. HECHO (prueba 117). `definir_destino_devolucion` pone el destino actual en
+   la solicitud de aprobación y reinicia una primera aprobación.
+5. HECHO (prueba 118). Tope por línea con 2 centavos de tolerancia.
 
 ## Corregir de la revisión de la etapa 2
 
@@ -59,3 +78,6 @@ MENOR
 - 0.9.1: una anulación pedida por un cajero cuyo turno sigue abierto saca el
   efectivo de ese turno al aprobarla (el cajero lo entrega); si ya cerró, sale
   del turno de quien aprueba. Confirmar.
+- 0.9.2: la comisión de un vendedor dado de baja se genera igual (recomendado) y
+  el dueño decide al liquidar; si no la paga, hoy la corrige el contador con un
+  asiento (no hay función para anularla). Confirmar.

@@ -56,7 +56,7 @@ Ejemplo (prueba 94): F-OLD-1 20,000 (saldo inicial), V1 15,000, V2 45,000. Cobro
 30,000 sin elegir: F-OLD-1 20,000 + V1 10,000. Tarjeta 5,000 a V2. Mixto 55,000 con
 excedente: V1 5,000 + V2 40,000 + 10,000 a favor.
 
-## Anular un cobro — `anular_cobro(cobro, motivo, id_operacion, fecha?)` (`cobros.anular`)
+## Anular un cobro — `anular_cobro(cobro, motivo, id_operacion, fecha?, cuenta_salida_id?)` (`cobros.anular`)
 
 Patrón "anular un abono" (CONVENCIONES): motivo de 5 letras o más; fecha por defecto
 hoy (nunca antes del cobro); mes abierto; una sola vez (`YA_ANULADO`); contra-asiento
@@ -77,6 +77,15 @@ abiertos, sale de la misma caja como antes. Lo mismo vale para anular una venta
 (`ventas.md`), devolver dinero (`devoluciones.md`) y devolver un anticipo de apartado.
 Ejemplo (prueba 107): el cajero cobra 4,500 en su turno T1 y lo cierra; el admin abre su
 turno T2 con 10,000 y anula: los 4,500 salen de T2 (`turno_origen_id` = T1); T1 no se toca.
+
+**Cuenta de salida elegida (0.9.2):** en un negocio de una sola caja ocupada por el turno de
+otro cajero, quien anula (con `cobros.anular`) puede indicar `cuenta_salida_id`: la caja
+fuerte, un banco, la caja chica o la caja de su propio turno. El efectivo sale de ahí (con
+`turno_origen_id` = el turno donde entró, si es una caja). Sigue prohibido elegir la caja
+del turno de otro cajero (`TURNO_AJENO`). Ejemplo (prueba 115): el cajero tiene la única
+caja con 7,500; el admin anula un cobro de 4,500 desde la caja fuerte (300,000 → 295,500)
+y el dueño aprueba anular una venta de 3,000 desde el banco; la caja del cajero sigue con
+7,500 y cierra sin diferencia.
 
 **Venta con cobros:** `solicitar_anulacion_venta` da `VENTA_CON_COBROS` mientras tenga
 cobros o condonaciones vigentes: primero se anulan.

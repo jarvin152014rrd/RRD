@@ -53,6 +53,13 @@ turnos obligatorios: `SIN_TURNO_ABIERTO`. Una anulación pedida por un cajero cu
 sigue abierto sale de ese turno al aprobarla. Un turno cerrado nunca se toca. Detalle y
 ejemplo en `cobros.md` (prueba 107).
 
+**Cuenta de salida elegida (0.9.2):** si la única caja tiene abierto el turno de otro cajero,
+quien anula puede elegir otra cuenta para el efectivo: `anular_cobro(..., fecha?, cuenta_salida_id)`
+y, al aprobar la anulación de una venta, `resolver_aprobacion(..., fecha?, cuenta_salida_id)`.
+Vale la caja fuerte (cuenta de efectivo sin punto de emisión), un banco, la caja chica o la caja
+de su propio turno; nunca la del turno de otro cajero (`TURNO_AJENO`). Devolver dinero de una
+devolución y el anticipo de un apartado ya piden la cuenta (`"cuenta_dinero_id"`). Prueba 115.
+
 ## Cerrar — `cerrar_turno(turno, contado_centavos, id_operacion, datos?)`
 
 (caja.turno; el turno de otro cajero pide caja.supervisar). `datos`: `conteo`, `nota`, `equipo`, `fecha`.
