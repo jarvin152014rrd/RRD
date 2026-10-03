@@ -105,6 +105,75 @@ CREATE FUNCTION pruebas.saldo(p_empresa uuid, p_codigo text) RETURNS bigint LANG
   SELECT saldo_centavos FROM public.v_saldo_cuenta WHERE empresa_id = p_empresa AND codigo = p_codigo
 $$;
 
+-- Guarda / lee un id de prueba (cualquier rol puede llamarlas).
+CREATE FUNCTION pruebas.guardar(p_clave text, p_valor uuid) RETURNS uuid
+LANGUAGE sql SECURITY DEFINER SET search_path = '' AS $$
+  INSERT INTO pruebas.dato (clave, valor) VALUES (p_clave, p_valor)
+  ON CONFLICT (clave) DO UPDATE SET valor = excluded.valor RETURNING valor
+$$;
+CREATE FUNCTION pruebas.id(p_clave text) RETURNS uuid LANGUAGE sql STABLE AS
+  $$ SELECT valor FROM pruebas.dato WHERE clave = p_clave $$;
+
+-- Etapa 2a: activa inventario y compras en la empresa A y crea (como
+-- dueño): bodegas B1 y B2 (sucursal 001), productos P1 (tornillo, UND,
+-- ISV15, enteros), P2 (arroz, LB, EXENTO, fracciones), P3 (pintura, ISV18)
+-- y proveedores PROV1 (plazo 30) y PROV2 (plazo 0). Deja la sesión como dueno_a.
+CREATE FUNCTION pruebas.preparar_inventario() RETURNS void LANGUAGE plpgsql AS $$
+DECLARE
+  e    uuid := pruebas.empresa('A');
+  s001 uuid;
+  lb   uuid;
+BEGIN
+  PERFORM pruebas.como('superusuario');
+  INSERT INTO public.modulo_activo (empresa_id, modulo) VALUES (e, 'inventario'), (e, 'compras')
+  ON CONFLICT (empresa_id, modulo) DO UPDATE SET activo = true;
+  SELECT id INTO s001 FROM public.sucursal WHERE empresa_id = e AND codigo = '001';
+  SELECT id INTO lb FROM public.unidad WHERE empresa_id IS NULL AND codigo = 'LB';
+
+  PERFORM pruebas.como('dueno_a');
+  PERFORM pruebas.guardar('B1', (public.crear_bodega(e, s001, 'B1', 'Bodega principal')->>'bodega_id')::uuid);
+  PERFORM pruebas.guardar('B2', (public.crear_bodega(e, s001, 'B2', 'Bodega trasera')->>'bodega_id')::uuid);
+  PERFORM pruebas.guardar('P1', (public.crear_producto(e, jsonb_build_object('codigo', 'TOR-001',
+    'codigo_barras', '7421000000011', 'nombre', 'Tornillo 1/2', 'precio_venta_centavos', 1500,
+    'stock_minimo', 50), gen_random_uuid())->>'producto_id')::uuid);
+  PERFORM pruebas.guardar('P2', (public.crear_producto(e, jsonb_build_object('codigo', 'ARR-001',
+    'nombre', 'Arroz', 'unidad_id', lb, 'tipo_impuesto', 'EXENTO', 'permite_fracciones', true,
+    'precio_venta_centavos', 2200), gen_random_uuid())->>'producto_id')::uuid);
+  PERFORM pruebas.guardar('P3', (public.crear_producto(e, jsonb_build_object('codigo', 'PIN-001',
+    'nombre', 'Pintura galón', 'tipo_impuesto', 'ISV18', 'precio_venta_centavos', 45000),
+    gen_random_uuid())->>'producto_id')::uuid);
+  PERFORM pruebas.guardar('PROV1', (public.crear_tercero(e, '{"nombre": "Distribuidora Lara", "es_proveedor": true,
+    "plazo_dias": 30, "rtn": "08011999000111"}', gen_random_uuid())->>'tercero_id')::uuid);
+  PERFORM pruebas.guardar('PROV2', (public.crear_tercero(e, '{"nombre": "Ferremax", "es_proveedor": true}',
+    gen_random_uuid())->>'tercero_id')::uuid);
+END $$;
+
+-- Arma una compra (jsonb) de una sola línea.
+CREATE FUNCTION pruebas.compra(p_prov text, p_bodega text, p_factura text, p_fecha date, p_condicion text,
+                               p_producto text, p_cantidad numeric, p_costo numeric,
+                               p_forma text DEFAULT NULL) RETURNS jsonb
+LANGUAGE sql STABLE AS $$
+  SELECT jsonb_strip_nulls(jsonb_build_object(
+    'proveedor_id', pruebas.id(p_prov), 'bodega_id', pruebas.id(p_bodega), 'numero_documento', p_factura,
+    'fecha', p_fecha, 'condicion', p_condicion, 'forma_pago', p_forma,
+    'lineas', jsonb_build_array(jsonb_build_object('producto_id', pruebas.id(p_producto),
+                                                   'cantidad', p_cantidad, 'costo_unitario', p_costo))))
+$$;
+
+-- Saldo de inventario (cantidad, valor) de un producto en una bodega.
+CREATE FUNCTION pruebas.existencia(p_bodega text, p_producto text) RETURNS numeric LANGUAGE sql STABLE SECURITY DEFINER AS
+  $$ SELECT coalesce((SELECT cantidad FROM public.inventario_saldo
+                       WHERE bodega_id = pruebas.id(p_bodega) AND producto_id = pruebas.id(p_producto)), 0) $$;
+CREATE FUNCTION pruebas.valor(p_bodega text, p_producto text) RETURNS bigint LANGUAGE sql STABLE SECURITY DEFINER AS
+  $$ SELECT coalesce((SELECT valor_centavos FROM public.inventario_saldo
+                       WHERE bodega_id = pruebas.id(p_bodega) AND producto_id = pruebas.id(p_producto)), 0) $$;
+CREATE FUNCTION pruebas.promedio(p_bodega text, p_producto text) RETURNS numeric LANGUAGE sql STABLE SECURITY DEFINER AS
+  $$ SELECT coalesce((SELECT costo_promedio FROM public.inventario_saldo
+                       WHERE bodega_id = pruebas.id(p_bodega) AND producto_id = pruebas.id(p_producto)), 0) $$;
+-- Saldo contable sin RLS (para comparar).
+CREATE FUNCTION pruebas.saldo_libros(p_empresa uuid, p_codigo text) RETURNS bigint LANGUAGE sql STABLE SECURITY DEFINER AS
+  $$ SELECT saldo_centavos FROM public.v_saldo_cuenta WHERE empresa_id = p_empresa AND codigo = p_codigo $$;
+
 GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA pruebas TO anon, authenticated, service_role;
 
 -- ---------------------------------------------------------------------

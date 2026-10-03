@@ -22,15 +22,15 @@ BEGIN
   PERFORM pruebas.como('admin_a');
   p := public.mi_perfil(e);
   PERFORM pruebas.afirmar(p->'rol'->>'codigo' = 'admin', 'rol admin');
-  PERFORM pruebas.afirmar(p->'permisos' = '["asientos.anular", "asientos.registrar", "bitacora.ver", "contabilidad.ver", "periodos.cerrar"]', 'permisos admin: ' || (p->'permisos')::text);
+  PERFORM pruebas.afirmar(p->'permisos' = '["asientos.anular", "asientos.registrar", "bitacora.ver", "bodegas.administrar", "compras.anular", "compras.pagar", "compras.registrar", "compras.ver", "contabilidad.ver", "inventario.ajustar", "inventario.carga_inicial", "inventario.costos", "inventario.trasladar", "inventario.ver", "periodos.cerrar", "productos.editar", "productos.precios", "sucursales.administrar", "terceros.credito", "terceros.desactivar", "terceros.editar", "usuarios.administrar"]', 'permisos admin: ' || (p->'permisos')::text);
 
-  -- Cajero y vendedor: sin permisos de contabilidad por defecto.
+  -- Cajero y vendedor: sin contabilidad ni costos; ven existencias y registran clientes (0.3.0).
   PERFORM pruebas.como('cajero_a');
   p := public.mi_perfil();
-  PERFORM pruebas.afirmar(p->'rol'->>'codigo' = 'cajero' AND p->'permisos' = '[]', 'cajero sin permisos');
+  PERFORM pruebas.afirmar(p->'rol'->>'codigo' = 'cajero' AND p->'permisos' = '["inventario.ver", "terceros.editar"]', 'cajero sin permisos');
   PERFORM pruebas.como('vendedor_a');
   p := public.mi_perfil();
-  PERFORM pruebas.afirmar(p->'rol'->>'codigo' = 'vendedor' AND p->'permisos' = '[]' AND p->'modulos' = '["contabilidad"]', 'vendedor');
+  PERFORM pruebas.afirmar(p->'rol'->>'codigo' = 'vendedor' AND p->'permisos' = '["inventario.ver", "terceros.editar"]' AND p->'modulos' = '["contabilidad"]', 'vendedor');
 
   -- Proveedor: sin permisos; con soporte, solo lectura.
   PERFORM pruebas.como('proveedor');
@@ -40,7 +40,7 @@ BEGIN
   PERFORM public.otorgar_acceso_soporte(e, now() + interval '1 day', 'Configurar reportes');
   PERFORM pruebas.como('proveedor');
   p := public.mi_perfil();
-  PERFORM pruebas.afirmar(p->'permisos' = '["bitacora.ver", "contabilidad.ver"]', 'proveedor con soporte');
+  PERFORM pruebas.afirmar(p->'permisos' = '["bitacora.ver", "compras.ver", "contabilidad.ver", "inventario.costos"]', 'proveedor con soporte');
   PERFORM pruebas.afirmar(p->>'soporte_vigente_hasta' ~ '^\d{4}-\d{2}-\d{2}T', 'muestra hasta cuándo');
 
   -- Estados de licencia.

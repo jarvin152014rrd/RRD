@@ -15,8 +15,8 @@ BEGIN
   SELECT id INTO s001 FROM public.sucursal WHERE empresa_id = e AND codigo = '001';
 
   -- ===== Usuarios =====
-  PERFORM pruebas.como('admin_a');   -- el admin no administra usuarios por defecto
-  PERFORM pruebas.debe_fallar(format('SELECT public.agregar_usuario_empresa(%L, %L, %L)', e, 'nuevo@prueba.hn', 'cajero'), 'SIN_PERMISO', 'admin agrega');
+  PERFORM pruebas.como('cajero_a');  -- el cajero no administra usuarios (el admin sí, desde 0.3.0: ver prueba 33)
+  PERFORM pruebas.debe_fallar(format('SELECT public.agregar_usuario_empresa(%L, %L, %L)', e, 'nuevo@prueba.hn', 'cajero'), 'SIN_PERMISO', 'cajero agrega');
 
   PERFORM pruebas.como('dueno_a');
   PERFORM pruebas.debe_fallar(format('SELECT public.agregar_usuario_empresa(%L, %L, %L)', e, 'nadie@prueba.hn', 'cajero'), 'USUARIO_NO_EXISTE', 'correo no registrado');
