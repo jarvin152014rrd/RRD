@@ -32,12 +32,12 @@ BEGIN
     "caja.turno", "caja.supervisar", "gastos.registrar", "gastos.aprobar", "gastos.anular", "aprobaciones.ver"]'
     AND NOT p->'permisos' ? 'dinero.saldo_inicial', 'admin: ' || (p->'permisos')::text);
   PERFORM pruebas.como('cajero_a');
-  PERFORM pruebas.afirmar(public.mi_perfil()->'permisos' = '["adjuntos.agregar", "caja.turno", "inventario.ver", "terceros.editar", "terceros.ver", "ventas.cobrar", "ventas.cotizar", "ventas.solicitar_anulacion", "ventas.vender"]',
+  PERFORM pruebas.afirmar(public.mi_perfil()->'permisos' = '["adjuntos.agregar", "apartados.registrar", "caja.turno", "inventario.ver", "terceros.editar", "terceros.ver", "ventas.cobrar", "ventas.cotizar", "ventas.devolver", "ventas.solicitar_anulacion", "ventas.vender"]',
     'cajero: su turno y comprobantes');
   PERFORM pruebas.como('vendedor_a');
-  PERFORM pruebas.afirmar(public.mi_perfil()->'permisos' = '["inventario.ver", "terceros.editar", "terceros.ver", "ventas.cotizar", "ventas.solicitar_anulacion", "ventas.vender"]', 'vendedor: nada de dinero');
+  PERFORM pruebas.afirmar(public.mi_perfil()->'permisos' = '["apartados.registrar", "inventario.ver", "terceros.editar", "terceros.ver", "ventas.cotizar", "ventas.solicitar_anulacion", "ventas.vender"]', 'vendedor: nada de dinero');
   PERFORM pruebas.como('contador');
-  PERFORM pruebas.afirmar(public.mi_perfil()->'permisos' = '["aprobaciones.ver", "bitacora.ver", "compras.ver", "contabilidad.ver", "dinero.ver", "inventario.costos", "inventario.ver", "terceros.ver", "ventas.ver"]',
+  PERFORM pruebas.afirmar(public.mi_perfil()->'permisos' = '["aprobaciones.ver", "bitacora.ver", "comisiones.ver", "compras.ver", "contabilidad.ver", "dinero.ver", "inventario.costos", "inventario.ver", "terceros.ver", "ventas.ver"]',
     'contador: solo lectura');
 
   -- 3) Vendedor: no ve bancos ni movimientos ni turnos ni gastos.

@@ -210,6 +210,26 @@ bloquea sin borrar. Reabrir: solo dueño, con motivo, en orden.
   - Confirmados sin cambios: topes de descuento (cajero y vendedor 5 %; admin
     10 % y aprueba hasta 20 %), el admin aprueba créditos y anulaciones hasta
     L 5,000.00, cotizaciones de 15 días (configurables).
+- Hecho en 0.9.0 (etapa 2b-2b): cobros a una factura o consolidados (la más
+  vieja primero o las elegidas) con efectivo/turno, tarjeta, transferencia por
+  confirmar, mixto y saldo a favor; nunca más del saldo sin decidir (el
+  excedente pasa a saldo a favor); condonación explícita con permiso y motivo;
+  anular cobro con motivo (el dinero sale de la misma cuenta); la venta con
+  cobros no se anula; saldos iniciales de clientes contra Saldos de apertura;
+  estado de cuenta, antigüedad y cobros por caja/cajero. Saldo a favor y vales
+  (pasivo 2.1.04.02; vale sin cliente con código y vencimiento configurable).
+  Apartados (módulo propio: reservan existencias, anticipos como pasivo
+  2.1.04.01, se completan como factura, cancelar según el dueño). Devoluciones
+  dentro de ventas (tipos que activa el dueño; nota de crédito con CAI o
+  interna; inventario al costo de la venta; primero rebaja la CxC, nunca
+  dinero y rebaja por lo mismo; cambio de producto enlazado; tope y
+  aprobación). Comisiones (módulo propio: interruptor, % por empleado, base
+  ganancia o precio sin ISV; se devengan al cobrar completa; se ajustan con
+  devoluciones aunque ya se hayan pagado; pago por período con asiento y
+  rastro; el vendedor ve solo las suyas). A CONFIRMAR con el dueño: los tres
+  tipos de devolución permitidos por defecto; tope de devolución (admin
+  L 5,000, cajero siempre con aprobación); apartado de 30 días con anticipo a
+  saldo a favor al cancelar; base de comisión "ganancia".
 
 ## Arranque fácil para cualquier tamaño de negocio
 
@@ -287,6 +307,9 @@ a dar seguimiento el primer día, sin trabas.
   asientos manuales aunque esté apagado. Pagar a proveedores o aprobar ventas
   y gastos pendientes con el módulo apagado: no (son operaciones nuevas).
   Prueba 89: 14 combinaciones con cuadre global. Ver nucleo/docs/modulos.md.
+- Hecho en 0.9.0: módulos `apartados` (necesita ventas e inventario) y
+  `comisiones` (necesita ventas); prueba 89 con 20 combinaciones (también
+  apagarlos y encenderlos a mitad de mes).
 
 ## Edición fácil para el proveedor
 

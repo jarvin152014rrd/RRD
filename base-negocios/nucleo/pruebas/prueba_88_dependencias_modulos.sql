@@ -8,7 +8,7 @@ DECLARE
 BEGIN
   -- 1) Dependencias mínimas guardadas como datos.
   PERFORM pruebas.afirmar((SELECT string_agg(modulo || '>' || requiere, ',' ORDER BY modulo, requiere) FROM public.modulo_dependencia)
-    = 'compras>inventario,dinero>contabilidad,fiscal_hn>ventas,inventario>contabilidad,ventas>contabilidad', 'dependencias');
+    = 'apartados>inventario,apartados>ventas,comisiones>ventas,compras>inventario,dinero>contabilidad,fiscal_hn>ventas,inventario>contabilidad,ventas>contabilidad', 'dependencias');
   PERFORM pruebas.como('superusuario');
   PERFORM pruebas.debe_fallar(format('INSERT INTO public.modulo_activo (empresa_id, modulo) VALUES (%L, %L)', e, 'fiscal_hn'),
     'necesita "ventas"', 'fiscal_hn sin ventas');

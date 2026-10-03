@@ -75,6 +75,11 @@ Qué hace cada migración:
 | 030_modulos_dependencias | dependencias entre módulos como datos, apagar sin romper (correcciones permitidas), cuentas controladas con el módulo apagado |
 | 031_ventas_decisiones_dueno | una promoción por línea (se elige), nunca descuento sobre descuento, vendedor que cobra, ventas de servicios sin inventario |
 | 032_limites_ficha_proveedor | límites del contrato, solicitudes al proveedor, `aplicar_ficha` / `vista_previa_ficha` |
+| 033_cobros_saldo_favor | cobros a clientes (consolidados, excedente a saldo a favor), anular cobro, condonación, saldos iniciales de clientes, saldo a favor y vales, estado de cuenta, `id_operacion` como datos |
+| 034_apartados | apartados con anticipo (reserva de existencias), formas de pago saldo a favor y anticipo en la venta |
+| 035_devoluciones | devoluciones y notas de crédito (CAI o internas), cambio de producto, tope y aprobación |
+| 036_comisiones | comisiones de vendedores: devengo al cobrar, ajustes, pago por período |
+| 037_cierre_2b2b | claves nuevas de `configurar_empresa`, `MODULO_CON_SALDO` de los módulos nuevos, asistente (clientes con saldos), `estado_cuenta_cliente` |
 
 Detalle de cada módulo: `nucleo/docs/` (dinero, caja, gastos y arranque en `dinero.md`, `caja.md`, `gastos.md`, `arranque.md`).
 
@@ -187,11 +192,20 @@ Si algo falla, termina con error (código distinto de 0).
 | `solicitar_al_proveedor(empresa, tipo, detalle, id_operacion)` | pedir ampliación, módulo u otra cosa | proveedor.solicitar (dueño, admin) |
 | `responder_solicitud_proveedor(solicitud, estado, respuesta)` | atender o rechazar una solicitud | solo service_role |
 | `promociones_aplicables(empresa, producto, fecha?, cantidad?)` | promociones que puede elegir quien vende | ventas.vender / ventas.cotizar |
+| `registrar_cobro(empresa, datos, id_operacion)` / `anular_cobro(cobro, motivo, id_operacion, fecha?)` / `confirmar_transferencia_cobro` | cobros a clientes y su anulación (`nucleo/docs/cobros.md`) | ventas.cobrar / cobros.anular / dinero.trasladar |
+| `condonar_saldo_cxc` / `anular_condonacion` | redondeo explícito con motivo | cobros.condonar / cobros.anular |
+| `registrar_saldo_inicial_cxc` / `anular_saldo_inicial_cxc` | facturas que los clientes ya debían | ventas.saldo_inicial (solo dueño) |
+| `consultar_vale(empresa, codigo)` / `estado_cuenta_cliente(empresa, cliente, desde?, hasta?)` | saldo de un vale / estado de cuenta | ventas.vender / ventas.ver |
+| `registrar_devolucion(venta, datos, id_operacion)` / `documento_nota_credito(devolucion)` | devoluciones y notas de crédito (`devoluciones.md`) | ventas.devolver |
+| `crear_apartado` / `abonar_apartado` / `completar_apartado` / `cancelar_apartado` | apartados con anticipo (`apartados.md`) | apartados.registrar / apartados.cancelar |
+| `configurar_comisiones` / `fijar_porcentaje_comision` / `pagar_comisiones` / `anular_pago_comisiones` | comisiones (`comisiones.md`) | comisiones.configurar (dueño) / comisiones.pagar |
 
 Vistas: `v_existencia` (inventario.ver; costos solo con inventario.costos),
 `v_kardex` (inventario.costos), `v_cxp_documento` y `v_cxp_proveedor` (compras.ver),
 `v_producto` (precio sin y con ISV), `v_cuenta_dinero`, `v_deposito_transito` (dinero.ver),
 `v_turno_caja`, `v_diferencia_cajero` (dinero.ver o el propio cajero), `v_gasto`, `v_aprobacion`.
+0.9.0: `v_cobro`, `v_cobros_por_caja`, `v_saldo_favor`, `v_apartado`, `v_devolucion`, `v_comision`,
+`v_comision_vendedor` y `v_mis_comisiones` (cada vendedor las suyas, sin costos).
 Detalle de cada módulo en `nucleo/docs/` (terceros, productos, inventario, compras, usuarios).
 
 Formato de `lineas` (montos en centavos):
@@ -218,7 +232,10 @@ busca ahí. Claves de hoy: `SIN_SESION`, `NO_PERTENECE`, `SIN_PERMISO`,
 `CUENTA_DINERO_INVALIDA`, `SALDO_INSUFICIENTE`, `TOPE_CAJA_CHICA`,
 `MOVIMIENTO_SIN_RASTRO`, `MONEDA_NO_SOPORTADA`, `TURNO_YA_ABIERTO`,
 `CAJA_OCUPADA`, `TURNO_CERRADO`, `FONDO_NO_CUADRA`, `SIN_TURNO_ABIERTO`,
-`YA_RESUELTO`, `TOPE_APROBACION`.
+`YA_RESUELTO`, `TOPE_APROBACION`, `COBRO_EXCEDE_SALDO`, `SALDO_FAVOR_INSUFICIENTE`,
+`VALE_INVALIDO`, `VALE_VENCIDO`, `SALDO_FAVOR_USADO`, `EXISTENCIA_RESERVADA`,
+`APROBACION_REQUERIDA`, `VENTA_CON_DEVOLUCIONES`, `DEVOLUCION_INVALIDA`,
+`DEVOLUCION_NO_PERMITIDA`, `NADA_QUE_PAGAR`.
 
 **Regla:** si una migración usa una clave nueva, la agrega a `error_catalogo`
 en ese mismo archivo. La prueba 17 falla si alguna falta.

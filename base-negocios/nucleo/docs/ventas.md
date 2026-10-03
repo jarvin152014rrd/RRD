@@ -33,6 +33,8 @@ TODO o NADA: documento + salida del kardex a costo promedio + asiento + rastro d
   | tarjeta | cuenta "POS por liquidar" (la indicada, la única, o se crea) | se liquida al banco con `trasladar_dinero` |
   | transferencia | cuenta "Transferencias por confirmar" | `confirmar_transferencia_venta` la pasa al banco elegido |
   | credito | Clientes 1.1.02.01 (CxC) | vence = fecha + plazo del cliente (fecha local) |
+| saldo_favor (0.9.0) | Dr Saldos a favor 2.1.04.02 | saldo a favor del cliente o `"vale":"VALE-..."` (sin cliente); se consume al emitir (`cobros.md`) |
+| anticipo (0.9.0) | Dr Anticipos de clientes 2.1.04.01 | solo al completar un apartado (`apartados.md`) |
 - **Quién cobra:** con efectivo, tarjeta o transferencia se pide además `ventas.cobrar` (cajero, admin, dueño). El vendedor vende al crédito o hace una **cotización** que el cajero cobra, salvo que la empresa tenga **vendedor que cobra** (ver abajo).
 - **Existencia:** la política de siempre (negativo solo con la configuración de la empresa o el permiso `inventario.negativo`). Los **servicios** no tocan el kardex.
 - **Respuesta:** venta_id, número, estado, documento, totales, vuelto, aprobación; el costo solo a quien tiene `inventario.costos`.
@@ -111,13 +113,14 @@ Ejemplo (prueba 80, 0.8.0): 10 tornillos con promoción 10 % → 13,500 con ISV 
 
 ## Anular — el vendedor solo SOLICITA
 
-`solicitar_anulacion_venta(venta, motivo, id_operacion)` (`ventas.solicitar_anulacion`): solo ventas emitidas, de un mes abierto y sin cobros (`VENTA_CON_COBROS`, gancho `interno.cobros_vigentes_venta` que llenará 2b-2b). Aprueba admin (hasta su tope) o dueño con `resolver_aprobacion` y **motivo**:
+`solicitar_anulacion_venta(venta, motivo, id_operacion)` (`ventas.solicitar_anulacion`): solo ventas emitidas, de un mes abierto, sin cobros ni condonaciones vigentes (`VENTA_CON_COBROS`: anúlelos primero con `anular_cobro` / `anular_condonacion`) y sin devoluciones (`VENTA_CON_DEVOLUCIONES`). Aprueba admin (hasta su tope) o dueño con `resolver_aprobacion` y **motivo**:
 - la factura conserva su número y queda **ANULADA** (el documento sale marcado);
 - contra-asiento enlazado (`anula_asiento_id`);
 - la mercadería vuelve a lo que costó;
 - el dinero vuelve a salir de la **MISMA cuenta** a la que entró (una transferencia ya confirmada, del banco donde quedó). Si esa cuenta ya no tiene el dinero: `SALDO_INSUFICIENTE` (primero se trae el dinero a esa cuenta);
-- la CxC se revierte.
-Mes cerrado: `PERIODO_CERRADO` (se corregirá con nota de crédito en 2b-2b).
+- la CxC se revierte; el saldo a favor usado vuelve a su lote y un anticipo de apartado queda a favor del cliente;
+- las comisiones del vendedor se revierten.
+Mes cerrado: `PERIODO_CERRADO`: se corrige con una devolución / nota de crédito (`devoluciones.md`).
 
 ## Transferencias — `confirmar_transferencia_venta(pago, {"banco_id","referencia","fecha"?}, id)`
 
@@ -134,7 +137,7 @@ vendedor de la cotización. Vigencia de 15 días (configurable, **confirmado por
 
 - `v_venta`, `v_venta_linea`, `v_venta_pago`: con `ventas.ver` todas; si no, las que uno registró o vendió. Costo y utilidad bruta (venta sin impuesto − costo − costo estimado de servicios) solo con `ventas.ver` + `inventario.costos`. La tabla `venta` la leen solo quienes ven costos.
 - `v_ventas_por_dia`, `v_ventas_por_vendedor`, `v_ventas_por_caja` (`ventas.ver`).
-- `v_cxc_documento` y `v_cxc_cliente` (saldo, antigüedad 0-30/31-60/61-90/+90 desde la factura, vencido, crédito disponible). Hoy `cobrado_centavos` = 0: los cobros llegan en 2b-2b.
+- `v_cxc_documento` y `v_cxc_cliente` (saldo, antigüedad 0-30/31-60/61-90/+90 desde la factura, vencido, crédito disponible). Desde 0.9.0 incluyen los saldos iniciales de clientes (`origen = 'saldo_inicial'`) y descuentan cobros, condonaciones y notas de crédito (columnas `cobrado_centavos`, `condonado_centavos`, `devuelto_centavos`). Estado de cuenta: `estado_cuenta_cliente` (`cobros.md`).
 - `documento_venta(venta)`: lo que se imprime (emisor y cliente con RTN, líneas, desglose de impuestos, total en letras, pagos, datos fiscales y leyendas del régimen). Sin costos.
 - `seguir_venta(venta)` (`ventas.ver`; el detalle de cuentas con `dinero.ver`): venta → forma de pago → cuenta de dinero y su rastro → turno, confirmación al banco o depósitos de esa caja desde la venta.
 
@@ -153,6 +156,12 @@ vendedor de la cotización. Vigencia de 15 días (configurable, **confirmado por
 Clientes (1.1.02.01) no acepta asientos manuales con el módulo activo; activar
 "ventas" con saldo en Clientes que el módulo no explica: `MODULO_CON_SALDO`.
 
-## Pendiente (2b-2b)
+## Etapa 2b-2b (0.9.0)
 
-Cobros y abonos de CxC (`interno.cobros_vigentes_venta`, `v_cxc_documento.cobrado_centavos`), saldos iniciales de clientes, apartados con anticipo, devoluciones / notas de crédito / vales, comisiones (la línea ya guarda costo y costo estimado; la venta, su vendedor).
+- Cobros, saldos iniciales de clientes, condonación y saldo a favor / vales: `cobros.md`.
+- Devoluciones, notas de crédito y cambio de producto: `devoluciones.md`.
+- Apartados con anticipo (módulo "apartados"): `apartados.md`.
+- Comisiones (módulo "comisiones"): `comisiones.md`.
+- `registrar_venta` acepta `"vale"` / `"saldo_favor_id"` en un pago `saldo_favor`.
+  `interno.registrar_venta_base` tiene un parámetro más (el apartado que se completa);
+  `interno.emitir_venta` y `interno.anular_venta_base` se reemplazaron con la misma firma.

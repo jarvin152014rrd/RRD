@@ -4,6 +4,89 @@ Formato: versión (fecha) y lista de cambios. La versión vive en `VERSION_NUCLE
 y queda guardada en cada base al migrar (vista `version_esquema`).
 Números: MAYOR.MENOR.ARREGLO (ver `docs/CONVENCIONES.md`).
 
+## 0.9.0 (2026-10-03) — Etapa 2b-2b: cobros, saldo a favor, apartados, devoluciones y comisiones
+
+Migraciones nuevas 033-037 (las 001-032 no se tocaron). 101 pruebas (nuevas 94-101).
+
+**Cobros y saldos iniciales de clientes (033)** — `registrar_cobro`: a una factura o consolidado (la más
+vieja primero o las elegidas con `"aplicar"`), efectivo (turno según la empresa), tarjeta, transferencia por
+confirmar (`confirmar_transferencia_cobro`), mixto y saldo a favor. Nunca más del saldo sin decisión
+(`COBRO_EXCEDE_SALDO`); con `"excedente":"saldo_favor"` lo que sobra queda a favor del cliente; `"tipo":"anticipo"`.
+`anular_cobro` (patrón "anular un abono": motivo, contra-asiento, el dinero sale de la misma cuenta, saldos
+restaurados). `condonar_saldo_cxc` / `anular_condonacion` (permiso `cobros.condonar`, motivo, cuenta 6.1.02.12).
+`registrar_saldo_inicial_cxc` / `anular_saldo_inicial_cxc` (solo el dueño; contra Saldos de apertura).
+Tabla `cxc_aplicacion`: todo lo que rebaja una factura. Ganchos de 2b-2a conectados:
+`interno.cobros_vigentes_venta`, `saldo_cxc_cliente`, `total_cxc` (con saldos iniciales); la venta con cobros
+no se anula (`VENTA_CON_COBROS`). Lecturas: `v_cxc_documento` (con saldos iniciales y columnas nuevas al final
+`condonado_centavos`, `devuelto_centavos`), `v_cobro`, `v_cobros_por_caja`, `v_saldo_favor`,
+`estado_cuenta_cliente` (037), `consultar_vale`.
+
+**Saldo a favor y vales (033)** — lotes `saldo_favor` (pasivo 2.1.04.02, controlado por ventas) y sus usos
+`saldo_favor_uso`. Sin cliente = vale `VALE-XXXXXXXXXX` con vencimiento opcional (`vale_dias_vigencia`).
+Forma de pago `saldo_favor` en ventas y cobros (se consume al emitir, con el lote bloqueado).
+
+**Apartados (034, módulo `apartados` -> ventas, inventario)** — `crear_apartado` (requiere cliente; precios
+fijos; reserva existencias: `EXISTENCIA_RESERVADA` para ventas y traslados; anticipo inicial como pasivo
+2.1.04.01 con rastro), `abonar_apartado`, `completar_apartado` (factura CAI con forma `anticipo`),
+`cancelar_apartado` (anticipo a saldo a favor, devuelto o a elegir: `apartado_cancelacion`); vencido
+(`apartado_dias_vigencia`, 30) ya no reserva. `v_apartado`.
+
+**Devoluciones y notas de crédito (035, dentro de ventas)** — `registrar_devolucion`: parcial o total por
+línea (cantidad <= vendida - ya devuelta), inventario al costo de la venta, revierte ingreso (4.1.01.04) e
+ISV, nota de crédito con CAI propio (`nota_credito`) o interna (NC-...); primero rebaja la CxC y lo ya pagado
+va a dinero, saldo a favor (vale sin cliente) o cambio de producto (venta nueva enlazada; se cobra o devuelve
+la diferencia). Tipos permitidos por el dueño (`devolucion_tipos`). Tope `devolucion` por puesto y aprobación
+(`resolver_aprobacion` con rama nueva). `documento_nota_credito`, `v_devolucion`. Una venta con devoluciones
+no se anula (`VENTA_CON_DEVOLUCIONES`).
+
+**Comisiones (036, módulo `comisiones` -> ventas)** — `configurar_comisiones` (interruptor y base ganancia |
+precio sin ISV; solo el dueño), `fijar_porcentaje_comision` (historial), devengo al quedar cobrada completa y
+ajustes solos con devoluciones, cobros anulados y anulaciones (aunque ya se hayan pagado), `pagar_comisiones` /
+`anular_pago_comisiones` (Dr 2.1.03.04 / Cr cuenta de dinero, con rastro). `v_comision`,
+`v_comision_vendedor`, `v_mis_comisiones` (el vendedor ve solo lo suyo, sin costos).
+
+**Cierre (037)** — `configurar_empresa`: `vale_dias_vigencia`, `apartado_dias_vigencia`, `apartado_cancelacion`,
+`devolucion_tipos`. `MODULO_CON_SALDO` para ventas (también Saldos a favor), apartados y comisiones. Con el
+módulo apagado se puede anular cobros, condonaciones, saldos iniciales de clientes, cancelar apartados, anular
+pagos de comisiones y confirmar transferencias de cobros. Asistente: el paso "clientes" dice cuántos saldos
+iniciales hay (y se marca solo también con ellos).
+
+**Cuentas nuevas** (siguiente código libre si ya eran del cliente): 2.1.04.02 Saldos a favor de clientes,
+6.1.02.12 Saldos condonados, 4.1.01.04 Devoluciones sobre ventas, 2.1.03.04 Comisiones por pagar, 6.1.01.04
+Comisiones sobre ventas. Usos nuevos: `saldo_favor`, `condonacion_cxc`, `apertura_cxc`, `anticipo_clientes`,
+`devolucion_ventas`, `comisiones_por_pagar`, `gasto_comisiones`.
+
+**Permisos:** `cobros.anular`, `cobros.condonar` (dueño, admin), `ventas.saldo_inicial` (dueño),
+`ventas.devolver` (dueño, admin, cajero), `apartados.registrar` (dueño, admin, cajero, vendedor),
+`apartados.cancelar` (dueño, admin), `comisiones.configurar` (dueño), `comisiones.ver` (dueño, admin,
+contador), `comisiones.pagar` (dueño, admin).
+
+**`id_operacion` como datos:** `interno.id_operacion_uso` (tabla, columna, tipo); las etapas nuevas solo
+agregan filas (`interno.tipo_operacion_2b` pregunta al final a `interno.tipo_operacion_2b2`).
+
+**Pruebas nuevas:** 94 cobros, 95 saldo a favor y vales, 96 apartados, 97 devoluciones, 98 comisiones,
+99 cuadre global ampliado, 100 concurrencia (dos cobros a la misma factura y el mismo vale a la vez),
+101 actualizar desde 0.8.0. La 89 tiene 20 combinaciones (con apartados y comisiones) y su cuadre incluye
+saldo a favor, anticipos, comisiones e ISV = ventas - notas de crédito.
+
+**Cambios que rompen (para quien ya usaba 0.8.0 en pruebas)**
+- Permisos nuevos para dueño, admin, cajero, vendedor, contador y el proveedor con soporte: se ajustaron las
+  pruebas 19, 31, 48, 57, 69 y 87. Dependencias nuevas (8): pruebas 88 y 93.
+- Empresas nuevas traen 6.1.02.12 "Saldos condonados a clientes": la prueba 32 usa ahora 6.1.02.20.
+- `interno.registrar_venta_base` tiene un sexto parámetro opcional (apartado); `interno.emitir_venta`,
+  `interno.anular_venta_base`, `resolver_aprobacion`, `configurar_tope_rol`, `configurar_empresa`,
+  `estado_arranque`, `revisar_activacion_modulo`, `tipo_operacion_2b`, `empresa_de_documento`,
+  `cobros_vigentes_venta`, `saldo_cxc_cliente`, `total_cxc` y `v_cxc_documento` se reemplazaron con la misma
+  firma (la vista con columnas nuevas al final). `venta_pago` acepta las formas `saldo_favor` y `anticipo`
+  (columnas nuevas `vale`, `saldo_favor_id`).
+
+**Pendiente (honesto):** qué hacer con un vale vencido (hoy sigue en el pasivo y no se usa); devolver en
+efectivo un saldo a favor sin una venta o apartado; penalidad al cancelar un apartado; anular una nota de
+crédito (hoy no se anula: se corrige con otra venta); una devolución con "ventas" apagado no se registra;
+un cambio de producto sobre el tope no queda pendiente; las leyendas de la nota de crédito y el trato fiscal
+del anticipo los debe validar un contador; no se consultó a los agentes constructor-maestro y revisor (esta
+sesión no los tiene).
+
 ## 0.8.0 (2026-10-03) — Módulos sin romper los números, ficha del proveedor, límites y decisiones de ventas
 
 Migraciones nuevas 030-032 (las 001-029 no se tocaron). 93 pruebas (nuevas 88-93).

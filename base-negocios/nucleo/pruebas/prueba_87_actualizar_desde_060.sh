@@ -48,7 +48,7 @@ PGDATABASE="$VIEJA" SIN_PREGUNTAR=1 SIN_RESPALDO=1 bash "$RAIZ/herramientas/migr
   || falla "mismo impuesto que antes"
 [ "$(q "SELECT count(*) FROM public.impuesto WHERE empresa_id IN (SELECT id FROM public.empresa)")" = "8" ] || falla "4 impuestos por empresa"
 [ "$(q "SELECT count(*) FROM public.rol_permiso WHERE empresa_id = $E AND rol = 'admin' AND permiso = 'gastos.anular'")" = "0" ] || falla "volvió un permiso quitado"
-[ "$(q "SELECT count(*) FROM public.rol_permiso WHERE empresa_id = $E AND permiso LIKE 'ventas.%'")" = "24" ] || falla "permisos de ventas: dueño 8, admin 8, cajero 4, vendedor 3, contador 1"
+[ "$(q "SELECT count(*) FROM public.rol_permiso WHERE empresa_id = $E AND permiso LIKE 'ventas.%'")" = "28" ] || falla "permisos de ventas: dueño 10, admin 9, cajero 5, vendedor 3, contador 1 (0.9.0: saldo_inicial y devolver)"
 [ "$(q "SELECT count(*) FROM public.permiso p WHERE NOT EXISTS (SELECT 1 FROM public.rol_permiso r WHERE r.empresa_id = $E AND r.rol = 'dueno' AND r.permiso = p.codigo)")" = "0" ] \
   || falla "el dueño no tiene todos los permisos"
 [ "$(q "SELECT aprobaciones_requeridas FROM public.aprobacion WHERE id = pruebas.id('G1')")" = "1" ] || falla "aprobación de antes: una sola"

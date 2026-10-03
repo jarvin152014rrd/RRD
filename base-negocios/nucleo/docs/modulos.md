@@ -15,6 +15,12 @@ PROCEDIMIENTOS P-09). El dueño no los cambia desde la app (puede pedirlos con
 | `ventas` | Ventas (bienes y servicios), descuentos, promociones, crédito, cotizaciones, CxC. | contabilidad | `ventas.md` |
 | `compras` | Compras al kardex, cuentas por pagar, pagos y saldos iniciales de proveedores. | inventario | `compras.md` |
 | `fiscal_hn` | Régimen fiscal de Honduras: CAI por caja, facturas numeradas, leyendas. | ventas | `cai.md` |
+| `apartados` (0.9.0) | Apartados con anticipo: reservan mercadería; anticipos como pasivo; se completan como venta. | ventas, inventario | `apartados.md` |
+| `comisiones` (0.9.0) | Comisiones de vendedores: devengo al cobrar, ajustes, pago por período. | ventas | `comisiones.md` |
+
+Cobros, saldos iniciales de clientes, saldo a favor / vales y devoluciones (notas de
+crédito) son parte de `ventas` (decisión 0.9.0: todo negocio que vende necesita cobrar
+y corregir; el dueño elige qué tipos de devolución permite en Ajustes).
 
 Las dependencias están **como datos** en `public.modulo_dependencia` (la app y
 el proveedor las leen de ahí). Son las mínimas: lo que sale de otra (compras
@@ -66,7 +72,10 @@ Nunca se borra nada. Con el módulo apagado:
 | compras | `anular_compra`, `anular_pago_proveedor`, `anular_saldo_inicial_cxp` |
 | inventario | `anular_documento_inventario` (ajuste, traslado, carga inicial) |
 | dinero | `anular_operacion_dinero`, `anular_gasto`, `cerrar_turno` (un turno que quedó abierto), `resolver_diferencia`, `confirmar_deposito`, `confirmar_transferencia_venta` |
-| ventas | `solicitar_anulacion_venta` y aprobarla (`resolver_aprobacion`), `cancelar_venta` (pendiente), `anular_cotizacion` |
+| ventas | `solicitar_anulacion_venta` y aprobarla (`resolver_aprobacion`), `cancelar_venta` (pendiente), `anular_cotizacion`, `anular_cobro`, `anular_condonacion`, `anular_saldo_inicial_cxc` |
+| dinero (0.9.0) | además `confirmar_transferencia_cobro` |
+| apartados | `cancelar_apartado` (libera la reserva y resuelve el anticipo) |
+| comisiones | `anular_pago_comisiones` |
 
   Decisión: **pagar** a un proveedor o **aprobar** una venta o un gasto
   pendiente son operaciones nuevas (mueven dinero o inventario): con su módulo
@@ -77,7 +86,9 @@ Nunca se borra nada. Con el módulo apagado:
   cancelarla sí se puede).
 - **Las cuentas del módulo siguen sin asientos manuales** aunque esté apagado
   (Inventario 1.1.03.01, Clientes 1.1.02.01, Proveedores 2.1.01.01,
-  Diferencias de caja 1.1.02.04): `CUENTA_CONTROLADA: ... (ahora apagado)`. Así
+  Diferencias de caja 1.1.02.04; desde 0.9.0 también Saldos a favor 2.1.04.02
+  (ventas), Anticipos de clientes 2.1.04.01 (apartados) y Comisiones por pagar
+  2.1.03.04 (comisiones)): `CUENTA_CONTROLADA: ... (ahora apagado)`. Así
   el kardex, la CxC y la CxP siguen iguales a sus cuentas y el módulo se puede
   volver a encender sin `MODULO_CON_SALDO`. `modulo_activo.estuvo_activo` lo
   recuerda (al actualizar a 0.8.0 toda fila que ya existía cuenta como usada).
@@ -85,21 +96,26 @@ Nunca se borra nada. Con el módulo apagado:
 ## Cómo se prueba
 
 `prueba_88_dependencias_modulos.sql` (reglas, servicios sin inventario,
-apagar y corregir) y `prueba_89_combinaciones_modulos.sql`: 14 combinaciones
+apagar y corregir) y `prueba_89_combinaciones_modulos.sql`: 20 combinaciones
 (solo contabilidad, solo servicios, servicios con dinero, ventas sin
 inventario con CAI, ventas + inventario sin compras, sin dinero, sin ventas,
 todo encendido, y apagar compras / inventario / dinero / fiscal_hn / ventas a
 mitad de mes, y encender otros a mitad de mes). En cada una se opera, se
 corrige lo apagado y se revisa el cuadre global: debe = haber (total y por
 asiento), dinero = subcuentas con rastro, kardex = inventario contable, CxC y
-CxP = sus cuentas, ISV por pagar = ventas no anuladas, bitácora intacta. Si
-una falla, `probar.sh` falla.
+CxP = sus cuentas, ISV por pagar = ventas no anuladas − notas de crédito,
+saldo a favor, anticipos y comisiones = sus pasivos, bitácora intacta. Desde
+0.9.0 son 20 combinaciones (también todo con apartados y comisiones, apagar
+apartados, comisiones o ventas con ellos a mitad de mes, servicios con
+comisiones y encenderlos a mitad de mes); en cada una se cobra, se condona, se
+devuelve, se aparta y se pagan comisiones. Si una falla, `probar.sh` falla.
 
 ## Para un módulo nuevo (por ejemplo comisiones u órdenes de trabajo)
 
 1. `INSERT INTO public.modulo` y sus filas en `public.modulo_dependencia`
-   (comisiones -> ventas).
+   (ejemplo real: comisiones -> ventas; apartados -> ventas e inventario).
 2. Sus RPC con `interno.exigir_escritura(empresa, permiso, 'su_modulo')`.
 3. Sus correcciones en `interno.modulo_apagado_permite`.
-4. Su cuenta controlada (si tiene) en `interno.cuenta_sistema`.
+4. Su cuenta controlada (si tiene) en `interno.cuenta_sistema` y su rama en
+   `interno.revisar_activacion_modulo` (`MODULO_CON_SALDO`).
 5. Sumarlo a `prueba_89` con su cuadre.

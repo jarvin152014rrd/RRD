@@ -105,16 +105,16 @@ BEGIN
 
   -- ===== Subcuentas =====
   PERFORM pruebas.como('cajero_a');
-  PERFORM pruebas.debe_fallar(format('SELECT public.crear_subcuenta(%L, %L, %L, %L)', e, '6.1.02', '6.1.02.12', 'Vigilancia'), 'SIN_PERMISO', 'cajero crea cuenta');
+  PERFORM pruebas.debe_fallar(format('SELECT public.crear_subcuenta(%L, %L, %L, %L)', e, '6.1.02', '6.1.02.20', 'Vigilancia'), 'SIN_PERMISO', 'cajero crea cuenta');
   PERFORM pruebas.como('dueno_b');
-  PERFORM pruebas.debe_fallar(format('SELECT public.crear_subcuenta(%L, %L, %L, %L)', e, '6.1.02', '6.1.02.12', 'Vigilancia'), 'NO_PERTENECE', 'otra empresa');
+  PERFORM pruebas.debe_fallar(format('SELECT public.crear_subcuenta(%L, %L, %L, %L)', e, '6.1.02', '6.1.02.20', 'Vigilancia'), 'NO_PERTENECE', 'otra empresa');
   PERFORM pruebas.como('dueno_a');
-  r := public.crear_subcuenta(e, '6.1.02', '6.1.02.12', ' Vigilancia ');
+  r := public.crear_subcuenta(e, '6.1.02', '6.1.02.20', ' Vigilancia ');
   SELECT * INTO cta FROM public.cuenta WHERE id = (r->>'cuenta_id')::uuid;
   PERFORM pruebas.afirmar(cta.es_detalle AND cta.tipo = 'gasto' AND cta.naturaleza = 'deudora' AND cta.nombre = 'Vigilancia'
     AND cta.padre_id = (SELECT id FROM public.cuenta WHERE empresa_id = e AND codigo = '6.1.02'), 'subcuenta de detalle bajo 6.1.02');
-  PERFORM public.registrar_asiento(e, '2026-01-10', 'Pago de vigilancia', pruebas.lineas('6.1.02.12', '1.1.01.01', 30000), gen_random_uuid());
-  PERFORM pruebas.afirmar(pruebas.saldo(e, '6.1.02.12') = 30000, 'la subcuenta recibe movimientos');
+  PERFORM public.registrar_asiento(e, '2026-01-10', 'Pago de vigilancia', pruebas.lineas('6.1.02.20', '1.1.01.01', 30000), gen_random_uuid());
+  PERFORM pruebas.afirmar(pruebas.saldo(e, '6.1.02.20') = 30000, 'la subcuenta recibe movimientos');
   -- Cuenta "contra" con naturaleza propia.
   r := public.crear_subcuenta(e, '1.2.01', '1.2.01.07', 'Depreciación acumulada de vehículos', 'acreedora');
   PERFORM pruebas.afirmar((SELECT naturaleza FROM public.cuenta WHERE id = (r->>'cuenta_id')::uuid) = 'acreedora', 'cuenta contra');
@@ -122,14 +122,14 @@ BEGIN
   PERFORM pruebas.debe_fallar(format('SELECT public.crear_subcuenta(%L, %L, %L, %L)', e, '6.1.02.01', '6.1.02.01.01', 'Bajo detalle'), 'CUENTA_INVALIDA', 'bajo cuenta de detalle');
   PERFORM pruebas.debe_fallar(format('SELECT public.crear_subcuenta(%L, %L, %L, %L)', e, '9.9', '9.9.01', 'Inventada'), 'CUENTA_INVALIDA', 'madre inexistente');
   PERFORM pruebas.debe_fallar(format('SELECT public.crear_subcuenta(%L, %L, %L, %L)', e, '6.1.02', '6.1.03.01', 'Otro código'), 'CUENTA_INVALIDA', 'código que no sigue a la madre');
-  PERFORM pruebas.debe_fallar(format('SELECT public.crear_subcuenta(%L, %L, %L, %L)', e, '6.1.02', '6.1.02.12.5', 'Dos niveles'), 'CUENTA_INVALIDA', 'dos niveles');
-  PERFORM pruebas.debe_fallar(format('SELECT public.crear_subcuenta(%L, %L, %L, %L)', e, '6.1.02', '6.1.02.12', 'Repetida'), 'YA_EXISTE', 'repetida');
-  PERFORM pruebas.debe_fallar(format('SELECT public.crear_subcuenta(%L, %L, %L, %L)', e, '6.1.02', '6.1.02.13', ''), 'DATO_INVALIDO', 'sin nombre');
-  PERFORM pruebas.debe_fallar(format('SELECT public.crear_subcuenta(%L, %L, %L, %L, %L)', e, '6.1.02', '6.1.02.13', 'Rara', 'neutra'), 'DATO_INVALIDO', 'naturaleza rara');
+  PERFORM pruebas.debe_fallar(format('SELECT public.crear_subcuenta(%L, %L, %L, %L)', e, '6.1.02', '6.1.02.20.5', 'Dos niveles'), 'CUENTA_INVALIDA', 'dos niveles');
+  PERFORM pruebas.debe_fallar(format('SELECT public.crear_subcuenta(%L, %L, %L, %L)', e, '6.1.02', '6.1.02.20', 'Repetida'), 'YA_EXISTE', 'repetida');
+  PERFORM pruebas.debe_fallar(format('SELECT public.crear_subcuenta(%L, %L, %L, %L)', e, '6.1.02', '6.1.02.21', ''), 'DATO_INVALIDO', 'sin nombre');
+  PERFORM pruebas.debe_fallar(format('SELECT public.crear_subcuenta(%L, %L, %L, %L, %L)', e, '6.1.02', '6.1.02.21', 'Rara', 'neutra'), 'DATO_INVALIDO', 'naturaleza rara');
 
   PERFORM pruebas.como('superusuario');
   PERFORM pruebas.afirmar(EXISTS (SELECT 1 FROM public.bitacora WHERE tabla = 'cuenta' AND accion = 'INSERT'
-    AND despues->>'codigo' = '6.1.02.12' AND usuario_id = pruebas.usuario('dueno_a')), 'subcuenta en bitácora');
+    AND despues->>'codigo' = '6.1.02.20' AND usuario_id = pruebas.usuario('dueno_a')), 'subcuenta en bitácora');
   PERFORM pruebas.afirmar(NOT EXISTS (
     SELECT 1 FROM public.cuenta c
     WHERE c.es_detalle = EXISTS (SELECT 1 FROM public.cuenta h WHERE h.padre_id = c.id)), 'árbol de cuentas sigue coherente');

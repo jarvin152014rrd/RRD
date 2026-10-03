@@ -140,6 +140,14 @@
             },
             "dinero": {
               "type": "boolean"
+            },
+            "apartados": {
+              "description": "Apartados con anticipo (necesita ventas e inventario).",
+              "type": "boolean"
+            },
+            "comisiones": {
+              "description": "Comisiones de vendedores (necesita ventas).",
+              "type": "boolean"
             }
           }
         },
@@ -328,7 +336,9 @@
               "inventario",
               "compras",
               "dinero",
-              "fiscal_hn"
+              "fiscal_hn",
+              "apartados",
+              "comisiones"
             ]
           }
         },

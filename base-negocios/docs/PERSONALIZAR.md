@@ -11,7 +11,7 @@ todos sin perder lo propio de nadie.
 | Nombre, RTN, rubro, moneda, país, zona horaria | ficha del cliente (`clientes/<cliente>/ficha.json`, `negocio`) al instalar | proveedor |
 | Fecha de inicio en el sistema | ficha (`fecha_inicio`) | proveedor, con el dueño |
 | Días al futuro permitidos para fechas (0-31, defecto 3) | ficha (`dias_futuro_max`) | proveedor |
-| Módulos activos (contabilidad, ventas, inventario, compras, dinero; fiscal_hn en `regimen_fiscal`) | ficha (`modulos` con true/false) y `aplicar_ficha.sh` (P-09) | proveedor |
+| Módulos activos (contabilidad, ventas, inventario, compras, dinero, apartados, comisiones; fiscal_hn en `regimen_fiscal`) | ficha (`modulos` con true/false) y `aplicar_ficha.sh` (P-09) | proveedor |
 | Licencia y límites del contrato (usuarios, cajas, sucursales, bodegas) | ficha (`licencia`, `limites`) y `aplicar_ficha.sh` | proveedor |
 | Vendedor que cobra (sí/no) | `configurar_empresa` (`vendedor_cobra`); el perfil pequeño lo sugiere | dueño |
 | Colores y logo | ficha (`tema`) | proveedor |
@@ -38,6 +38,13 @@ todos sin perder lo propio de nadie.
 | Asistente de arranque (saltar o volver a pendiente un paso) | app: `estado_arranque`, `marcar_paso_arranque` | dueño o admin |
 | Empezar una caja o banco en cero (sin saldo inicial) | app: `empezar_cuenta_en_cero` | solo el dueño |
 | Licencia (vencimiento, gracia, suspensión) | tabla `licencia` con la llave service_role | proveedor |
+| Saldos iniciales de clientes (facturas que ya debían) | app: `registrar_saldo_inicial_cxc` / `anular_saldo_inicial_cxc` | solo el dueño |
+| Condonar un saldo de cliente (redondeo), con motivo | app: `condonar_saldo_cxc` | dueño o admin |
+| Vencimiento de los vales sin cliente (días; null = no vencen) | app: `configurar_empresa` (`vale_dias_vigencia`) | solo el dueño |
+| Qué devoluciones se permiten (devolver dinero, cambio de producto, nota de crédito; defecto: las tres) | app: `configurar_empresa` (`devolucion_tipos`) | solo el dueño |
+| Tope de devolución por puesto (defecto: admin L 5,000; cajero siempre con aprobación) | app: `configurar_tope_rol(..., 'devolucion', ...)` | solo el dueño |
+| Días de vigencia de un apartado (defecto 30) y qué pasa con el anticipo al cancelar (saldo a favor por defecto, devolver o elegir) | app: `configurar_empresa` (`apartado_dias_vigencia`, `apartado_cancelacion`) | solo el dueño |
+| Comisiones: encender o apagar, base (ganancia o precio sin ISV) y porcentaje de cada empleado | app: `configurar_comisiones`, `fijar_porcentaje_comision` | solo el dueño |
 
 ## Perfiles por tamaño (cómo usarlos)
 
@@ -70,7 +77,8 @@ Un perfil es solo una configuración de inicio; el núcleo es el mismo para todo
   desactivar una cuenta, nunca cambiar su código, tipo o naturaleza).
 - La llave `service_role` jamás va en la app ni en `personal/`.
 - Las cuentas que usan los módulos (1.1.03.01, 2.1.01.01, 3.3.01.03 Saldos de
-  apertura, 1.1.02.04 Diferencias de caja...). Están en `interno.cuenta_sistema`
+  apertura, 1.1.02.04 Diferencias de caja, 2.1.04.01 Anticipos, 2.1.04.02 Saldos
+  a favor, 2.1.03.04 Comisiones por pagar...). Están en `interno.cuenta_sistema`
   (y `interno.cuenta_sistema_empresa` si el código ya era del cliente); no se
   renombran a mano. Las subcuentas de las cuentas de dinero tampoco reciben
   asientos manuales.

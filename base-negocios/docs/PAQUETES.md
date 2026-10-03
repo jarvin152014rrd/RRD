@@ -9,18 +9,20 @@ para controlar su dinero.
 
 ## Módulos de cada paquete (nombres reales para la ficha)
 
-Lo que existe hoy (0.8.0). Lo demás de la lista de abajo llega en etapas
+Lo que existe hoy (0.9.0). Lo demás de la lista de abajo llega en etapas
 siguientes y se agregará aquí con su nombre de módulo. Dependencias en
-`nucleo/docs/modulos.md` (compras necesita inventario; fiscal_hn necesita ventas).
+`nucleo/docs/modulos.md` (compras necesita inventario; fiscal_hn y comisiones necesitan ventas; apartados necesita ventas e inventario).
 
 | Módulo (ficha) | Esencial | Completo | Nota |
 |---|---|---|---|
 | `contabilidad` | sí | sí | siempre |
-| `ventas` | sí | sí | incluye cotizaciones; sin inventario solo vende servicios |
+| `ventas` | sí | sí | incluye cotizaciones, cobros y saldos iniciales de clientes, saldo a favor / vales, devoluciones y notas de crédito; sin inventario solo vende servicios |
 | `inventario` | sí | sí | negocio de solo servicios: puede ir en `false` |
 | `dinero` | sí | sí | cajas, bancos, caja chica, gastos, pagos fijos, turnos |
 | `compras` | no | sí | necesita inventario |
-| `fiscal_hn` (`"regimen_fiscal"`) | extra | extra | facturas con CAI; necesita ventas |
+| `fiscal_hn` (`"regimen_fiscal"`) | extra | extra | facturas y notas de crédito con CAI; necesita ventas |
+| `apartados` | no (extra) | sí | apartados con anticipo; necesita ventas e inventario |
+| `comisiones` | no (extra) | sí | comisiones de vendedores; necesita ventas |
 
 | Perfil y límites sugeridos (a confirmar con el dueño) | Esencial | Completo |
 |---|---|---|

@@ -81,10 +81,12 @@ cabe en estas reglas, se discute antes de programarlo.
   revisa el tipo OTRA VEZ, ya con lo que otros confirmaron) -> "¿ya existe?" ->
   guardar. Sin la segunda revisión, dos operaciones distintas con el mismo id
   al mismo tiempo podían pasar las dos.
-- Al agregar una tabla con `id_operacion`, sumarla en
-  `interno.tipo_operacion_2b` (migración nueva, `CREATE OR REPLACE`).
+- Al agregar una tabla con `id_operacion` (desde 0.9.0): una fila en
+  `interno.id_operacion_uso (tabla, columna, tipo, orden)` en la migración
+  nueva; `interno.tipo_operacion_2b2` la revisa sola (antes había que
+  reemplazar `interno.tipo_operacion_2b`).
 
-## Anular (patrón; los cobros de la etapa 2b lo copian)
+## Anular (patrón; los cobros de 0.9.0 lo copian: `anular_cobro`)
 - El documento original NO se edita: la anulación es una fila aparte
   (`pago_proveedor_anulacion`, `inventario_documento_anulacion`) o columnas
   de anulación que se llenan una sola vez (compra, saldo inicial).
