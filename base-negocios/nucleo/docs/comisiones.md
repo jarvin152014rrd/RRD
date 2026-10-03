@@ -12,11 +12,26 @@ Necesita **ventas**. Además del módulo (lo activa el proveedor), el dueño tie
   **Nunca sobre el ISV.** Queda en la bitácora.
 - `fijar_porcentaje_comision(empresa, usuario, porcentaje, desde, motivo)`: porcentaje
   por empleado con fecha desde (historial; vale el de la fecha de la venta).
+  **0.9.1: no es retroactivo:** `desde` es hoy (por defecto) o una fecha futura; una fecha
+  pasada da `FECHA_INVALIDA` (lo ya vendido conserva su porcentaje).
+
+> **Aviso para el dueño (base "ganancia"):** con esta base la comisión depende del
+> **costo** de lo vendido (ganancia = precio sin ISV − costo). El vendedor no ve costos
+> en el sistema (`v_mis_comisiones` solo muestra monto y %), pero sabiendo su porcentaje
+> y el precio de venta **puede deducir el costo** (precio − comisión ÷ %). Si el costo es
+> información sensible para el negocio, use la base "precio" o no comparta el
+> porcentaje con el detalle de cada venta.
 
 ## Cuándo se ganan
 
 - Se **devengan cuando la venta queda cobrada completa**: al contado, al emitir; al
   crédito, cuando su saldo llega a 0 (cobros, saldo a favor, condonación).
+- **Solo sobre lo realmente cobrado (0.9.1, decisión del dueño):** si se condonó parte
+  de la factura, a la base se le resta la parte sin ISV de lo condonado:
+  round(condonado × base sin ISV / total con ISV). Ejemplo (prueba 106): venta de 90,000
+  (76,271 + ISV 18 %), cobran 89,000 y condonan 1,000 → se restan round(1,000 × 76,271 /
+  90,000) = 847; base 75,424; al 10 % = 7,542 (antes 7,627). Si se anula la condonación,
+  la comisión vuelve a 0 hasta que se cobre todo (entonces 7,627).
 - Se **ajustan solas** (`comision_movimiento`, tipo `ajuste`) con devoluciones, cobros
   anulados y anulación de la venta, **aunque ya se hayan pagado**: queda saldo a
   descontar del próximo pago.

@@ -181,8 +181,21 @@ BEGIN
   PERFORM pruebas.debe_fallar(format('DELETE FROM public.cxc_aplicacion WHERE origen_id = %L', c1->>'cobro_id'), 'PROHIBIDO', 'no se borra');
 
   -- 14) Anular el primer cobro: F-OLD-1 y V1 recuperan saldo; con otros cobros vigentes las ventas siguen sin anularse.
+  --     0.9.1 (decisión del dueño): el efectivo de c1 (30,000) está en la caja donde el cajero tiene su
+  --     turno abierto: el admin, sin turno propio, no lo saca (TURNO_AJENO). El cajero cierra (esperado
+  --     34,999 + 1,000 = 35,999, cuenta lo mismo); el admin abre su turno con esos 35,999 y anula: los
+  --     30,000 salen de SU turno (queda 5,999).
   PERFORM pruebas.como('admin_a');
+  PERFORM pruebas.debe_fallar(format('SELECT public.anular_cobro(%L, %L, gen_random_uuid())', c1->>'cobro_id', 'Cobro mal aplicado'),
+    'TURNO_AJENO', 'nadie saca dinero del turno de otro cajero');
+  PERFORM pruebas.como('cajero_a');
+  PERFORM public.cerrar_turno((SELECT id FROM public.turno_caja WHERE empresa_id = e AND estado = 'abierto'), 35999, gen_random_uuid());
+  PERFORM pruebas.como('admin_a');
+  PERFORM public.abrir_turno(e, pruebas.id('CAJA001'), 35999, gen_random_uuid());
   PERFORM public.anular_cobro((c1->>'cobro_id')::uuid, 'Cobro mal aplicado', gen_random_uuid());
+  PERFORM pruebas.como('superusuario');
+  PERFORM pruebas.afirmar(pruebas.dinero('CAJA1') = 5999 AND (SELECT t.cajero_id FROM public.dinero_movimiento m JOIN public.turno_caja t ON t.id = m.turno_id
+    WHERE m.documento_id = (c1->>'cobro_id')::uuid AND m.operacion = 'anulacion_cobro') = pruebas.usuario('admin_a'), 'sale del turno del admin');
   PERFORM pruebas.como('dueno_a');
   PERFORM pruebas.debe_fallar(format('SELECT public.solicitar_anulacion_venta(%L, %L, gen_random_uuid())', v1, 'Error de captura'),
     'VENTA_CON_COBROS', 'V1 aún tiene el cobro de 4,999');

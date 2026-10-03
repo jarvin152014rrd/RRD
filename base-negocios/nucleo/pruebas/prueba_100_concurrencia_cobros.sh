@@ -57,12 +57,14 @@ E="(SELECT valor FROM pruebas.dato WHERE clave = 'A')"
 for quien in cajero_a admin_a; do
   : > "$TMP/v_$quien.sql"
   for i in $(seq 1 "$N"); do
+    # 0.9.1: la app paga con el CÓDIGO del vale ("saldo_favor_id" ya no se acepta desde la app).
+    codigo="$(q "SELECT codigo FROM public.saldo_favor WHERE id = pruebas.id('VALE$i')")"
     cat >> "$TMP/v_$quien.sql" <<SQL
 BEGIN;
 SELECT pruebas.como('$quien');
 SELECT 'OK ' || (public.registrar_venta(pruebas.empresa('A'), jsonb_build_object('lineas',
   jsonb_build_array(jsonb_build_object('producto_id', pruebas.id('P1'), 'cantidad', 2)),
-  'pagos', jsonb_build_array(jsonb_build_object('forma', 'saldo_favor', 'saldo_favor_id', pruebas.id('VALE$i')))), gen_random_uuid())->>'venta_id');
+  'pagos', jsonb_build_array(jsonb_build_object('forma', 'saldo_favor', 'vale', '$codigo'))), gen_random_uuid())->>'venta_id');
 COMMIT;
 SQL
   done

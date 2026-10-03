@@ -14,6 +14,7 @@ anticipo, la mercadería queda reservada y se lleva cuando termina de pagar.
 - **Requiere cliente** (`CLIENTE_REQUERIDO`) y al menos un bien.
 - Precios, promociones y descuentos del día **quedan fijos** (se guardan en el apartado).
   Un descuento sobre el tope del puesto: `APROBACION_REQUERIDA` (que lo haga quien pueda).
+  0.9.1: el tope vale también **por línea** (como en ventas).
 - **Reserva** las existencias: lo apartado no está disponible para otras ventas ni
   traslados (`EXISTENCIA_RESERVADA`); un ajuste por conteo físico sí lo toca (refleja la
   realidad). No sale del kardex ni reconoce ingreso ni ISV.
@@ -44,7 +45,8 @@ apartado ya se entregó).
 
 Libera la reserva. El anticipo, según el dueño (`empresa.apartado_cancelacion`):
 - `saldo_favor` (defecto): queda como saldo a favor del cliente (Dr Anticipos / Cr Saldos a favor);
-- `devolver`: se devuelve de la cuenta elegida (`"cuenta_dinero_id"`; Dr Anticipos / Cr dinero, con rastro);
+- `devolver`: se devuelve de la cuenta elegida (`"cuenta_dinero_id"`; Dr Anticipos / Cr dinero, con rastro;
+  0.9.1: de una caja, solo la del turno propio — `TURNO_AJENO` / `SIN_TURNO_ABIERTO`, ver `caja.md`);
 - `elegir`: quien cancela elige con `"destino"`.
 Se puede cancelar con el módulo apagado (corrige lo ya registrado).
 

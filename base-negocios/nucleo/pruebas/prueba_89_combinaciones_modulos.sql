@@ -75,7 +75,8 @@ BEGIN
   END IF;
   IF pruebas.c_id(p_emp, 'COM') IS NULL AND pruebas.c_activo(e, 'comisiones') THEN
     PERFORM public.configurar_comisiones(e, '{"activas": true}', 'Prueba de combinaciones');
-    PERFORM public.fijar_porcentaje_comision(e, pruebas.usuario(p_emp), 10, '2026-01-01', 'Prueba de combinaciones');
+    -- 0.9.1: el porcentaje ya no es retroactivo; las ventas de esta prueba son de enero: porcentaje fijado antes.
+    PERFORM pruebas.porcentaje_comision_anterior(e, pruebas.usuario(p_emp), 10, '2026-01-01');
     PERFORM pruebas.c_guardar(p_emp, 'COM', e);
   END IF;
 END $$;

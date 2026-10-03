@@ -64,7 +64,7 @@ cabe en estas reglas, se discute antes de programarlo.
   `es_movimiento`). Lo vigila un trigger; solo el dueño crea contadores.
 - Una RPC que devuelve montos de costo (kardex, ajustes, traslados) los pasa
   por `interno.ocultar_costos(...)`: sin `inventario.costos` llegan en null y
-  con `"costos_ocultos": true`.
+  con `"costos_ocultos": true` (desde 0.9.1 en cualquier nivel de la respuesta, también anidados).
 
 ## Errores
 - Todo `RAISE EXCEPTION` empieza con una CLAVE en mayúsculas y dos puntos:
@@ -121,6 +121,11 @@ cabe en estas reglas, se discute antes de programarlo.
   caja chica o banco). El equipo sale de `interno.equipo(datos)`.
 - Un cobro en efectivo (2b-2) toma su cuenta con `interno.cuenta_efectivo_cobro(empresa, caja?)`
   (turno abierto del usuario; sin turno solo si la empresa no los exige).
+- Efectivo que SALE por una anulación o devolución (0.9.1, decisión del dueño):
+  la cuenta sale de `interno.cuenta_salida_efectivo(empresa, cuenta, autorizados, sustituir)`
+  (turno abierto de quien hace la operación; nunca el turno de otro cajero:
+  `TURNO_AJENO`) y, antes de `rastrear_dinero`, `set_config('app.turno_origen', <turno original>, true)`
+  (se limpia después) para que el movimiento lleve `turno_origen_id`.
 - Comprobantes: `"comprobante": {"ruta","tipo","sha256"}` en los datos o
   `agregar_adjunto`; la ruta empieza con el id de la empresa.
 

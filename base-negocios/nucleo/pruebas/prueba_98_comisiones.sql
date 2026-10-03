@@ -20,8 +20,8 @@ BEGIN
   PERFORM pruebas.como('dueno_a');
   r := public.configurar_comisiones(e, '{"activas": true, "base": "ganancia"}', 'Comisiones para el equipo');
   PERFORM pruebas.afirmar((r->>'comisiones_activas')::boolean AND r->>'comision_base' = 'ganancia', 'encendidas');
-  PERFORM public.fijar_porcentaje_comision(e, ven, 10, '2026-01-01', 'Acuerdo con el vendedor');
-  PERFORM public.fijar_porcentaje_comision(e, caj, 5, '2026-01-01', 'Acuerdo con el cajero');
+  PERFORM public.fijar_porcentaje_comision(e, ven, 10, NULL, 'Acuerdo con el vendedor');
+  PERFORM public.fijar_porcentaje_comision(e, caj, 5, NULL, 'Acuerdo con el cajero');
   PERFORM pruebas.debe_fallar(format('SELECT public.fijar_porcentaje_comision(%L, %L, 101, NULL, %L)', e, ven, 'Mucho'), 'DATO_INVALIDO', 'porcentaje');
 
   -- 2) Al crédito: no se devenga hasta cobrarla completa. V1 10 tornillos: base 13,043 - costo 10,000 = 3,043 x 10 % = 304.

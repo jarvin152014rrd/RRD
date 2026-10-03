@@ -38,7 +38,10 @@ Una fila por cada línea de asiento que toca una cuenta de dinero: monto (+
 entra, − sale), operación, documento, contrapartida (origen o destino),
 turno de caja (si había uno abierto en esa caja), referencia, equipo
 (`"equipo"` en los datos o la cabecera `x-equipo` de la app), usuario y hora
-del servidor. Si un asiento toca una cuenta de dinero sin dejar su fila, **no
+del servidor. **0.9.1:** `turno_origen_id`: en el efectivo que sale por una anulación o
+una devolución, el turno donde ese dinero había entrado (el movimiento queda en el turno
+de quien hace la operación; ver `cobros.md`). Los movimientos de antes quedan en NULL.
+Si un asiento toca una cuenta de dinero sin dejar su fila, **no
 se guarda nada** (`MOVIMIENTO_SIN_RASTRO`). Por defecto ninguna cuenta queda
 en negativo (`SALDO_INSUFICIENTE`; ver "Saldo negativo") y la caja chica no
 pasa su fondo (`TOPE_CAJA_CHICA`).

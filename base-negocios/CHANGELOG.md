@@ -4,6 +4,59 @@ Formato: versión (fecha) y lista de cambios. La versión vive en `VERSION_NUCLE
 y queda guardada en cada base al migrar (vista `version_esquema`).
 Números: MAYOR.MENOR.ARREGLO (ver `docs/CONVENCIONES.md`).
 
+## 0.9.1 (2026-10-03) — Correcciones de la revisión de la etapa 2
+
+Migración nueva 038 (las 001-037 no se tocaron). 113 pruebas (nuevas 102-113; cada una falla contra 0.9.0
+y pasa con 0.9.1, con las cifras hechas a mano en sus comentarios).
+
+**Grave**
+- **Saldo a favor ajeno (102):** la venta ya no acepta `"saldo_favor_id"` desde la app (`DATO_INVALIDO`); solo el
+  cambio de producto usa por dentro su propio lote. `interno.usar_saldo_favor_lote` exige que el lote sea de la
+  misma empresa y del mismo cliente de la venta (`VALE_INVALIDO`).
+
+**Importantes**
+- **Costos anidados (103):** `interno.ocultar_costos` limpia los costos en todos los niveles (nuevo
+  `interno.quitar_claves`); el cajero ya no ve `costo_centavos` de la venta nueva de un cambio de producto.
+- **Devoluciones en partes (104):** base, ISV y costo por cantidad ACUMULADA (lo de todo lo devuelto menos lo ya
+  devuelto). 10 kg a L 11.50 + ISV devueltos de 0.5 en 0.5: cada nota 86 u 87 de ISV, al final exacto.
+- **Tope de descuento por línea (105):** `interno.descuento_linea_sobre_tope` (1 centavo de tolerancia) al vender,
+  al apartar y al aprobar (`TOPE_APROBACION`; el dueño sin tope).
+- **Comisión sobre lo cobrado (106, decisión del dueño):** `interno.base_comision` resta la parte sin ISV de lo
+  condonado.
+- **Efectivo de anulaciones y devoluciones (107, decisión del dueño):** sale del turno abierto de quien hace la
+  operación, a su nombre, con referencia al turno original (columna nueva `dinero_movimiento.turno_origen_id`;
+  `interno.cuenta_salida_efectivo`). Nadie saca dinero del turno de otro cajero (`TURNO_AJENO`, error nuevo); sin
+  turno propio con turnos obligatorios: `SIN_TURNO_ABIERTO`. Aplica a `anular_cobro`, anular venta,
+  `registrar_devolucion` / aprobarla y `cancelar_apartado` (devolver).
+
+**Menores**
+- **Vales vencidos (108):** `dar_baja_vales_vencidos(empresa, {"vales"?, "fecha"?}, motivo, id_operacion)`, permiso
+  nuevo `cobros.baja_vales` (solo el dueño), tabla `saldo_favor_baja`, cuenta nueva 4.2.01.04 Vales vencidos no
+  reclamados (uso `vales_vencidos`), error nuevo `SIN_VALES_VENCIDOS`.
+- **Devolución pendiente atascada (109):** `definir_destino_devolucion(devolucion, {"destino","cuenta_dinero_id"},
+  motivo)` y se vuelve a aprobar; el error al aprobar lo explica.
+- **Descuento de factura en monto (110):** exacto al centavo (ajusta la última línea que puede).
+- **`vendedor_id` (111):** solo usuarios activos de la empresa con puesto que vende (`ventas.vender`).
+- **Porcentaje de comisión (112):** no retroactivo (`desde` >= hoy, `FECHA_INVALIDA`).
+- `comisiones.md` avisa al dueño: con base "ganancia" el vendedor puede deducir el costo.
+- Prueba 113: actualizar desde 0.9.0 con datos (turno cerrado, devolución atascada, vale vencido).
+
+**Cambios que rompen (para quien ya usaba 0.9.0 en pruebas)**
+- `fijar_porcentaje_comision` con `desde` pasado da `FECHA_INVALIDA`: las pruebas 98 y 99 usan hoy; la 89 (ventas
+  de enero) usa el ayudante de pruebas nuevo `pruebas.porcentaje_comision_anterior`.
+- Anular un cobro cuyo efectivo está en el turno abierto de otro cajero da `TURNO_AJENO`: la prueba 94 ahora cierra
+  ese turno y el admin abre el suyo antes de anular.
+- La venta ya no acepta `"saldo_favor_id"` desde la app: la prueba 100 paga con el código del vale (`"vale"`).
+- Se reemplazaron con la misma firma: `interno.rastrear_dinero`, `interno.calcular_venta`,
+  `interno.registrar_venta_base`, `interno.usar_saldo_favor_lote`, `interno.venta_de_cambio`, `public.anular_cobro`,
+  `interno.anular_venta_base`, `interno.proteger_devolucion`, `interno.aplicar_devolucion`,
+  `public.registrar_devolucion`, `public.crear_apartado`, `public.cancelar_apartado`, `public.resolver_aprobacion`,
+  `interno.ocultar_costos`, `interno.base_comision`, `public.fijar_porcentaje_comision`.
+
+**Pendiente (honesto):** una baja de vales vencidos no se anula (si fue un error, se corrige con un asiento
+del contador); no se consultó a los agentes constructor-maestro y revisor (esta sesión no los tiene): el revisor
+debe confirmar estas correcciones antes de la etapa 3.
+
 ## 0.9.0 (2026-10-03) — Etapa 2b-2b: cobros, saldo a favor, apartados, devoluciones y comisiones
 
 Migraciones nuevas 033-037 (las 001-032 no se tocaron). 101 pruebas (nuevas 94-101).

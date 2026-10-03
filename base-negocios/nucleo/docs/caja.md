@@ -43,6 +43,16 @@ efectivo de la caja indicada (o de la única caja activa; se crea si falta).
 `interno.exigir_turno_abierto(empresa)` sigue igual cuando son obligatorios; si
 no lo son, devuelve un turno vacío (id NULL) en vez de error.
 
+## Efectivo de anulaciones y devoluciones (0.9.1, decisión del dueño)
+
+Anular un cobro o una venta, devolver dinero de una devolución o el anticipo de un
+apartado: el efectivo sale del **turno abierto de quien hace la operación, a su nombre**,
+con referencia al turno donde había entrado (`dinero_movimiento.turno_origen_id`).
+**Nadie saca dinero del turno de otro cajero** (`TURNO_AJENO`). Sin turno propio y con
+turnos obligatorios: `SIN_TURNO_ABIERTO`. Una anulación pedida por un cajero cuyo turno
+sigue abierto sale de ese turno al aprobarla. Un turno cerrado nunca se toca. Detalle y
+ejemplo en `cobros.md` (prueba 107).
+
 ## Cerrar — `cerrar_turno(turno, contado_centavos, id_operacion, datos?)`
 
 (caja.turno; el turno de otro cajero pide caja.supervisar). `datos`: `conteo`, `nota`, `equipo`, `fecha`.

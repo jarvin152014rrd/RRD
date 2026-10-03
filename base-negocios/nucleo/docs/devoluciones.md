@@ -16,9 +16,14 @@ tipos permite.
 
 - **Parcial o total por línea** (número de línea de la venta). Cantidad ≤ vendida − ya
   devuelta (las pendientes de aprobación cuentan): si no, `DEVOLUCION_INVALIDA`.
-- **Montos:** total = round(total de la línea × cantidad / vendida); base sin ISV en
-  proporción; ISV = la diferencia. La última devolución de una línea toma lo que falte
-  (nunca se pierden centavos).
+- **Montos (0.9.1: por cantidad ACUMULADA):** se calcula lo que corresponde a TODO lo
+  devuelto de la línea (lo de antes + esta) y se le resta lo ya devuelto:
+  total = round(total de la línea × acumulado / vendida) − total ya devuelto;
+  base = round(base × acumulado / vendida) − base ya devuelta; ISV = total − base; el
+  costo igual. Así devolver en partes da lo mismo que devolver de una vez y la última
+  toma lo que falte (nunca se pierden ni se ganan centavos de ISV). Ejemplo (prueba 104):
+  10 kg a L 11.50 + ISV (13,225 = 11,500 + 1,725) devueltos de 0.5 en 0.5: cada nota lleva
+  575 de base y 86 u 87 de ISV; a 1 kg el ISV devuelto es 173 (antes 172) y al final 1,725.
 - **Inventario al costo de la venta original** (entrada `devolucion_venta` en el kardex,
   al costo proporcional de la línea). Los **servicios** no tocan inventario y no se
   devuelven como cambio de producto (solo nota de crédito o dinero).
@@ -31,6 +36,11 @@ tipos permite.
   2. Lo que quede (lo que el cliente ya pagó) va al `destino`: `dinero` (sale de la cuenta
      elegida: caja, caja chica o banco), `saldo_favor` (nota de crédito al cliente; sin
      cliente = VALE con código) o `cambio`. Si queda algo y no hay destino: `DATO_INVALIDO`.
+  3. **Efectivo (0.9.1, decisión del dueño):** de una caja solo sale del turno abierto de
+     quien registra o aplica la devolución (o de quien la pidió, si su turno sigue
+     abierto). La caja con el turno de otro cajero: `TURNO_AJENO`; una caja sin turno con
+     turnos obligatorios: `SIN_TURNO_ABIERTO`. El movimiento lleva `turno_origen_id` = el
+     turno donde se cobró la venta. Banco y caja chica, como antes.
 - **Tipos que permite el dueño:** `empresa.devolucion_tipos` (`devolver_dinero`,
   `cambio_producto`, `nota_credito`; por defecto los tres, A CONFIRMAR). Otro:
   `DEVOLUCION_NO_PERMITIDA`. La rebaja de CxC siempre se permite.
@@ -72,10 +82,23 @@ la aplica (con la doble aprobación si la empresa la tiene) o la rechaza con mot
 Un cambio de producto sobre el tope no queda pendiente (`APROBACION_REQUERIDA`): se hace
 como nota de crédito pendiente y después se vende con ese saldo.
 
+### Pendiente que se atasca (0.9.1)
+
+Si mientras espera aprobación el cliente paga (la devolución se pidió sin destino porque
+todo iba a rebajar la deuda) o se cierra el turno de la caja elegida, aprobar da un
+error claro. Se destraba con
+`definir_destino_devolucion(devolucion, {"destino":"dinero"|"saldo_favor","cuenta_dinero_id"?}, motivo)`
+(`ventas.devolver` de quien la pidió, o quien tiene `ventas.aprobar`): solo mientras está
+pendiente, con motivo (bitácora), respetando los tipos que permite el dueño y la regla del
+efectivo. Después se vuelve a aprobar con `resolver_aprobacion` (o se rechaza con motivo).
+Ejemplo (prueba 109).
+
 ## Con otras partes
 
 - Una venta con devoluciones ya no se anula completa (`VENTA_CON_DEVOLUCIONES`).
 - Las comisiones del vendedor se ajustan solas (`comisiones.md`).
+- El cajero (sin `inventario.costos`) no ve costos en ningún nivel de la respuesta,
+  tampoco en la venta nueva de un cambio (0.9.1, prueba 103).
 - `v_devolucion` (con `ventas.ver` todas; si no, las que uno registró; costo solo con
   `inventario.costos`). La tabla `devolucion` la leen quienes ven ventas y costos.
 - Permiso `ventas.devolver`: dueño, admin y cajero (el vendedor no).

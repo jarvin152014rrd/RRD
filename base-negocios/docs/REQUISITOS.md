@@ -230,6 +230,16 @@ bloquea sin borrar. Reabrir: solo dueño, con motivo, en orden.
   tipos de devolución permitidos por defecto; tope de devolución (admin
   L 5,000, cajero siempre con aprobación); apartado de 30 días con anticipo a
   saldo a favor al cancelar; base de comisión "ganancia".
+- Hecho en 0.9.1 (revisión de la etapa 2): nadie paga con el saldo a favor de
+  otro cliente u otra empresa; el cajero no ve costos (tampoco anidados); las
+  devoluciones en partes cuadran al centavo; el tope de descuento vale por
+  línea; DECIDIDO POR EL DUEÑO: la comisión es solo sobre lo cobrado (se resta
+  lo condonado) y el efectivo de anulaciones y devoluciones sale del turno
+  abierto de quien hace la operación, a su nombre, con referencia al turno
+  original (nadie saca dinero del turno de otro cajero). Además: baja de vales
+  vencidos (solo el dueño, a otros ingresos), destrabar una devolución
+  pendiente, descuento de factura en monto exacto, vendedor solo con puesto que
+  vende y porcentaje de comisión no retroactivo.
 
 ## Arranque fácil para cualquier tamaño de negocio
 

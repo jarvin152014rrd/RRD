@@ -62,8 +62,21 @@ Patrón "anular un abono" (CONVENCIONES): motivo de 5 letras o más; fecha por d
 hoy (nunca antes del cobro); mes abierto; una sola vez (`YA_ANULADO`); contra-asiento
 enlazado; el dinero **sale de la misma cuenta** a la que entró (una transferencia ya
 confirmada, del banco donde quedó; si no hay dinero ahí: `SALDO_INSUFICIENTE`); el
+**efectivo** sigue la regla de turnos de abajo (0.9.1); el
 saldo a favor usado vuelve a su lote; el excedente que quedó a favor se anula (si ya
 se usó: `SALDO_FAVOR_USADO`); las facturas recuperan su saldo; las comisiones se ajustan.
+
+**Efectivo de una anulación (0.9.1, decisión del dueño):** sale del **turno abierto de
+quien anula, a su nombre**, con referencia al turno donde había entrado
+(`dinero_movimiento.turno_origen_id`). Si ese turno original sigue abierto y es de quien
+anula, sale de ahí mismo. **Nadie saca dinero del turno de otro cajero:** si el efectivo
+está en el turno abierto de otro y quien anula no tiene turno propio → `TURNO_AJENO`.
+Sin turno propio y con turnos obligatorios → `SIN_TURNO_ABIERTO` (abra su turno; si hace
+falta, traiga el fondo con `cuenta_origen_id`). Sin turnos obligatorios y sin turnos
+abiertos, sale de la misma caja como antes. Lo mismo vale para anular una venta
+(`ventas.md`), devolver dinero (`devoluciones.md`) y devolver un anticipo de apartado.
+Ejemplo (prueba 107): el cajero cobra 4,500 en su turno T1 y lo cierra; el admin abre su
+turno T2 con 10,000 y anula: los 4,500 salen de T2 (`turno_origen_id` = T1); T1 no se toca.
 
 **Venta con cobros:** `solicitar_anulacion_venta` da `VENTA_CON_COBROS` mientras tenga
 cobros o condonaciones vigentes: primero se anulan.
@@ -83,12 +96,25 @@ motivo y bitácora. No más que el saldo. `anular_condonacion(condonacion, motiv
 - Vencimiento opcional de los vales: `empresa.vale_dias_vigencia` (null = no vencen; lo
   cambia el dueño con `configurar_empresa`). Vencido: `VALE_VENCIDO`.
 - Se usa como forma de pago `saldo_favor` en ventas (`"vale"` o el saldo del cliente,
-  lotes más viejos primero) y en cobros. Se consume al EMITIR la venta (una pendiente
+  lotes más viejos primero) y en cobros. **0.9.1:** la venta NO acepta `"saldo_favor_id"`
+  desde la app (solo el cambio de producto usa por dentro su propio lote) y un lote solo
+  paga ventas de su misma empresa y su mismo cliente (`VALE_INVALIDO`). Se consume al EMITIR la venta (una pendiente
   de aprobación no consume) con el lote bloqueado: dos usos a la vez no pasan del saldo
   (prueba 100). No alcanza: `SALDO_FAVOR_INSUFICIENTE`.
 - `consultar_vale(empresa, codigo)` (`ventas.vender`): saldo, vencimiento y estado.
-- El pasivo 2.1.04.02 = suma de los saldos de todos los lotes (vencidos incluidos;
-  pendiente: decidir qué hacer con lo vencido).
+- El pasivo 2.1.04.02 = suma de los saldos de todos los lotes (vencidos incluidos,
+  hasta que el dueño los da de baja).
+
+### Dar de baja vales vencidos (0.9.1, opción del dueño)
+
+`dar_baja_vales_vencidos(empresa, {"vales":["VALE-..."] (opcional), "fecha"?}, motivo, id_operacion)`
+(`cobros.baja_vales`, **solo el dueño**). Sin `"vales"`: todos los vales SIN cliente,
+vencidos a la fecha y con saldo; con la lista: esos (uno vigente: `DATO_INVALIDO`). Cada
+vale queda "usado" por la baja (saldo 0) y el total pasa a otros ingresos:
+Dr 2.1.04.02 Saldos a favor / Cr 4.2.01.04 Vales vencidos no reclamados. Motivo de 5
+letras o más (queda en la bitácora), una sola vez por `id_operacion`; nada vencido con
+saldo: `SIN_VALES_VENCIDOS`. Se guarda en `saldo_favor_baja` (no se edita ni se borra).
+Un vale vencido sigue sin poder usarse (`VALE_VENCIDO`), dado de baja o no.
 
 ## Lecturas
 
@@ -107,6 +133,7 @@ motivo y bitácora. No más que el saldo. `anular_condonacion(condonacion, motiv
 | cobros.anular | ✓ | ✓ | | | |
 | cobros.condonar | ✓ | ✓ | | | |
 | ventas.saldo_inicial | ✓ | | | | |
+| cobros.baja_vales (0.9.1) | ✓ | | | | |
 
 Con "ventas" apagado se pueden anular cobros, condonaciones y saldos iniciales; con
 "dinero" apagado, confirmar una transferencia ya cobrada.

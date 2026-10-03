@@ -197,6 +197,8 @@ Si algo falla, termina con error (código distinto de 0).
 | `registrar_saldo_inicial_cxc` / `anular_saldo_inicial_cxc` | facturas que los clientes ya debían | ventas.saldo_inicial (solo dueño) |
 | `consultar_vale(empresa, codigo)` / `estado_cuenta_cliente(empresa, cliente, desde?, hasta?)` | saldo de un vale / estado de cuenta | ventas.vender / ventas.ver |
 | `registrar_devolucion(venta, datos, id_operacion)` / `documento_nota_credito(devolucion)` | devoluciones y notas de crédito (`devoluciones.md`) | ventas.devolver |
+| `definir_destino_devolucion(devolucion, datos, motivo)` (0.9.1) | destino de una devolución pendiente atascada | ventas.devolver (quien la pidió) / ventas.aprobar |
+| `dar_baja_vales_vencidos(empresa, datos, motivo, id_operacion)` (0.9.1) | vales vencidos a otros ingresos | cobros.baja_vales (solo dueño) |
 | `crear_apartado` / `abonar_apartado` / `completar_apartado` / `cancelar_apartado` | apartados con anticipo (`apartados.md`) | apartados.registrar / apartados.cancelar |
 | `configurar_comisiones` / `fijar_porcentaje_comision` / `pagar_comisiones` / `anular_pago_comisiones` | comisiones (`comisiones.md`) | comisiones.configurar (dueño) / comisiones.pagar |
 

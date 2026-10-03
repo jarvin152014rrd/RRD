@@ -20,8 +20,8 @@ BEGIN
   INSERT INTO public.modulo_activo (empresa_id, modulo) VALUES (e, 'apartados'), (e, 'comisiones');
   PERFORM pruebas.como('dueno_a');
   PERFORM public.configurar_comisiones(e, '{"activas": true}', 'Comisiones');
-  PERFORM public.fijar_porcentaje_comision(e, pruebas.usuario('vendedor_a'), 10, '2026-01-01', 'Vendedor');
-  PERFORM public.fijar_porcentaje_comision(e, pruebas.usuario('cajero_a'), 3, '2026-01-01', 'Cajero');
+  PERFORM public.fijar_porcentaje_comision(e, pruebas.usuario('vendedor_a'), 10, NULL, 'Vendedor');
+  PERFORM public.fijar_porcentaje_comision(e, pruebas.usuario('cajero_a'), 3, NULL, 'Cajero');
   PERFORM public.registrar_saldo_inicial_cxc(e, jsonb_build_object('cliente_id', pruebas.id('CLI1'), 'numero_documento', 'F-OLD-1',
     'fecha_documento', '2025-12-01', 'monto_centavos', 12345), gen_random_uuid());
   PERFORM public.registrar_saldo_inicial_cxc(e, jsonb_build_object('cliente_id', pruebas.id('CLI2'), 'numero_documento', 'F-OLD-2',

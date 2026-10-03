@@ -1,42 +1,42 @@
-# Pendientes al pausar (núcleo 0.9.0, 101 pruebas OK)
+# Pendientes (núcleo 0.9.1, 113 pruebas OK)
 
-Estado: etapa 2 terminada. Revisión del revisor hecha. NO pasar a la etapa 3
-hasta corregir lo siguiente (en una migración nueva 038+, con pruebas).
+Estado: etapa 2 terminada. Las correcciones de la revisión de la etapa 2 están
+HECHAS en la migración 038 (núcleo 0.9.1), cada una con su prueba (falla
+contra 0.9.0 y pasa con 0.9.1). Falta que el revisor las confirme antes de la
+etapa 3.
 
 ## Corregir de la revisión de la etapa 2
 
 GRAVE
-1. Saldo a favor de otro cliente u otra empresa: `usar_saldo_favor_lote`
-   (034_apartados.sql:70-91) y la venta aceptan `saldo_favor_id` desde la app
-   sin revisar cliente ni empresa (034:384-385, 423-434, 606). No aceptar
-   `saldo_favor_id` desde la app (solo uso interno del cambio de producto) o
-   exigir misma empresa y mismo cliente. Prueba con cliente A / otra empresa.
+1. HECHO (prueba 102). Saldo a favor de otro cliente u otra empresa: la venta
+   ya no acepta `saldo_favor_id` desde la app (solo el cambio de producto usa
+   su lote) y `usar_saldo_favor_lote` exige misma empresa y mismo cliente.
 
 IMPORTANTE
-2. Cajero ve costos en cambio de producto: ocultar `costo_centavos` dentro de
-   `venta_cambio` (035:643-644, 028:952; ocultar_costos en 017:210-223 solo
-   limpia el primer nivel).
-3. Devoluciones parciales: base e ISV por cantidad acumulada (lo que
-   corresponde a todo lo devuelto menos lo ya devuelto), 035:549-553. Prueba:
-   10 kg a L 11.50 devueltos de 0.5 en 0.5.
-4. Tope de descuento también por línea (031:306, 034:485). Prueba: 100 % en
-   L 500 dentro de factura de L 20,000.
-5. Comisión con condonación (DECIDIDO POR EL DUEÑO): la comisión se calcula
-   solo sobre lo realmente cobrado (se resta lo condonado). 036:229.
-6. Efectivo de anulaciones y devoluciones de un turno ya cerrado (DECIDIDO
-   POR EL DUEÑO): sale del turno abierto de quien hace la operación, a su
-   nombre, con referencia al turno original. Nadie puede sacar dinero del
-   turno de otro cajero. 033:1003-1009, 035:505-509, 035:360, 025:100.
+2. HECHO (prueba 103). Cajero ve costos en cambio de producto:
+   `ocultar_costos` limpia todos los niveles (`interno.quitar_claves`).
+3. HECHO (prueba 104). Devoluciones parciales por cantidad acumulada (10 kg a
+   L 11.50 devueltos de 0.5 en 0.5: ISV 86/87 por nota, exacto al final).
+4. HECHO (prueba 105). Tope de descuento también por línea (vender, apartar y
+   aprobar). 100 % en L 500 dentro de L 20,000 pide aprobación.
+5. HECHO (prueba 106). Comisión solo sobre lo realmente cobrado (se resta la
+   parte sin ISV de lo condonado). Decisión del dueño.
+6. HECHO (prueba 107). Efectivo de anulaciones y devoluciones: sale del turno
+   abierto de quien hace la operación, a su nombre, con referencia al turno
+   original (`dinero_movimiento.turno_origen_id`); nadie saca dinero del turno
+   de otro cajero (`TURNO_AJENO`). Decisión del dueño.
 
 MENOR
-- Vales vencidos: forma de darlos de baja con asiento (033:454-459).
-- Devolución pendiente sin destino que queda atascada si el cliente paga antes
-  (035:305-308).
-- Descuento de factura en monto: diferencia de 1 centavo por línea con precio
-  sin ISV (031:263-264).
-- `vendedor_id` se puede poner a cualquier usuario activo (034:349): limitar.
-- Porcentaje de comisión con fecha "desde" en el pasado (036:315): no permitir.
-- Informar al dueño: con base "ganancia", el vendedor puede deducir el costo.
+- HECHO (prueba 108). Vales vencidos: `dar_baja_vales_vencidos` (solo el
+  dueño, permiso `cobros.baja_vales`, motivo y bitácora; asiento a 4.2.01.04).
+- HECHO (prueba 109). Devolución pendiente atascada:
+  `definir_destino_devolucion` y se vuelve a aprobar (o se rechaza; el error
+  lo explica).
+- HECHO (prueba 110). Descuento de factura en monto: exacto al centavo.
+- HECHO (prueba 111). `vendedor_id`: solo usuarios activos con puesto que vende.
+- HECHO (prueba 112). Porcentaje de comisión no retroactivo (desde >= hoy).
+- HECHO (nucleo/docs/comisiones.md). Aviso al dueño: con base "ganancia" el
+  vendedor puede deducir el costo.
 
 ## Después de corregir
 
@@ -54,3 +54,8 @@ MENOR
   constructor-maestro).
 - Valores iniciales de devoluciones, apartados (30 días, anticipo sin mínimo)
   y vales (no vencen).
+- 0.9.1: la baja de vales vencidos la hace el dueño a mano cuando decide (no es
+  automática) y no se anula; confirmar que así lo quiere.
+- 0.9.1: una anulación pedida por un cajero cuyo turno sigue abierto saca el
+  efectivo de ese turno al aprobarla (el cajero lo entrega); si ya cerró, sale
+  del turno de quien aprueba. Confirmar.

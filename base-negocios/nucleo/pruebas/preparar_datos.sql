@@ -268,6 +268,16 @@ LANGUAGE sql STABLE AS $$
     'pagos', jsonb_build_array(jsonb_build_object('forma', p_forma))))
 $$;
 
+-- 0.9.1: fijar_porcentaje_comision ya no acepta "desde" en el pasado. Para pruebas con
+-- ventas en fechas pasadas: un porcentaje que se fijó ANTES de esas ventas (como si el
+-- dueño lo hubiera registrado ese día). (plpgsql: carga también en bases viejas.)
+CREATE FUNCTION pruebas.porcentaje_comision_anterior(p_empresa uuid, p_user uuid, p_porcentaje numeric, p_desde date)
+RETURNS void LANGUAGE plpgsql SECURITY DEFINER AS $$
+BEGIN
+  INSERT INTO public.comision_porcentaje (empresa_id, user_id, porcentaje, desde, motivo, creado_por)
+  VALUES (p_empresa, p_user, p_porcentaje, p_desde, 'Prueba: porcentaje fijado antes de las ventas', p_user);
+END $$;
+
 GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA pruebas TO anon, authenticated, service_role;
 
 -- ---------------------------------------------------------------------
