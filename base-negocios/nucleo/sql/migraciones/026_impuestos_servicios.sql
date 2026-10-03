@@ -141,14 +141,16 @@ LANGUAGE sql IMMUTABLE SET search_path = '' AS $$
     CROSS JOIN LATERAL (SELECT CASE WHEN p_incluye THEN x.total ELSE s.sin + round(s.sin * x.tasa)::bigint END AS con) c
 $$;
 
--- Lo mismo con el código de impuesto de la empresa (lee la tabla).
+-- Lo mismo con el código de impuesto de la empresa (lee la tabla; solo de
+-- una empresa del usuario).
 CREATE FUNCTION public.precio_impuesto(p_empresa_id uuid, p_precio_centavos bigint, p_incluye boolean, p_impuesto text,
                                        p_cantidad numeric DEFAULT 1,
                                        OUT sin_isv_centavos bigint, OUT isv_centavos bigint, OUT con_isv_centavos bigint)
 LANGUAGE sql STABLE SECURITY DEFINER SET search_path = '' AS $$
   SELECT x.sin_isv_centavos, x.isv_centavos, x.con_isv_centavos
     FROM public.precio_con_tasa(p_precio_centavos, p_incluye,
-           (SELECT i.porcentaje FROM public.impuesto i WHERE i.empresa_id = p_empresa_id AND i.codigo = p_impuesto), p_cantidad) x
+           (SELECT i.porcentaje FROM public.impuesto i WHERE i.empresa_id = p_empresa_id AND i.codigo = p_impuesto
+               AND (auth.uid() IS NULL OR i.empresa_id IN (SELECT public.mis_empresas()))), p_cantidad) x
 $$;
 
 -- Tasa de un impuesto para las COMPRAS (reemplaza la de 016; misma firma):

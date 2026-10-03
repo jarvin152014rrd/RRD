@@ -238,3 +238,26 @@ a dar seguimiento el primer día, sin trabas.
   contrato de servicio. Agregar un módulo después = el proveedor lo activa.
 - Mercado objetivo: negocios pequeños y medianos que van empezando y tienen
   dificultades con la administración y el rastro del dinero.
+
+## Encender y apagar módulos sin romper los números (NO NEGOCIABLE)
+
+- Cualquier combinación de módulos activos debe dar siempre números
+  correctos: debe = haber, dinero = cuentas, kardex = inventario contable,
+  CxC y CxP = sus cuentas.
+- Dependencias entre módulos guardadas como datos: no se activa un módulo sin
+  los que necesita (ej.: comisiones requiere ventas) y no se apaga uno del
+  que dependen otros activos.
+- Apagar un módulo solo impide operaciones nuevas; lo ya registrado sigue en
+  reportes y contabilidad. Nunca borra datos.
+- Prueba automática de combinaciones de módulos (incluido apagar a mitad de
+  mes) con cuadre global en cada una. Si una falla, no se entrega.
+
+## Edición fácil para el proveedor
+
+- Una ficha por cliente (clientes/<nombre>/ficha.json) legible: negocio,
+  paquete, perfil, módulos con sí/no, licencia.
+- Un comando (aplicar_ficha.sh): vista previa de cambios, confirmación con el
+  nombre del cliente, respaldo y aplicación. Nunca borra datos.
+- Lista general de clientes: paquete, módulos, vencimiento de licencia y
+  versión del núcleo.
+- Más adelante: panel web del proveedor con lo mismo por clics.
