@@ -98,6 +98,36 @@ página "Mi cuenta" (plan, módulos, próximo pago, pedir módulo).
   Existencias por sucursal, Clientes, Categorías.
 - Plantillas por rubro como datos, no como código.
 
+### Precio e ISV
+
+- Cada producto tiene impuesto (15%, 18% o Exento) y la marca "precio incluye
+  ISV" (Sí/No). El valor por defecto lo elige el dueño en Ajustes
+  (recomendado: Sí). El programa calcula la otra cifra.
+
+### Columnas del Excel
+
+Columnas azules = editables (se importan). Columnas grises = solo
+información (se exportan y se ignoran al subir). Montos en lempiras con 2
+decimales; fechas AAAA-MM-DD; celda vacía conserva el valor; nunca borra.
+
+- Productos (editable): código (llave, no cambia), código de barras, nombre,
+  descripción, categoría, subcategoría, unidad, se vende con decimales,
+  impuesto, precio de venta, precio incluye ISV, existencia mínima, proveedor
+  principal, ubicación, activo, campos extra.
+  Solo información: costo promedio, existencia total, valor del inventario,
+  margen %, precio con y sin ISV, última venta, última compra.
+- Clientes y proveedores (editable): código, tipo, nombre o razón social, RTN,
+  teléfono, correo, dirección, límite de crédito, plazo en días, activo,
+  campos extra. Solo información: saldo actual, saldo vencido, último pago.
+- Categorías: nombre, categoría padre, activo.
+- Carga inicial (una sola vez): existencias iniciales (código, sucursal,
+  bodega, cantidad, costo) y saldos iniciales de clientes y proveedores
+  (documento, fecha, vencimiento, monto).
+- Conteo físico: se descarga, se llena con lo contado y se sube; el programa
+  calcula diferencias y crea ajustes que aprueba admin o dueño. Nunca cambia
+  la existencia directamente.
+- Hoja Instrucciones con cada columna y sus valores válidos.
+
 ## Celular
 
 Resumen del negocio, venta rápida, consultar precio y existencia, conteo de
