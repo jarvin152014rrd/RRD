@@ -147,3 +147,11 @@ mismo (`"duplicado": true`) y de otro tipo da `ID_OPERACION_USADO`.
 
 Permisos por defecto: dueño todo; admin ve, administra, traslada y anula;
 contador solo ve; cajero agrega comprobantes; vendedor nada.
+
+## Ventas (0.7.0, ver `ventas.md`)
+
+Los cobros de ventas dejan su rastro: efectivo a la caja de la venta (`interno.cuenta_efectivo_cobro`),
+tarjeta a "Tarjetas por liquidar (POS)" y transferencia a "Transferencias por confirmar" (se crean
+solas la primera vez si no hay una). La transferencia pasa al banco con
+`confirmar_transferencia_venta`; lo del POS, con `trasladar_dinero` (traslado al banco). Al anular
+una venta el dinero sale de la misma cuenta a la que entró.

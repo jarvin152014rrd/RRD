@@ -35,6 +35,12 @@ cabe en estas reglas, se discute antes de programarlo.
   esa bodega, salvo permiso `inventario.fecha_atrasada` (y entonces lo ya
   salido no se recalcula). 0 unidades = L 0.00 (lo que sobre va a ajuste de costo).
 
+- **Impuestos (0.7.0):** nunca tasas fijas en el código: la tasa sale de la tabla
+  `public.impuesto` de la empresa (`interno.impuesto_de`, `public.precio_con_tasa`,
+  `public.precio_impuesto`). Cada documento guarda el código y la tasa que usó.
+  `public.precio_isv` (tasas de Honduras) queda solo por compatibilidad.
+- **Servicios (0.7.0):** `producto.tipo = 'servicio'` nunca entra al kardex.
+
 ## Fechas y horas
 - Columnas de momento (fecha + hora) terminan en **`_en`**: `creado_en`,
   `registrado_en`, `vence_en`, `revocado_en`. Tipo `timestamptz`. Las pone
@@ -123,6 +129,13 @@ cabe en estas reglas, se discute antes de programarlo.
   lo que pidió (salvo el dueño) y aplica o rechaza (con motivo) una sola vez.
 - Para un tipo nuevo: su permiso, su tope en `tope_rol` y su rama en
   `resolver_aprobacion` (migración nueva).
+
+- **Doble aprobación (0.7.0):** `aprobacion.aprobaciones_requeridas` se fija al
+  pedir (trigger); cada rama de `resolver_aprobacion` llama `interno.paso_aprobacion`
+  antes de aplicar (la primera solo se anota; el dueño aprueba solo).
+- **Régimen fiscal (0.7.0):** el núcleo no conoce el CAI: pide
+  `interno.numero_fiscal(...)` e imprime `interno.bloque_fiscal(venta)`. Un régimen
+  nuevo es un módulo `fiscal_xx` que agrega su rama en esas dos funciones.
 
 ## Vistas
 - Por defecto `security_invoker = true` (respetan RLS).

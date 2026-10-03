@@ -74,3 +74,13 @@ demás puestos 0 (todo gasto suyo pide aprobación y no aprueban).
   vencimiento se paga una sola vez. Respeta los topes como cualquier gasto.
 - `reporte_pagos_fijos(empresa, año, mes)`: total mensual estimado (mensual =
   monto / cada; semanal = monto × 52 / 12 / cada) y lo pagado en el mes.
+
+## 0.7.0
+
+- `"impuesto": "ISV15"` (código de la tabla de impuestos) en vez de `"isv_centavos"`: el crédito
+  fiscal se calcula del total (115,000 → 15,000). Sigue pidiendo factura y RTN.
+- **Doble aprobación** (`empresa.doble_aprobacion`): una solicitud nueva necesita dos personas
+  distintas (ninguna es quien pidió); la primera queda anotada (`falta_segunda_aprobacion`) y el
+  dinero no se mueve hasta la segunda; el dueño aprueba solo; un rechazo basta. Las solicitudes de
+  antes de activarla siguen con una. `v_aprobacion` muestra la primera aprobación.
+- `resolver_aprobacion` también resuelve ventas (descuento / crédito) y anulaciones de venta (ver `ventas.md`).

@@ -83,3 +83,6 @@ mismo tipo (compra, pago, anulación...); si ya se usó en otra cosa: `ID_OPERAC
 
 Permisos por defecto: dueño y admin (ver, registrar, anular, pagar); saldos
 iniciales solo el dueño; el contador solo ve. Cajero y vendedor no ven compras.
+
+**0.7.0:** el ISV de cada línea sale de la tabla de impuestos de la empresa (`impuestos.md`);
+un servicio no se compra al kardex (`PRODUCTO_INVALIDO`).

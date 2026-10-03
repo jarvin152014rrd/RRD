@@ -48,7 +48,7 @@ La app lee `perfil`, `turnos_obligatorios`, `contabilidad_visible` y
 | 4 | `productos` | existe al menos un producto |
 | 5 | `clientes` | existe al menos un cliente |
 | 6 | `proveedores` | existe al menos un proveedor |
-| 7 | `primera_venta` | (llega con el módulo de ventas, 2b-2; mientras tanto se salta) |
+| 7 | `primera_venta` | hay una venta emitida (aunque después se anule). Desde 0.7.0 |
 
 Devuelve `pasos` (orden, paso, título, estado `hecho`/`saltado`/`pendiente`,
 detalle), `hechos`, `saltados`, `pendientes`, `porcentaje` (hechos de 7,

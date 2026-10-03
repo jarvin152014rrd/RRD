@@ -51,3 +51,8 @@ uno hecho por fuera de las funciones, que además exige motivo).
 "se vende con decimales" no se apaga si hay existencias con decimales.
 
 Permisos por defecto: dueño y admin. Vendedor y cajero solo leen el catálogo.
+
+**0.7.0 — impuestos y servicios (ver `impuestos.md`):** `tipo_impuesto` es un código de la
+tabla de impuestos de la empresa (en Honduras ISV15, ISV18, EXENTO, EXONERADO; sin indicarlo, el
+predeterminado). Nuevo `"tipo": "bien" | "servicio"` y, en servicios, `"costo_estimado_centavos"`
+(lo ve solo quien ve costos). Un servicio no lleva inventario.

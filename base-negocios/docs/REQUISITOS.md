@@ -261,3 +261,22 @@ a dar seguimiento el primer día, sin trabas.
 - Lista general de clientes: paquete, módulos, vencimiento de licencia y
   versión del núcleo.
 - Más adelante: panel web del proveedor con lo mismo por clics.
+- Hecho en 0.7.0 (etapa 2b-2a): ventas todo-o-nada con efectivo, tarjeta,
+  transferencia, crédito y mixto; descuentos de tres tipos con tope por puesto y
+  aprobación (doble aprobación aplicada en ventas y gastos); crédito según
+  límite o siempre con aprobación; anulación solicitada y aprobada con motivo
+  (el dinero vuelve a la misma cuenta); cotizaciones; CxC con antigüedad;
+  "seguir una venta"; primera venta del asistente. Pendiente 2b-2b: cobros,
+  saldos iniciales de clientes, apartados, devoluciones / notas de crédito,
+  comisiones.
+
+## Cualquier negocio y otros países (decisión del dueño, 0.7.0)
+
+- Productos y SERVICIOS: un servicio no lleva inventario; costo estimado
+  opcional (margen y comisiones) que no va a los libros. Bienes y servicios en
+  la misma venta.
+- Impuestos como DATOS por empresa (tabla de impuestos sembrada por país;
+  Honduras: ISV15, ISV18, EXENTO, EXONERADO). Otro país solo cambia datos.
+- Lo fiscal de Honduras (CAI, formato 000-001-01-00000001, leyendas SAR) es el
+  módulo "fiscal_hn". Sin régimen fiscal activo, la venta usa ticket interno.
+  Un contador debe validar las reglas y leyendas fiscales.

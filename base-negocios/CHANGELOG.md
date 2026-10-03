@@ -4,6 +4,63 @@ Formato: versión (fecha) y lista de cambios. La versión vive en `VERSION_NUCLE
 y queda guardada en cada base al migrar (vista `version_esquema`).
 Números: MAYOR.MENOR.ARREGLO (ver `docs/CONVENCIONES.md`).
 
+## 0.7.0 (2026-10-03) — Etapa 2b-2a: ventas, CAI, impuestos como datos y servicios
+
+Migraciones nuevas 026-029 (las 001-025 no se tocaron). 87 pruebas (nuevas 77-87).
+
+**Impuestos como datos (026)** — tabla `impuesto` por empresa (código, nombre, porcentaje, clase
+gravado/exento/exonerado, cuentas por pagar y de crédito fiscal), sembrada por país
+(`interno.plantilla_impuesto`; Honduras: ISV15, ISV18, EXENTO, EXONERADO). `producto.tipo_impuesto`
+y `compra_linea.tipo_impuesto` apuntan a la tabla (mismos códigos de antes). `configurar_impuesto`
+(solo el dueño), `precio_con_tasa`, `precio_impuesto`. Compras, gastos (`"impuesto"`) y ventas calculan con la tabla.
+
+**Servicios (026)** — `producto.tipo` bien | servicio; un servicio no mueve kardex; costo estimado
+opcional en `servicio_costo` (solo con `inventario.costos`, nunca va a los libros);
+`empresa.permite_servicios`; unidades SERV, HORA, SES, MES; `v_producto` con tipo e impuesto.
+
+**Régimen fiscal de Honduras (027, módulo `fiscal_hn`)** — `cai_rango` por caja y tipo de documento,
+`registrar_cai` / `desactivar_cai` / `reactivar_cai`, numeración del servidor dentro del rango de
+ESA caja (sin repetir ni saltar), `SIN_CAI` / `CAI_VENCIDO` / `CAI_AGOTADO`, `cai_alertas` y
+`v_cai_rango` (días y % configurables), leyendas y datos fiscales en el documento. Despacho por
+régimen (`interno.numero_fiscal`, un solo régimen activo). Sin régimen: ticket interno.
+
+**Ventas (028)** — `registrar_venta` todo o nada (documento, kardex a costo promedio, asiento y
+rastro); efectivo (turno), tarjeta (POS por liquidar), transferencia (por confirmar →
+`confirmar_transferencia_venta`), crédito (CxC con vencimiento), mixto; consumidor final;
+promociones por categoría (`crear_promocion`, `editar_promocion`), descuento por artículo y por
+factura prorrateado; topes de descuento por puesto (`configurar_tope_descuento`) y de crédito y
+anulación (`configurar_tope_rol` acepta `credito` y `anulacion_venta`); venta pendiente sin mover
+nada; `cancelar_venta`; crédito `segun_limite` | `siempre_aprobacion`; anulación solicitada
+(`solicitar_anulacion_venta`) y aprobada con motivo; el dinero sale de la misma cuenta.
+`resolver_aprobacion` despacha gasto, venta y anulación, con **doble aprobación** (también gastos).
+Clientes 1.1.02.01 controlada por el módulo (`MODULO_CON_SALDO` al activar con saldo).
+`configurar_empresa`: `credito_politica`, `documento_venta_modo`, `cai_dias_alerta`,
+`cai_porcentaje_alerta`, `leyenda_factura`, `cotizacion_dias_vigencia`, `cotizacion_precios`,
+`permite_servicios`. El paso "primera venta" del asistente se marca solo.
+
+**Cotizaciones y lecturas (029)** — `crear_cotizacion`, `anular_cotizacion`,
+`convertir_cotizacion_a_venta` (respeta precios cotizados si está vigente o recalcula, según
+configuración); `v_venta`, `v_venta_linea`, `v_venta_pago`, `v_ventas_por_dia`,
+`v_ventas_por_vendedor`, `v_ventas_por_caja`, `v_cxc_documento`, `v_cxc_cliente` (antigüedad),
+`v_cotizacion`, `documento_venta` (total en letras) y `seguir_venta`.
+
+**Permisos:** `ventas.ver`, `ventas.vender`, `ventas.cobrar`, `ventas.cotizar`, `ventas.aprobar`,
+`ventas.solicitar_anulacion`, `ventas.anular`, `ventas.promociones`, `cai.administrar`,
+`impuestos.configurar` (solo dueño). Vendedor: vende, cotiza y solicita; cajero: además cobra;
+admin: todo de ventas con topes; contador: `ventas.ver`. Módulo nuevo `fiscal_hn`.
+
+**Ganchos para 2b-2b:** `interno.cobros_vigentes_venta` (hoy 0), `interno.saldo_cxc_cliente`,
+`interno.total_cxc`, `v_cxc_documento.cobrado_centavos`.
+
+**Cambios que rompen (para quien ya usaba 0.6.0 en pruebas)**
+- Admin, cajero, vendedor, contador y el proveedor con soporte tienen permisos nuevos: se ajustaron
+  las pruebas 19, 31, 48, 57 y 69. El error de un impuesto que no existe es `IMPUESTO_INVALIDO`
+  (antes `DATO_INVALIDO`): se ajustó la prueba 35.
+- `resolver_aprobacion`, `configurar_tope_rol`, `configurar_empresa`, `registrar_compra`,
+  `registrar_gasto`, `crear_producto`, `editar_producto`, `estado_arranque`, `mover_inventario`,
+  `buscar_producto_por_codigo` y `v_producto` / `v_aprobacion` se reemplazaron con la misma firma
+  (las vistas, con columnas nuevas al final).
+
 ## 0.6.0 (2026-10-03) — Etapa 2b-1.1: arranque fácil para cualquier tamaño de negocio
 
 Migración nueva 025 (las 001-024 no se tocaron). 76 pruebas (nuevas 72-76).
