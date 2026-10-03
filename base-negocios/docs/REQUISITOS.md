@@ -189,6 +189,14 @@ bloquea sin borrar. Reabrir: solo dueño, con motivo, en orden.
   elegida por el dueño: sobre la GANANCIA (precio sin ISV menos costo,
   recomendado) o sobre el precio sin ISV. Nunca sobre el ISV. Se ganan cuando
   la venta está cobrada completa y se ajustan con devoluciones.
+- Hecho en 0.7.0 (etapa 2b-2a): ventas todo-o-nada con efectivo, tarjeta,
+  transferencia, crédito y mixto; descuentos de tres tipos con tope por puesto y
+  aprobación (doble aprobación aplicada en ventas y gastos); crédito según
+  límite o siempre con aprobación; anulación solicitada y aprobada con motivo
+  (el dinero vuelve a la misma cuenta); cotizaciones; CxC con antigüedad;
+  "seguir una venta"; primera venta del asistente. Pendiente 2b-2b: cobros,
+  saldos iniciales de clientes, apartados, devoluciones / notas de crédito,
+  comisiones.
 
 ## Arranque fácil para cualquier tamaño de negocio
 
@@ -228,6 +236,11 @@ a dar seguimiento el primer día, sin trabas.
   régimen "fiscal_hn" activable. Sin régimen fiscal se usa numeración interna.
 - Módulos futuros pensados para servicios (se venden aparte): órdenes de
   trabajo, citas/agenda, cobros recurrentes (mensualidades, membresías).
+- Hecho en 0.7.0: servicios (sin kardex; costo estimado que solo ven quienes
+  ven costos y nunca va a los libros; bandera permite_servicios), tabla de
+  impuestos por empresa sembrada por país (Honduras también con EXONERADO) que
+  usan ventas, compras y gastos, y módulo "fiscal_hn" (CAI) con ticket interno
+  cuando no hay régimen. Un contador debe validar las reglas y leyendas fiscales.
 
 ## Versiones y venta
 
@@ -261,22 +274,3 @@ a dar seguimiento el primer día, sin trabas.
 - Lista general de clientes: paquete, módulos, vencimiento de licencia y
   versión del núcleo.
 - Más adelante: panel web del proveedor con lo mismo por clics.
-- Hecho en 0.7.0 (etapa 2b-2a): ventas todo-o-nada con efectivo, tarjeta,
-  transferencia, crédito y mixto; descuentos de tres tipos con tope por puesto y
-  aprobación (doble aprobación aplicada en ventas y gastos); crédito según
-  límite o siempre con aprobación; anulación solicitada y aprobada con motivo
-  (el dinero vuelve a la misma cuenta); cotizaciones; CxC con antigüedad;
-  "seguir una venta"; primera venta del asistente. Pendiente 2b-2b: cobros,
-  saldos iniciales de clientes, apartados, devoluciones / notas de crédito,
-  comisiones.
-
-## Cualquier negocio y otros países (decisión del dueño, 0.7.0)
-
-- Productos y SERVICIOS: un servicio no lleva inventario; costo estimado
-  opcional (margen y comisiones) que no va a los libros. Bienes y servicios en
-  la misma venta.
-- Impuestos como DATOS por empresa (tabla de impuestos sembrada por país;
-  Honduras: ISV15, ISV18, EXENTO, EXONERADO). Otro país solo cambia datos.
-- Lo fiscal de Honduras (CAI, formato 000-001-01-00000001, leyendas SAR) es el
-  módulo "fiscal_hn". Sin régimen fiscal activo, la venta usa ticket interno.
-  Un contador debe validar las reglas y leyendas fiscales.
