@@ -1,4 +1,4 @@
-# Pendientes (núcleo 0.11.0, 126 pruebas OK)
+# Pendientes (núcleo 0.12.0, 127 pruebas OK)
 
 Estado: etapa 2 terminada. Las correcciones de la revisión de la etapa 2 están
 HECHAS en la migración 038 (núcleo 0.9.1) y las de la revisión de 0.9.1 en la
@@ -32,7 +32,18 @@ etapa 3.
 - FALTA: que el revisor revise 0.11.0 y que un contador valide los libros de ISV (formato SAR).
 - FALTA (menor): emparejar varias filas del banco contra un movimiento; anular un movimiento creado desde la
   conciliación; guardar el CAI del proveedor en las compras.
-- Siguiente (etapa 3b-2): Excel de ida y vuelta, crecimiento por sucursal, resto del centro de control del dueño.
+- Siguiente (etapa 3b-2): ver "Etapa 3b-2a" abajo.
+
+## Etapa 3b-2a (HECHA en 0.12.0, migración 046, prueba 127)
+
+- HECHO: Excel de ida y vuelta como JSON (`excel.md`): exportar plantilla con columnas e instrucciones, vista previa que no
+  guarda, aplicar todo o nada con id_operacion; hojas productos (con campos extra y columnas grises), clientes y proveedores
+  (con código nuevo `tercero.codigo` y saldos), categorías, existencias iniciales, saldos iniciales y conteo físico con
+  ajustes pendientes de aprobación.
+- FALTA: que el revisor revise 0.12.0.
+- FALTA (menor): descripción, proveedor principal y ubicación del producto (hoy: campos extra); campos extra de clientes;
+  hoja de solo lectura "Existencias por sucursal".
+- Siguiente (etapa 3b-2b): crecimiento por sucursal y resto del centro de control del dueño.
 
 ## Decisiones del dueño para el final
 
@@ -92,8 +103,8 @@ MENOR
 ## Después de corregir
 
 1. Revisor confirma las correcciones.
-2. Etapa 3: 3a HECHA en 0.10.0 y 3b-1 en 0.11.0 (ver arriba). Falta 3b-2: Excel
-   de ida y vuelta, crecimiento por sucursal, resto del centro de control del dueño.
+2. Etapa 3: 3a HECHA en 0.10.0, 3b-1 en 0.11.0 y 3b-2a (Excel) en 0.12.0. Falta 3b-2b:
+   crecimiento por sucursal y resto del centro de control del dueño.
 3. Etapas 4 a 7: pantallas (PWA), celular y sin internet, prueba real en
    Supabase, preparación para vender.
 
@@ -125,3 +136,6 @@ MENOR
 - 0.11.0 [DINERO]: "ganancia de hoy" = ventas sin ISV − costo; "ganancia del mes" = ventas − costo − gastos del 1 a
   hoy (de los libros); "ventas de hoy" con ISV. Confirmar.
 - 0.11.0: alertas — cierre del mes pasado se espera hasta el día 10; licencia avisa 15 días antes. Confirmar.
+- 0.12.0: categorías y unidades que no existen dan error (no se crean solas desde la hoja de productos). Confirmar.
+- 0.12.0: conteo físico a ciegas; al aprobar se aplica la diferencia contada (no la cantidad). Confirmar.
+- 0.12.0: en clientes, la columna "tipo" solo agrega papeles; un saldo inicial ya cargado con otro monto da error. Confirmar.

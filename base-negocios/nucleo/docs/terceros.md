@@ -5,7 +5,7 @@
 `nombre`, `rtn` (14 dígitos), `telefono` (8-15 dígitos), `correo`,
 `direccion`, `limite_credito_centavos`, `plazo_dias` (0-365), `activo`.
 Todo se liga por **id**, nunca por nombre (dos "Juan Pérez" son distintos).
-El RTN no se repite dentro de la empresa.
+El RTN no se repite dentro de la empresa. Desde 0.12.0 cada uno tiene `codigo` (T00001...; llave del Excel, no cambia; ver `excel.md`).
 
 **RPC** (`datos` en jsonb; solo las claves que se quieren poner o cambiar):
 

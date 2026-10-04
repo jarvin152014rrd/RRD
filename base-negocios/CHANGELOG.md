@@ -4,6 +4,48 @@ Formato: versión (fecha) y lista de cambios. La versión vive en `VERSION_NUCLE
 y queda guardada en cada base al migrar (vista `version_esquema`).
 Números: MAYOR.MENOR.ARREGLO (ver `docs/CONVENCIONES.md`).
 
+## 0.12.0 (2026-10-04) — Etapa 3b-2a: Excel de ida y vuelta
+
+Migración nueva 046 (las 001-045 no se tocaron). 127 pruebas (nueva 127; se ajustó la 31: el admin tiene `excel.importar`).
+Guía para la app: `nucleo/docs/excel.md`.
+
+**Excel (046)** — el servidor trabaja con JSON; la app convierte xlsx <-> JSON.
+- `exportar_plantilla(empresa, hoja)`: columnas (clave, título, editable o gris, tipo, valores válidos y descripción para la
+  hoja Instrucciones) y filas actuales. Hojas: `productos` (con campos extra como columnas y grises: costo promedio, valor y
+  margen solo con `inventario.costos`, existencia total, precio con y sin ISV, última venta y compra), `clientes_proveedores`
+  (grises: saldo y vencido por cobrar/pagar, último cobro/pago), `categorias`, `existencias_iniciales`, `saldos_iniciales`,
+  `conteo_fisico` (a ciegas).
+- `importar_vista_previa(empresa, hoja, filas)`: no guarda nada; por fila: crear / actualizar / sin cambios / error, con los
+  errores en palabras sencillas con fila y columna, y resumen. Revisa con las reglas reales: aplica cada fila y al final deshace todo.
+- `importar_aplicar(empresa, hoja, filas, id_operacion, motivo)`: todo o nada (un error = no se guarda nada); reintento con el
+  mismo id = mismo resultado (`duplicado`). Usa por dentro crear/editar producto, cambiar precio (historial con el motivo),
+  crear/editar tercero (límites de crédito), crear/desactivar/reactivar categoría, `cargar_saldo_inicial` (una carga por bodega y
+  fecha, una sola vez contra Saldos de apertura) y `registrar_saldo_inicial_cxc/cxp`.
+- Reglas: código = llave; celda vacía conserva; nunca borra (Activo = No desactiva); grises se ignoran; montos en lempiras con 2
+  decimales -> centavos; fechas AAAA-MM-DD; impuesto por código; Sí/No; llave repetida en el archivo = error.
+- **Conteo físico**: no cambia existencias; por bodega crea `conteo_fisico` + aprobación tipo `conteo_fisico`. Al aprobar
+  (`resolver_aprobacion`, admin o dueño con `inventario.ajustar`; nunca el que lo subió, salvo el dueño) se ajusta la DIFERENCIA
+  contada sobre la existencia de ese momento.
+
+**Clientes y proveedores con código:** columna nueva `tercero.codigo` (llave del Excel, no cambia). Los que ya existían quedaron
+T00001, T00002... por empresa en orden de creación; los nuevos sin código reciben el siguiente.
+
+**`resolver_aprobacion`**: misma firma; la de 041 pasa a `interno.resolver_aprobacion_041` y la pública despacha `conteo_fisico`.
+
+**Tablas nuevas:** `importacion_excel`, `conteo_fisico`. **Permiso nuevo:** `excel.importar` (dueño, admin).
+**Errores nuevos:** `EXCEL_CELDA`, `EXCEL_DESHACER` (interno; no llega al usuario).
+
+**Decisiones tomadas (a confirmar con el dueño)**
+- Categorías y unidades que no existen = error claro (no se crean solas desde productos): las categorías se suben antes en su
+  hoja; las unidades se crean en Ajustes.
+- Conteo físico a ciegas (el Excel no trae la existencia del sistema) y el ajuste aprobado aplica la diferencia, no la cantidad.
+- En clientes, "tipo" solo agrega papeles (cliente/proveedor); quitar uno se hace en la app.
+- Saldo inicial ya cargado con otro monto = error (se anula y se vuelve a subir); nunca se reemplaza solo.
+
+**Pendiente (honesto):** descripción, proveedor principal y ubicación del producto no existen como columnas (se pueden usar
+campos extra); campos extra para clientes y proveedores; la hoja "Existencias por sucursal" de solo lectura; el revisor debe
+revisar 0.12.0 (esta sesión no tiene los agentes constructor-maestro, revisor ni asesor-negocio).
+
 ## 0.11.0 (2026-10-04) — Etapa 3b-1: conciliación bancaria, libros de ISV, alertas y "¿cuánto gané hoy?"
 
 Migraciones nuevas 043-045 (las 001-042 no se tocaron). 126 pruebas (nuevas 124-126, con las cifras hechas a mano
