@@ -392,3 +392,34 @@ a dar seguimiento el primer día, sin trabas.
 - Control remoto: cerrar sesión, desactivar usuario al instante, bloquear
   acceso fuera de horario.
 - Reportes automáticos diario y semanal.
+
+## El Armador (herramienta del proveedor para armar cada programa)
+
+Visión del dueño: la base es una herramienta para ARMAR programas a la medida.
+El proveedor visita al cliente, analiza su negocio y decide qué encender. El
+cliente solo ve lo suyo (resuelve el riesgo "esto es muy grande para mí").
+
+- Pantalla con clics solo para el proveedor (no archivo + comando): marcar
+  módulos, límites, perfil, rubro; vista previa del menú del cliente; botón
+  Crear / Aplicar (usa por dentro la ficha y aplicar_ficha).
+- Cuestionario guiado para la visita que SUGIERE módulos según respuestas
+  (ej.: ¿vende al crédito? → Créditos; ¿varios cobran? → Turnos). El
+  proveedor decide al final.
+- Plantillas por rubro (ferretería, salón, taller, tienda, restaurante):
+  módulos, categorías, campos extra, palabras del rubro ("orden de trabajo",
+  "cita", "mesa"), reportes típicos.
+- Modo demostración con datos falsos por rubro, para vender.
+- Entregar con los datos del cliente ya cargados (Excel), su nombre y logo.
+- Menú del cliente solo con lo suyo: sin opciones grises ni bloqueadas.
+- Lista de clientes: ficha, módulos, versión, límites y lo que pagan.
+- Regla de oro: un solo programa para todos; lo único que cambia es la ficha.
+  Nada de código a la medida de un solo cliente: lo nuevo se agrega como
+  módulo para todos.
+
+Mejoras de la vista previa aprobadas por el dueño (asesor-negocio):
+"¿Cuánto gané hoy/este mes?" en grande; palabras sencillas en vez de
+contables; modo sencillo con pocas pestañas; letra 14-15 px y grises más
+oscuros; celular con forma de pago y cálculo del vuelto; cobrar por WhatsApp a
+quien debe; sello "funciona sin internet"; frase de cierre "Ganaste X,
+cobraste Y, te toca Z"; promoción sugerida automáticamente pero quien vende
+puede cambiarla (regla del dueño: nunca se suman).
