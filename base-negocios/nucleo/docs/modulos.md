@@ -18,6 +18,7 @@ PROCEDIMIENTOS P-09). El dueño no los cambia desde la app (puede pedirlos con
 | `apartados` (0.9.0) | Apartados con anticipo: reservan mercadería; anticipos como pasivo; se completan como venta. | ventas, inventario | `apartados.md` |
 | `comisiones` (0.9.0) | Comisiones de vendedores: devengo al cobrar, ajustes, pago por período. | ventas | `comisiones.md` |
 | `fondos` (0.10.0) | Fondos (reinversión, emergencias...), socios, reparto de la utilidad cobrada, uso de fondos, dividendos. | dinero | `fondos.md` |
+| `conciliacion` (0.11.0) | Conciliación bancaria con el estado de cuenta del banco: emparejar, diferencias, crear comisiones e intereses, cierre por mes. | dinero | `conciliacion.md` |
 
 Cobros, saldos iniciales de clientes, saldo a favor / vales y devoluciones (notas de
 crédito) son parte de `ventas` (decisión 0.9.0: todo negocio que vende necesita cobrar
@@ -78,6 +79,7 @@ Nunca se borra nada. Con el módulo apagado:
 | apartados | `cancelar_apartado` (libera la reserva y resuelve el anticipo) |
 | comisiones | `anular_pago_comisiones` |
 | fondos (0.10.0) | `anular_distribucion`, `anular_pago_dividendos` |
+| conciliacion (0.11.0) | `deshacer_emparejamiento` (de una conciliación abierta) |
 
   Decisión: **pagar** a un proveedor o **aprobar** una venta o un gasto
   pendiente son operaciones nuevas (mueven dinero o inventario): con su módulo
@@ -119,7 +121,8 @@ final de cada una se cierra enero con `cerrar_mes`: la foto cuadra con los libro
 cobrada con patrimonio coherente (reservas y dividendos = sus cuentas).
 
 El cierre de mes con foto, los estados por mes y la proyección de flujo son parte de
-`contabilidad` (todos los paquetes): ver `cierres.md`, `estados.md`, `proyecciones.md`.
+`contabilidad` (todos los paquetes): ver `cierres.md`, `estados.md`, `proyecciones.md`. Desde 0.11.0 también
+las alertas y "Mi negocio hoy" (`alertas.md`) y los libros de ISV (`libros_isv.md`, formato de Honduras).
 
 ## Para un módulo nuevo (por ejemplo comisiones u órdenes de trabajo)
 

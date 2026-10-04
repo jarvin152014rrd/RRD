@@ -49,7 +49,7 @@ PGDATABASE="$VIEJA" SIN_PREGUNTAR=1 SIN_RESPALDO=1 bash "$RAIZ/herramientas/migr
 [ "$(q "SELECT interno.cuenta_de($E, 'saldo_favor')")" = "2.1.04.03" ] || falla "2.1.04.02 era del cliente: se usa la siguiente"
 [ "$(q "SELECT count(*) FROM public.cuenta WHERE empresa_id = $E AND codigo IN ('2.1.04.03', '6.1.02.12', '4.1.01.04', '2.1.03.04', '6.1.01.04')")" = "5" ] \
   || falla "cuentas nuevas"
-[ "$(q "SELECT count(*) FROM public.modulo_dependencia")" = "9" ] || falla "dependencias (0.10.0: 9 con fondos)"
+[ "$(q "SELECT count(*) FROM public.modulo_dependencia")" = "10" ] || falla "dependencias (0.11.0: 10 con conciliacion)"
 [ "$(q "SELECT count(*) FROM public.modulo_activo WHERE modulo IN ('apartados', 'comisiones')")" = "0" ] || falla "módulos nuevos apagados"
 [ "$(q "SELECT string_agg(rol || ':' || permiso, ',' ORDER BY rol, permiso) FROM public.rol_permiso WHERE empresa_id = $E
         AND permiso IN ('cobros.anular', 'ventas.devolver', 'ventas.saldo_inicial', 'comisiones.ver')")" \

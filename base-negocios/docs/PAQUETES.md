@@ -9,9 +9,9 @@ para controlar su dinero.
 
 ## Módulos de cada paquete (nombres reales para la ficha)
 
-Lo que existe hoy (0.10.0). Lo demás de la lista de abajo llega en etapas
+Lo que existe hoy (0.11.0). Lo demás de la lista de abajo llega en etapas
 siguientes y se agregará aquí con su nombre de módulo. Dependencias en
-`nucleo/docs/modulos.md` (compras necesita inventario; fiscal_hn y comisiones necesitan ventas; apartados necesita ventas e inventario; fondos necesita dinero).
+`nucleo/docs/modulos.md` (compras necesita inventario; fiscal_hn y comisiones necesitan ventas; apartados necesita ventas e inventario; fondos y conciliacion necesitan dinero).
 
 | Módulo (ficha) | Esencial | Completo | Nota |
 |---|---|---|---|
@@ -24,6 +24,10 @@ siguientes y se agregará aquí con su nombre de módulo. Dependencias en
 | `apartados` | no (extra) | sí | apartados con anticipo; necesita ventas e inventario |
 | `comisiones` | no (extra) | sí | comisiones de vendedores; necesita ventas |
 | `fondos` | no (extra) | sí | fondos (reinversión, emergencias...), socios y reparto de la utilidad cobrada; necesita dinero |
+| `conciliacion` | no (extra) | sí | conciliación bancaria con el estado de cuenta del banco (CSV); necesita dinero |
+
+En todos los paquetes (sin módulo): alertas en un solo lugar y "Mi negocio hoy" (ganancia de hoy y del mes);
+libros de ISV de ventas y compras cuando se usa `fiscal_hn`.
 
 | Perfil y límites sugeridos (a confirmar con el dueño) | Esencial | Completo |
 |---|---|---|

@@ -152,6 +152,10 @@
             "fondos": {
               "description": "Fondos (reinversión, emergencias...) y reparto de utilidades a socios (necesita dinero).",
               "type": "boolean"
+            },
+            "conciliacion": {
+              "description": "Conciliación bancaria con el estado de cuenta del banco (necesita dinero).",
+              "type": "boolean"
             }
           }
         },
@@ -343,7 +347,8 @@
               "fiscal_hn",
               "apartados",
               "comisiones",
-              "fondos"
+              "fondos",
+              "conciliacion"
             ]
           }
         },

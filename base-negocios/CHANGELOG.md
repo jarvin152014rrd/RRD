@@ -4,6 +4,62 @@ Formato: versión (fecha) y lista de cambios. La versión vive en `VERSION_NUCLE
 y queda guardada en cada base al migrar (vista `version_esquema`).
 Números: MAYOR.MENOR.ARREGLO (ver `docs/CONVENCIONES.md`).
 
+## 0.11.0 (2026-10-04) — Etapa 3b-1: conciliación bancaria, libros de ISV, alertas y "¿cuánto gané hoy?"
+
+Migraciones nuevas 043-045 (las 001-042 no se tocaron). 126 pruebas (nuevas 124-126, con las cifras hechas a mano
+en sus comentarios). Los libros de ISV los **debe validar un contador hondureño** antes de presentarlos a la SAR.
+
+**Conciliación bancaria (043, módulo `conciliacion` -> dinero, `conciliacion.md`)** — `importar_estado_cuenta`
+(filas JSON que la app saca del CSV: fecha, descripción, referencia, monto con signo; solo bancos; la misma fila no se
+repite; reintento), emparejamiento automático por monto y fecha ± N días (gana la referencia y la fecha más cercana)
+y `emparejar_conciliacion`, `emparejar_manual`, `deshacer_emparejamiento` (motivo; solo abierta; no se borra),
+`marcar_conciliados_anteriores` (primera conciliación), `registrar_diferencia_banco` (comisión 6.2.01.02, intereses
+6.2.01.01 / 4.2.01.01 u otra cuenta de resultados; asiento + rastro + pareja), `cerrar_conciliacion` (mes terminado,
+en orden, solo si banco = sistema − pendientes del sistema + pendientes del banco; guarda la foto), `ver_conciliacion`,
+`v_conciliacion`. Tablas `conciliacion`, `banco_importacion`, `banco_movimiento`, `conciliacion_pareja`, `banco_diferencia`.
+
+**Libros de ISV (044, `libros_isv.md`)** — `libro_ventas`, `libro_compras`, `libros_isv` (contabilidad.ver): fecha,
+número, CAI, RTN, nombre, gravado 15 % / 18 % / otra tasa, exento, exonerado, ISV y total; notas de crédito y
+anulaciones de meses anteriores en negativo, anulada en el mismo mes en cero; `columnas` y `filas` para CSV/Excel;
+`cuadre` contra `isv_mes` (débito y crédito) y contra las ventas netas de los libros.
+
+**Alertas y "Mi negocio hoy" (045, `alertas.md`)** — `alertas_activas(empresa)`: lista uniforme (tipo, gravedad,
+título, mensaje sencillo, qué hacer, enlace, datos) de CAI, cierre de mes atrasado, cuentas en negativo, depósitos sin
+confirmar, diferencias de arqueo, aprobaciones, créditos vencidos, pagos fijos, mercadería por acabarse, conciliación,
+licencia y límites del plan, según los permisos de cada usuario (el cajero no ve dinero, bancos, créditos ni costos).
+Preferencias por usuario: `alerta_tipo`, `alerta_preferencia`, `mis_preferencias_alertas`,
+`guardar_preferencias_alertas`. `resumen_hoy(empresa)` (pedido del dueño): ventas y ganancia de hoy contra ayer,
+ganancia del mes contra el mes pasado (completo y a la misma fecha), dinero disponible, te deben (vencido aparte),
+debes; sin `inventario.costos` la ganancia va en null con `costos_ocultos`.
+
+**Permisos:** `conciliacion.ver` (dueño, admin, contador), `conciliacion.conciliar` y `conciliacion.registrar` (dueño,
+admin). Alertas y resumen: cualquier usuario de la empresa (cada parte con su permiso).
+
+**Cuentas (usos nuevos, ya estaban en la plantilla):** `comisiones_bancarias` 6.2.01.02, `intereses_pagados` 6.2.01.01,
+`intereses_ganados` 4.2.01.01.
+
+**Errores nuevos:** `CONCILIACION_CERRADA`, `CONCILIACION_NO_CUADRA`, `CONCILIACION_EN_ORDEN`, `NO_EMPAREJA`, `YA_CONCILIADO`.
+
+**Herramientas:** `ficha.py` y `personal/ficha.schema.json` aceptan `"conciliacion"`; `docs/PAQUETES.md`.
+
+**Decisiones tomadas (a confirmar con el dueño)**
+- Emparejamiento uno a uno; tolerancia de 3 días por defecto (0 a 15). Una conciliación cerrada no se reabre.
+- El saldo inicial de la cuenta de dinero es la apertura (no queda pendiente en la conciliación).
+- "Ventas de hoy" = total con ISV de las ventas emitidas y no anuladas; "ganancia de hoy" = ventas sin ISV − costo;
+  "ganancia del mes" = ventas − costo − gastos del 1 a hoy (de los libros).
+- Cierre de mes atrasado: el mes pasado se da hasta el día 10; un mes más viejo sin cerrar es alerta grave.
+- Licencia: avisa 15 días antes. Límites: al 80 % (igual que `lista_clientes.sh`).
+
+**Cambios que rompen (para quien ya usaba 0.10.0 en pruebas)**
+- Permiso nuevo `conciliacion.ver` para admin, contador y el proveedor con soporte (y `conciliar`/`registrar` para el
+  admin): se ajustaron las pruebas 19, 31, 48, 57 y 69. Dependencia nueva conciliacion -> dinero (10): 88, 93 y 101.
+
+**Pendiente (honesto):** emparejar varias filas del banco contra un movimiento; anular un movimiento creado desde la
+conciliación; CAI del proveedor en compras (columna vacía en el libro de compras); formato oficial de la SAR; la
+conciliación no se sumó a la prueba 89 (no controla cuentas; su cuadre de dinero = libros está en la 124); no se
+consultó a los agentes constructor-maestro, revisor ni asesor-negocio (esta sesión no los tiene): el revisor debe
+revisar 0.11.0.
+
 ## 0.10.0 (2026-10-04) — Etapa 3a: cierre de mes con foto, estados por mes, fondos y proyección
 
 Migraciones nuevas 040-042 (las 001-039 no se tocaron). 123 pruebas (nuevas 120-123; la 89 ahora con 25

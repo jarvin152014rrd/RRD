@@ -1,4 +1,4 @@
-# Pendientes (núcleo 0.10.0, 123 pruebas OK)
+# Pendientes (núcleo 0.11.0, 126 pruebas OK)
 
 Estado: etapa 2 terminada. Las correcciones de la revisión de la etapa 2 están
 HECHAS en la migración 038 (núcleo 0.9.1) y las de la revisión de 0.9.1 en la
@@ -20,8 +20,23 @@ etapa 3.
   balance, flujo, ISV para la SAR).
 - FALTA (menor): anular un uso de fondo ya aplicado (hoy lo corrige el contador con un asiento); cierre
   anual (pasar el resultado del año a utilidades acumuladas).
-- Siguiente (etapa 3b): conciliación bancaria con CSV, libros de ISV, Excel de ida y vuelta, crecimiento
-  por sucursal, centro de control del dueño, alertas.
+- Siguiente (etapa 3b): ver "Etapa 3b-1" arriba.
+
+## Etapa 3b-1 (HECHA en 0.11.0, migraciones 043-045, pruebas 124-126)
+
+- HECHO: conciliación bancaria (módulo `conciliacion`): cargar estado de cuenta, emparejar automático y a mano,
+  deshacer con motivo, diferencias, crear comisión e intereses, cierre por mes (`conciliacion.md`).
+- HECHO: libros de ISV de ventas y compras por mes, cuadrados con `isv_mes` (`libros_isv.md`).
+- HECHO: alertas en un solo lugar con permisos y preferencias por usuario; "Mi negocio hoy" con ganancia de hoy
+  y del mes (`alertas.md`).
+- FALTA: que el revisor revise 0.11.0 y que un contador valide los libros de ISV (formato SAR).
+- FALTA (menor): emparejar varias filas del banco contra un movimiento; anular un movimiento creado desde la
+  conciliación; guardar el CAI del proveedor en las compras.
+- Siguiente (etapa 3b-2): Excel de ida y vuelta, crecimiento por sucursal, resto del centro de control del dueño.
+
+## Decisiones del dueño para el final
+
+- Precio de venta del producto: se decide al final, decisión del dueño.
 
 ## Corregir de la revisión de 0.9.1 (todo HECHO en 0.9.2)
 
@@ -77,9 +92,8 @@ MENOR
 ## Después de corregir
 
 1. Revisor confirma las correcciones.
-2. Etapa 3: 3a HECHA en 0.10.0 (ver arriba). Falta 3b: conciliación bancaria,
-   libros de ISV, Excel de ida y vuelta, crecimiento por sucursal, centro de
-   control del dueño, alertas.
+2. Etapa 3: 3a HECHA en 0.10.0 y 3b-1 en 0.11.0 (ver arriba). Falta 3b-2: Excel
+   de ida y vuelta, crecimiento por sucursal, resto del centro de control del dueño.
 3. Etapas 4 a 7: pantallas (PWA), celular y sin internet, prueba real en
    Supabase, preparación para vender.
 
@@ -107,3 +121,7 @@ MENOR
   vencidos no se asumen; POS por liquidar no cuenta como disponible). Confirmar.
 - 0.10.0: el cierre bloquea solo con descuadre contable; un módulo que no cuadra con su cuenta sale como
   "alerta de cuadre" sin bloquear (así lo dice REQUISITOS). Confirmar.
+- 0.11.0: conciliación uno a uno con 3 días de tolerancia; una conciliación cerrada no se reabre. Confirmar.
+- 0.11.0 [DINERO]: "ganancia de hoy" = ventas sin ISV − costo; "ganancia del mes" = ventas − costo − gastos del 1 a
+  hoy (de los libros); "ventas de hoy" con ISV. Confirmar.
+- 0.11.0: alertas — cierre del mes pasado se espera hasta el día 10; licencia avisa 15 días antes. Confirmar.
