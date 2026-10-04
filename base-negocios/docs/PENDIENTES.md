@@ -1,4 +1,4 @@
-# Pendientes (núcleo 0.12.0, 127 pruebas OK)
+# Pendientes (núcleo 0.13.0, 128 pruebas OK)
 
 Estado: etapa 2 terminada. Las correcciones de la revisión de la etapa 2 están
 HECHAS en la migración 038 (núcleo 0.9.1) y las de la revisión de 0.9.1 en la
@@ -43,7 +43,18 @@ etapa 3.
 - FALTA: que el revisor revise 0.12.0.
 - FALTA (menor): descripción, proveedor principal y ubicación del producto (hoy: campos extra); campos extra de clientes;
   hoja de solo lectura "Existencias por sucursal".
-- Siguiente (etapa 3b-2b): crecimiento por sucursal y resto del centro de control del dueño.
+- Siguiente (etapa 3b-2b): ver abajo.
+
+## Etapa 3b-2b (HECHA en 0.13.0, migración 047, prueba 128)
+
+- HECHO: usuarios restringidos por sucursal (lecturas y operaciones en el servidor), reporte por sucursal y total, envío de
+  dinero entre sucursales en tránsito, recepción de traslados de mercadería, precios por sucursal (`sucursales.md`).
+- HECHO: vigilancia por empleado, bitácora legible, cerrar sesión a distancia, horario por puesto (`control.md`).
+- HECHO: prueba de volumen `herramientas/prueba_volumen.sh` (20,000 ventas; tiempos en CHANGELOG 0.13.0).
+- FALTA: que el revisor revise 0.13.0.
+- FALTA: filtrar por sucursal los reportes de toda la empresa (estados, libros, resumen_hoy, alertas, dónde está mi dinero);
+  envíos sin recibir en alertas; Edge Function que revoque tokens de Supabase Auth al cerrar sesión; reportes automáticos diario
+  y semanal; aviso al proveedor cuando la base se acerque al límite de su plan; prueba con cientos de miles de ventas en Supabase real.
 
 ## Decisiones del dueño para el final
 
@@ -103,8 +114,8 @@ MENOR
 ## Después de corregir
 
 1. Revisor confirma las correcciones.
-2. Etapa 3: 3a HECHA en 0.10.0, 3b-1 en 0.11.0 y 3b-2a (Excel) en 0.12.0. Falta 3b-2b:
-   crecimiento por sucursal y resto del centro de control del dueño.
+2. Etapa 3: 3a HECHA en 0.10.0, 3b-1 en 0.11.0, 3b-2a (Excel) en 0.12.0 y 3b-2b (sucursales y
+   centro de control) en 0.13.0.
 3. Etapas 4 a 7: pantallas (PWA), celular y sin internet, prueba real en
    Supabase, preparación para vender.
 
@@ -139,3 +150,5 @@ MENOR
 - 0.12.0: categorías y unidades que no existen dan error (no se crean solas desde la hoja de productos). Confirmar.
 - 0.12.0: conteo físico a ciegas; al aprobar se aplica la diferencia contada (no la cantidad). Confirmar.
 - 0.12.0: en clientes, la columna "tipo" solo agrega papeles; un saldo inicial ya cargado con otro monto da error. Confirmar.
+- 0.13.0: usuario restringido ve lo de toda la empresa (banco sin sucursal); ventas del empleado = las que registró; el horario
+  bloquea operar, no consultar; la mercadería trasladada cuenta en el destino desde que sale. Confirmar.

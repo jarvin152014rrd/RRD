@@ -4,6 +4,58 @@ Formato: versión (fecha) y lista de cambios. La versión vive en `VERSION_NUCLE
 y queda guardada en cada base al migrar (vista `version_esquema`).
 Números: MAYOR.MENOR.ARREGLO (ver `docs/CONVENCIONES.md`).
 
+## 0.13.0 (2026-10-04) — Etapa 3b-2b: sucursales y centro de control del dueño
+
+Migración nueva 047 (las 001-046 no se tocaron). 128 pruebas (nueva 128, con las cifras hechas a mano en sus comentarios;
+ninguna anterior cambió). Guías: `nucleo/docs/sucursales.md` y `nucleo/docs/control.md`.
+
+**Usuarios por sucursal** — `asignar_sucursales_usuario(empresa, usuario, sucursales, motivo)` (usuarios.administrar; lista
+vacía = todas; nunca al dueño ni al proveedor; nadie a sí mismo; el admin restringido no amplía su alcance). En el servidor:
+políticas RLS restrictivas y vistas del sistema filtradas (ventas, cobros, turnos, gastos, cajas, bodegas, existencias, kardex,
+cuentas y rastro del dinero...) y un trigger en cada venta, cobro, turno, gasto, apartado, devolución, compra, kardex y rastro
+del dinero (`SUCURSAL_NO_PERMITIDA`), así vale para toda RPC.
+
+**Reportes por sucursal** — `reporte_sucursales(empresa, desde, hasta)`: ventas, ventas sin ISV, costo, ganancia, gastos y dinero
+por sucursal, fila "de toda la empresa" y total, con participación en ventas; cada parte con su permiso.
+
+**Entre sucursales** — `enviar_dinero_sucursal` / `recibir_dinero_sucursal`: el dinero queda en tránsito ("Envíos entre
+sucursales") hasta que el destino lo recibe; asientos y rastro; se anula antes de recibir con `anular_operacion_dinero`
+(operacion_dinero.tipo nuevo `envio_sucursal`). Mercadería: el traslado ya dejaba salida y llegada en el kardex; nuevo
+`confirmar_recepcion_traslado` (tabla `traslado_recepcion`). `pendientes_entre_sucursales` lista lo que falta recibir.
+
+**Precios por sucursal (opcional)** — `activar_precios_sucursal` (solo dueño), `fijar_precio_sucursal` (productos.precios; NULL =
+vuelve al general), `precio_en_sucursal`. La venta usa el precio de la sucursal de su caja (`interno.caja_de_venta` y
+`interno.producto_de` reemplazadas, misma firma). Historial en `producto_precio.sucursal_id`.
+
+**Centro de control** — `vigilancia_empleados` (ventas, ganancia solo con costos, descuentos, anulaciones pedidas, diferencias de
+caja, horario de uso desde la bitácora), `bitacora_legible` (filtros persona, fechas, tipo; textos sencillos; páginas),
+`cerrar_sesion_usuario` (el servidor rechaza la sesión anterior con `SESION_CERRADA` usando el `iat` del token),
+`configurar_horario_acceso` por puesto (`FUERA_DE_HORARIO` al operar; el dueño nunca), `mi_estado_sesion` para la app.
+`interno.exigir_escritura`, `exigir_lectura` y `exigir_miembro` reemplazadas (misma firma) para revisar sesión y horario.
+Desactivar usuario: ya era al instante (confirmado en la prueba).
+
+**Volumen** — `herramientas/prueba_volumen.sh` (20,000 ventas reales; fuera de probar.sh: tarda ~8 min). Con 20,000 ventas
+(base local, mejor de 3): resumen_hoy 411 ms, alertas_activas 20 ms, estado_resultados de un mes 126 ms, libro_ventas de un mes
+547 ms, reporte_sucursales de 90 días 20 ms, vigilancia_empleados de 30 días 674 ms. Hallazgo: registrar cada venta se volvía más
+lento con el volumen (24 ms al inicio, ~50 ms a las 17,000) porque la revisión del id_operacion recorría tablas enteras; con índices
+en todas las columnas `*id_operacion` y un índice del saldo de dinero, las 20,000 ventas bajaron de 760 s a 463 s. Otros índices
+nuevos: bitácora por usuario, ventas por sucursal y por quien emitió.
+
+**Tablas nuevas:** `usuario_sucursal`, `traslado_recepcion`, `producto_precio_sucursal`, `horario_acceso`. **Columnas:**
+`empresa.precios_por_sucursal`, `producto_precio.sucursal_id`, `usuario_empresa.sesion_cerrada_en/_por`.
+**Errores nuevos:** `SUCURSAL_NO_PERMITIDA`, `SESION_CERRADA`, `FUERA_DE_HORARIO`. **Permisos:** ninguno nuevo (se usan los de siempre).
+
+**Decisiones tomadas (a confirmar con el dueño)**
+- Restringido = solo esas sucursales; lo de toda la empresa (banco sin sucursal) se sigue viendo.
+- Ventas del empleado = las que él registró (no el vendedor asignado). Horario de uso = lo que guardó (no lo que consultó).
+- El horario bloquea operar, no consultar. Sin turnos que pasen la medianoche.
+- La mercadería trasladada cuenta en el destino desde que sale; la recepción es una confirmación (sin bodega "en camino").
+
+**Pendiente (honesto):** los reportes de toda la empresa (estados, libros ISV, resumen_hoy, alertas, dónde está mi dinero) no se
+filtran por sucursal (dar esos permisos solo a usuarios sin restricción); envíos sin recibir aún no salen en alertas; revocar los
+tokens de Supabase Auth al cerrar sesión (Edge Function de la etapa de pantallas); el revisor debe revisar 0.13.0 (esta sesión no
+tiene los agentes constructor-maestro, revisor ni asesor-negocio).
+
 ## 0.12.0 (2026-10-04) — Etapa 3b-2a: Excel de ida y vuelta
 
 Migración nueva 046 (las 001-045 no se tocaron). 127 pruebas (nueva 127; se ajustó la 31: el admin tiene `excel.importar`).
