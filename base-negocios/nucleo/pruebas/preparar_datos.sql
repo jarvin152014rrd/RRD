@@ -278,6 +278,46 @@ BEGIN
   VALUES (p_empresa, p_user, p_porcentaje, p_desde, 'Prueba: porcentaje fijado antes de las ventas', p_user);
 END $$;
 
+-- Etapa 3a: enero de 2026 con cifras conocidas (las hechas a mano están en prueba_120), como dueño y
+-- sin turnos obligatorios, sobre preparar_ventas(false):
+--   10/01 venta de contado (efectivo, CAJA1): 10 tornillos = 15,000 (13,043 + ISV 1,957; costo 10,000)
+--   12/01 venta al crédito a CLI1 (V_ENE_2): 1 galón = 45,000 (38,136 + ISV 6,864; costo 30,000; vence 11/02)
+--   15/01 venta de contado con tarjeta (POS): 2 h de servicio = 46,000 (40,000 + ISV 6,000)
+--   20/01 cobro de CLI1 en efectivo a V_ENE_2: 20,000 (queda 25,000)
+--   22/01 gasto de energía desde BANCO: 11,500
+--   25/01 abono a la compra F-INI-1 desde BANCO: 100,000
+--   28/01 depósito de FUERTE a BANCO: 50,000 (DEP_ENE, queda en tránsito)
+-- (plpgsql: carga también en bases viejas.)
+CREATE FUNCTION pruebas.preparar_enero() RETURNS void LANGUAGE plpgsql AS $$
+DECLARE e uuid := pruebas.empresa('A');
+BEGIN
+  PERFORM pruebas.preparar_ventas(false);
+  PERFORM public.configurar_empresa(e, '{"turnos_obligatorios": false}', 'Prueba de cierre de mes');
+  PERFORM public.registrar_venta(e, pruebas.venta('P1', 10, 'efectivo') || '{"fecha": "2026-01-10"}', gen_random_uuid());
+  PERFORM pruebas.guardar('V_ENE_2', (public.registrar_venta(e, pruebas.venta('P3', 1, 'credito', 'CLI1') || '{"fecha": "2026-01-12"}',
+    gen_random_uuid())->>'venta_id')::uuid);
+  PERFORM public.registrar_venta(e, pruebas.venta('S1', 2, 'tarjeta') || '{"fecha": "2026-01-15"}', gen_random_uuid());
+  PERFORM public.registrar_cobro(e, jsonb_build_object('cliente_id', pruebas.id('CLI1'), 'fecha', '2026-01-20',
+    'pagos', '[{"forma":"efectivo","monto_centavos":20000}]'::jsonb), gen_random_uuid());
+  PERFORM public.registrar_gasto(e, jsonb_build_object('cuenta_dinero_id', pruebas.id('BANCO'), 'categoria_id', pruebas.id('CAT_LUZ'),
+    'monto_centavos', 11500, 'descripcion', 'Energía de enero', 'fecha', '2026-01-22'), gen_random_uuid());
+  PERFORM public.pagar_proveedor(e, (SELECT id FROM public.compra WHERE empresa_id = e AND numero_documento = 'F-INI-1'), 100000,
+    '2026-01-25', NULL, gen_random_uuid(), 'Abono', NULL, pruebas.id('BANCO'));
+  PERFORM pruebas.guardar('DEP_ENE', (public.trasladar_dinero(e, jsonb_build_object('tipo', 'deposito', 'origen_id', pruebas.id('FUERTE'),
+    'destino_id', pruebas.id('BANCO'), 'monto_centavos', 50000, 'fecha', '2026-01-28', 'referencia', 'Boleta 1'), gen_random_uuid())->>'operacion_id')::uuid);
+END $$;
+
+-- Usuario contador de la empresa A (lo crea el dueño). Deja la sesión como dueno_a.
+CREATE FUNCTION pruebas.crear_contador() RETURNS void LANGUAGE plpgsql AS $$
+DECLARE cont uuid;
+BEGIN
+  PERFORM pruebas.como('superusuario');
+  INSERT INTO auth.users (email) VALUES ('contador@prueba.hn') RETURNING id INTO cont;
+  INSERT INTO pruebas.usuario (apodo, id) VALUES ('contador', cont);
+  PERFORM pruebas.como('dueno_a');
+  PERFORM public.agregar_usuario_empresa(pruebas.empresa('A'), 'contador@prueba.hn', 'contador', 'Lic. Contador');
+END $$;
+
 GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA pruebas TO anon, authenticated, service_role;
 
 -- ---------------------------------------------------------------------
