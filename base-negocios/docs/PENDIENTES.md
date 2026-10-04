@@ -1,10 +1,27 @@
-# Pendientes (núcleo 0.9.2, 119 pruebas OK)
+# Pendientes (núcleo 0.10.0, 123 pruebas OK)
 
 Estado: etapa 2 terminada. Las correcciones de la revisión de la etapa 2 están
 HECHAS en la migración 038 (núcleo 0.9.1) y las de la revisión de 0.9.1 en la
 migración 039 (núcleo 0.9.2), cada una con su prueba (falla contra la versión
 anterior y pasa con la nueva). Falta que el revisor las confirme antes de la
 etapa 3.
+
+## Etapa 3a (HECHA en 0.10.0, migraciones 040-042, pruebas 120-123)
+
+- HECHO: cierre de mes con foto inmutable, advertencias, versiones al reabrir (`cierres.md`).
+- HECHO: selector de meses (foto o "preliminar"), comparativo, utilidad cobrada vs facturada,
+  exportación JSON para PDF/Excel (`estados.md`).
+- HECHO: módulo `fondos` (socios, fondos con meta, regla, reparto, uso con aprobación del dueño,
+  dividendos) (`fondos.md`).
+- HECHO: proyección de flujo por semana con alerta (`proyecciones.md`).
+- HECHO: prueba 89 con 25 combinaciones (fondos encendido, apagado y a mitad de mes) y cierre de enero
+  en cada una cuadrando con los libros.
+- FALTA: que el revisor revise 0.10.0 y que un contador hondureño valide los formatos (resultados,
+  balance, flujo, ISV para la SAR).
+- FALTA (menor): anular un uso de fondo ya aplicado (hoy lo corrige el contador con un asiento); cierre
+  anual (pasar el resultado del año a utilidades acumuladas).
+- Siguiente (etapa 3b): conciliación bancaria con CSV, libros de ISV, Excel de ida y vuelta, crecimiento
+  por sucursal, centro de control del dueño, alertas.
 
 ## Corregir de la revisión de 0.9.1 (todo HECHO en 0.9.2)
 
@@ -60,10 +77,9 @@ MENOR
 ## Después de corregir
 
 1. Revisor confirma las correcciones.
-2. Etapa 3: cierre de mes con selector, estados descargables (sin emojis en
-   PDF), fondos y reparto de utilidades sobre lo cobrado, proyección de
-   cobros y pagos, conciliación bancaria, libros de ISV, Excel de ida y
-   vuelta, crecimiento por sucursal, centro de control del dueño, alertas.
+2. Etapa 3: 3a HECHA en 0.10.0 (ver arriba). Falta 3b: conciliación bancaria,
+   libros de ISV, Excel de ida y vuelta, crecimiento por sucursal, centro de
+   control del dueño, alertas.
 3. Etapas 4 a 7: pantallas (PWA), celular y sin internet, prueba real en
    Supabase, preparación para vender.
 
@@ -81,3 +97,13 @@ MENOR
 - 0.9.2: la comisión de un vendedor dado de baja se genera igual (recomendado) y
   el dueño decide al liquidar; si no la paga, hoy la corrige el contador con un
   asiento (no hay función para anularla). Confirmar.
+- 0.10.0 [DINERO]: utilidad cobrada = utilidad neta − aumento de la utilidad por cobrar (margen
+  proporcional al saldo de cada factura al crédito). Confirmar que así se quiere repartir.
+- 0.10.0 [DINERO]: el reparto usa la foto del cierre; si el mes se reabre y cambia, el reparto queda y el
+  nuevo cierre lo advierte (el dueño decide anular y repartir otra vez). Confirmar.
+- 0.10.0 [DINERO]: usar un fondo lo decide solo el dueño (otro puesto solo lo pide si el dueño le da el
+  permiso); el gasto pasa por los resultados del mes. Confirmar.
+- 0.10.0 [DINERO]: proyección conservadora (CxP vencidas, comisiones y dividendos en la semana 1; cobros
+  vencidos no se asumen; POS por liquidar no cuenta como disponible). Confirmar.
+- 0.10.0: el cierre bloquea solo con descuadre contable; un módulo que no cuadra con su cuenta sale como
+  "alerta de cuadre" sin bloquear (así lo dice REQUISITOS). Confirmar.

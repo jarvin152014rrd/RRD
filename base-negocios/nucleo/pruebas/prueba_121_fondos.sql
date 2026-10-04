@@ -1,4 +1,14 @@
 -- PRUEBA: fondos y reparto de utilidades (cifras a mano): módulo "fondos" (necesita dinero); socios y fondos con meta (monto o meses de pagos fijos) solo del dueño; regla guardada que suma 100 %; se reparte la utilidad COBRADA de un mes cerrado (abierto: MES_ABIERTO; dos veces: YA_DISTRIBUIDO; negativa: SIN_UTILIDAD_COBRADA) con asiento de patrimonio (reservas y dividendos por pagar) y separación física opcional; se anula con contra-asiento (no si ya se pagó o se usó); dividendos pagados y anulados; usar un fondo pide comprobante y la aprobación del dueño y libera la reserva con rastro; reservas y dividendos sin asientos manuales; estado de cada fondo; el balance del cierre sigue cuadrando; apagado solo corrige
+
+-- Ayudantes de esta prueba (leen sin RLS, como superusuario).
+CREATE FUNCTION pruebas.f_saldo(p_fondo uuid) RETURNS bigint LANGUAGE sql STABLE SECURITY DEFINER AS
+  $$ SELECT interno.saldo_fondo(p_fondo) $$;
+CREATE FUNCTION pruebas.f_dividendos(p_empresa uuid) RETURNS bigint LANGUAGE sql STABLE SECURITY DEFINER AS
+  $$ SELECT interno.total_dividendos_por_pagar(p_empresa) $$;
+CREATE FUNCTION pruebas.f_dinero(p_cuenta uuid) RETURNS bigint LANGUAGE sql STABLE SECURITY DEFINER AS
+  $$ SELECT interno.saldo_dinero(p_cuenta) $$;
+GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA pruebas TO anon, authenticated, service_role;
+
 DO $$
 DECLARE
   e    uuid := pruebas.empresa('A');
@@ -74,7 +84,7 @@ BEGIN
   PERFORM pruebas.afirmar(pruebas.saldo_libros(e, '3.3.01.02') = -35159 AND pruebas.saldo_libros(e, '3.2.02.01') = 14063
     AND pruebas.saldo_libros(e, '3.2.02.02') = 10548 AND pruebas.saldo_libros(e, '2.1.01.03') = 10548, 'asiento de patrimonio');
   -- Separación física: solo emergencias tiene cuenta: BANCO 888,500 - 10,548 = 877,952; Banco fondos 10,548.
-  PERFORM pruebas.afirmar(pruebas.dinero('BANCO') = 877952 AND interno.saldo_dinero(bf) = 10548, 'separación física con rastro');
+  PERFORM pruebas.afirmar(pruebas.dinero('BANCO') = 877952 AND pruebas.f_dinero(bf) = 10548, 'separación física con rastro');
   r := public.distribuir_utilidades(e, 2026, 1, jsonb_build_object('fecha', '2026-02-15', 'separar_desde', pruebas.id('BANCO')), 'Reparto de enero', d1);
   PERFORM pruebas.afirmar((r->>'duplicado')::boolean, 'reintento = el mismo reparto');
   PERFORM pruebas.debe_fallar(format('SELECT public.distribuir_utilidades(%L, 2026, 1, %L, %L, gen_random_uuid())', e, '{"fecha":"2026-02-15"}',
@@ -82,11 +92,11 @@ BEGIN
   -- Anular: contra-asientos y el dinero vuelve al BANCO.
   r := public.anular_distribucion((SELECT id FROM public.distribucion WHERE id_operacion = d1), 'Porcentajes equivocados', gen_random_uuid(), '2026-02-15');
   PERFORM pruebas.afirmar(pruebas.saldo_libros(e, '3.3.01.02') = 0 AND pruebas.saldo_libros(e, '3.2.02.01') = 0 AND pruebas.saldo_libros(e, '2.1.01.03') = 0
-    AND pruebas.dinero('BANCO') = 888500 AND interno.saldo_dinero(bf) = 0, 'anulación del reparto');
+    AND pruebas.dinero('BANCO') = 888500 AND pruebas.f_dinero(bf) = 0, 'anulación del reparto');
   -- Otra vez con la regla guardada y sin separar.
   d2 := gen_random_uuid();
   r := public.distribuir_utilidades(e, 2026, 1, '{"fecha": "2026-02-15"}', 'Reparto de enero corregido', d2);
-  PERFORM pruebas.afirmar((r->>'base_centavos')::bigint = 35159 AND r->>'asiento_separacion_id' IS NULL AND interno.saldo_fondo(emer) = 10548,
+  PERFORM pruebas.afirmar((r->>'base_centavos')::bigint = 35159 AND r->>'asiento_separacion_id' IS NULL AND pruebas.f_saldo(emer) = 10548,
     'segundo reparto con la regla guardada');
 
   -- ===================== Dividendos =====================
@@ -98,7 +108,7 @@ BEGIN
   PERFORM pruebas.debe_fallar(format('SELECT public.pagar_dividendos(%L, %L, gen_random_uuid())', e,
     jsonb_build_object('socio_id', sa, 'cuenta_dinero_id', pruebas.id('BANCO'), 'fecha', '2026-02-16')), 'NADA_QUE_PAGAR', 'al dueño ya se le pagó');
   -- 10,548 - 6,329 - 2,000 = 2,219 por pagar; BANCO 888,500 - 8,329 = 880,171.
-  PERFORM pruebas.afirmar(pruebas.saldo_libros(e, '2.1.01.03') = 2219 AND interno.total_dividendos_por_pagar(e) = 2219
+  PERFORM pruebas.afirmar(pruebas.saldo_libros(e, '2.1.01.03') = 2219 AND pruebas.f_dividendos(e) = 2219
     AND pruebas.dinero('BANCO') = 880171, 'dividendos pagados');
   PERFORM pruebas.debe_fallar(format('SELECT public.anular_distribucion(%L, %L, gen_random_uuid())', (SELECT id FROM public.distribucion WHERE id_operacion = d2),
     'Ya no sirve'), 'DISTRIBUCION_USADA', 'no se anula con dividendos pagados');
@@ -135,7 +145,7 @@ BEGIN
   PERFORM public.trasladar_dinero(e, jsonb_build_object('tipo', 'traslado', 'origen_id', pruebas.id('BANCO'), 'destino_id', bf, 'monto_centavos', 7548,
     'fecha', '2026-02-18', 'referencia', 'Separar emergencias'), gen_random_uuid());
   u := public.resolver_aprobacion(apr, true, 'Aprobado', gen_random_uuid());
-  PERFORM pruebas.afirmar(u->>'estado' = 'aplicado' AND (u->>'saldo_fondo_centavos')::bigint = 6548 AND interno.saldo_dinero(bf) = 6548,
+  PERFORM pruebas.afirmar(u->>'estado' = 'aplicado' AND (u->>'saldo_fondo_centavos')::bigint = 6548 AND pruebas.f_dinero(bf) = 6548,
     'aprobado por el dueño: ' || u::text);
   -- Nadie mueve la reserva ni los dividendos con un asiento manual.
   PERFORM pruebas.debe_fallar(pruebas.sql_registrar(e, '2026-02-20', pruebas.lineas('3.2.02.02', '3.3.01.01', 100)), 'CUENTA_CONTROLADA', 'reserva sin asiento manual');
@@ -190,7 +200,7 @@ BEGIN
     jsonb_build_object('monto_centavos', 100, 'cuenta_dinero_id', pruebas.id('BANCO'), 'cuenta_destino', '6.1.02.06',
                        'comprobante', pruebas.comprobante('x.jpg')), 'Apagado'), 'MODULO_INACTIVO', 'apagado no usa');
   PERFORM public.anular_pago_dividendos(pg, 'Pago duplicado', gen_random_uuid());
-  PERFORM pruebas.afirmar(pruebas.saldo_libros(e, '2.1.01.03') = 4219 AND interno.total_dividendos_por_pagar(e) = 4219, 'anular pago con el módulo apagado');
+  PERFORM pruebas.afirmar(pruebas.saldo_libros(e, '2.1.01.03') = 4219 AND pruebas.f_dividendos(e) = 4219, 'anular pago con el módulo apagado');
   PERFORM pruebas.debe_fallar(pruebas.sql_registrar(e, '2026-03-02', pruebas.lineas('2.1.01.03', '3.3.01.01', 100)), 'CUENTA_CONTROLADA', 'apagado sigue controlada');
   PERFORM pruebas.como('superusuario');
   UPDATE public.modulo_activo SET activo = true WHERE empresa_id = e AND modulo = 'fondos';   -- dividendos = libros: no pide nada

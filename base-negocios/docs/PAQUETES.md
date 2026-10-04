@@ -9,9 +9,9 @@ para controlar su dinero.
 
 ## Módulos de cada paquete (nombres reales para la ficha)
 
-Lo que existe hoy (0.9.0). Lo demás de la lista de abajo llega en etapas
+Lo que existe hoy (0.10.0). Lo demás de la lista de abajo llega en etapas
 siguientes y se agregará aquí con su nombre de módulo. Dependencias en
-`nucleo/docs/modulos.md` (compras necesita inventario; fiscal_hn y comisiones necesitan ventas; apartados necesita ventas e inventario).
+`nucleo/docs/modulos.md` (compras necesita inventario; fiscal_hn y comisiones necesitan ventas; apartados necesita ventas e inventario; fondos necesita dinero).
 
 | Módulo (ficha) | Esencial | Completo | Nota |
 |---|---|---|---|
@@ -23,6 +23,7 @@ siguientes y se agregará aquí con su nombre de módulo. Dependencias en
 | `fiscal_hn` (`"regimen_fiscal"`) | extra | extra | facturas y notas de crédito con CAI; necesita ventas |
 | `apartados` | no (extra) | sí | apartados con anticipo; necesita ventas e inventario |
 | `comisiones` | no (extra) | sí | comisiones de vendedores; necesita ventas |
+| `fondos` | no (extra) | sí | fondos (reinversión, emergencias...), socios y reparto de la utilidad cobrada; necesita dinero |
 
 | Perfil y límites sugeridos (a confirmar con el dueño) | Esencial | Completo |
 |---|---|---|
@@ -49,7 +50,8 @@ Objetivo: dejar de perder dinero y saber dónde está.
 - Gastos y pagos fijos.
 - Cajas, bancos y caja chica con rastro completo.
 - "¿Dónde está mi dinero hoy?" y resumen del negocio.
-- Cierre de mes con selector de meses.
+- Cierre de mes con foto, selector de meses y estados descargables (en todos los paquetes: es parte de contabilidad).
+- Proyección de flujo de caja a 30/60/90 días (parte de contabilidad).
 - Excel de ida y vuelta. Uso en celular.
 - Perfil sugerido: pequeño (contabilidad trabaja por dentro, sin turnos
   obligatorios).

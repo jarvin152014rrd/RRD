@@ -12,3 +12,6 @@
 - Una anulación cuenta en la fecha del contra-asiento.
 
 Permiso `contabilidad.ver` (o `service_role`).
+
+**0.10.0:** estados del mes ya armados (resultados, balance, flujo, CxC, CxP, inventario,
+dinero, ISV), comparativo y exportación: `estados.md`. Proyección: `proyecciones.md`.

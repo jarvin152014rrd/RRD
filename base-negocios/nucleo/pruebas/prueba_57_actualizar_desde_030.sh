@@ -58,7 +58,7 @@ ULTIMA="$(ls "$RAIZ"/nucleo/sql/migraciones/[0-9][0-9][0-9]_*.sql | tail -1 | xa
   || falla "volvió un permiso que el dueño había quitado"
 [ "$(q "SELECT count(*) FROM public.rol_permiso WHERE empresa_id = pruebas.empresa('A') AND rol = 'admin' AND permiso IN ('terceros.ver', 'inventario.anular')")" = "2" ] \
   || falla "el admin no recibió los permisos nuevos"
-[ "$(q "SELECT count(*) FROM public.rol_permiso WHERE empresa_id = pruebas.empresa('A') AND rol = 'contador'")" = "10" ] || falla "faltan permisos del contador"
+[ "$(q "SELECT count(*) FROM public.rol_permiso WHERE empresa_id = pruebas.empresa('A') AND rol = 'contador'")" = "11" ] || falla "faltan permisos del contador"
 [ "$(q "SELECT count(*) FROM public.permiso p WHERE NOT EXISTS (SELECT 1 FROM public.rol_permiso r WHERE r.empresa_id = pruebas.empresa('A') AND r.rol = 'dueno' AND r.permiso = p.codigo)")" = "0" ] \
   || falla "el dueño no tiene todos los permisos"
 # Precios de antes: SIN ISV (P1 1,500 -> con ISV 1,500 + 225 = 1,725). El defecto nuevo de la empresa: con ISV.

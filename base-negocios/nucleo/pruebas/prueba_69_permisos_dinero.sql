@@ -37,7 +37,7 @@ BEGIN
   PERFORM pruebas.como('vendedor_a');
   PERFORM pruebas.afirmar(public.mi_perfil()->'permisos' = '["apartados.registrar", "inventario.ver", "terceros.editar", "terceros.ver", "ventas.cotizar", "ventas.solicitar_anulacion", "ventas.vender"]', 'vendedor: nada de dinero');
   PERFORM pruebas.como('contador');
-  PERFORM pruebas.afirmar(public.mi_perfil()->'permisos' = '["aprobaciones.ver", "bitacora.ver", "comisiones.ver", "compras.ver", "contabilidad.ver", "dinero.ver", "inventario.costos", "inventario.ver", "terceros.ver", "ventas.ver"]',
+  PERFORM pruebas.afirmar(public.mi_perfil()->'permisos' = '["aprobaciones.ver", "bitacora.ver", "comisiones.ver", "compras.ver", "contabilidad.ver", "dinero.ver", "fondos.ver", "inventario.costos", "inventario.ver", "terceros.ver", "ventas.ver"]',
     'contador: solo lectura');
 
   -- 3) Vendedor: no ve bancos ni movimientos ni turnos ni gastos.

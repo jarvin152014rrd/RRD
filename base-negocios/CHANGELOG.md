@@ -4,6 +4,75 @@ Formato: versión (fecha) y lista de cambios. La versión vive en `VERSION_NUCLE
 y queda guardada en cada base al migrar (vista `version_esquema`).
 Números: MAYOR.MENOR.ARREGLO (ver `docs/CONVENCIONES.md`).
 
+## 0.10.0 (2026-10-04) — Etapa 3a: cierre de mes con foto, estados por mes, fondos y proyección
+
+Migraciones nuevas 040-042 (las 001-039 no se tocaron). 123 pruebas (nuevas 120-123; la 89 ahora con 25
+combinaciones y cierre de enero en cada una). Las cifras de las pruebas están hechas a mano en sus comentarios.
+Formatos según NIIF para PYMES: **un contador hondureño debe validar la presentación** (resultados, balance,
+flujo, ISV) antes de entregarlos a terceros.
+
+**Cierre de mes completo (040, `cierres.md`)** — `cerrar_mes(empresa, año, mes, motivo?)` (`periodos.cerrar`):
+descuadre contable = no cierra (`DESCUADRE_CONTABLE`); bloquea con `cerrar_periodo` (en orden) y guarda una FOTO
+inmutable (tablas `cierre` y `cierre_detalle`): saldos de cuentas, estado de resultados, balance, flujo directo,
+CxC por cliente con antigüedad, CxP, inventario por producto/bodega, cuentas de dinero, saldo a favor y anticipos,
+comisiones por pagar e ISV del mes, todo a la fecha de fin del mes. Advertencias que no bloquean: depósitos en
+tránsito, turnos abiertos, aprobaciones pendientes, transferencias por confirmar, cuentas en negativo y alertas de
+cuadre. Reabrir (como siempre) deja la foto superada (trigger en `periodo`, cualquier camino); cerrar otra vez =
+versión siguiente. `historial_cierres`, `ver_cierre`.
+
+**Selector de meses y exportación (040, `estados.md`)** — `estado_resultados`, `balance_general`, `flujo_efectivo`,
+`saldos_cuentas_mes`, `cuentas_por_cobrar_mes`, `cuentas_por_pagar_mes`, `inventario_mes`, `dinero_mes`, `isv_mes`
+(`contabilidad.ver`): mes cerrado = la foto; abierto = en vivo y "PRELIMINAR". Comparativo con el mes anterior y el
+mismo mes del año anterior. Estado de resultados con **utilidad cobrada** (decisión abajo) frente a la facturada.
+`exportar_mes`: todo el paquete en JSON (centavos, fechas ISO, sin emojis; la app arma PDF/Excel).
+
+**Fondos y reparto de utilidades (041, módulo `fondos` -> dinero, `fondos.md`)** — `socio` (`guardar_socio`),
+`fondo` con su reserva 3.2.02.NN, meta en monto o meses de pagos fijos y cuenta de dinero opcional (`crear_fondo`,
+`editar_fondo`), regla que suma 100 % (`guardar_regla_distribucion`). `distribuir_utilidades(empresa, año, mes,
+datos, motivo, id)`: solo mes cerrado con foto, una vez por mes, base = utilidad cobrada (negativa no se reparte),
+asiento Dr 3.3.01.02 / Cr reservas / Cr 2.1.01.03 Dividendos por pagar, separación física opcional con rastro;
+`anular_distribucion`. `usar_fondo` (comprobante obligatorio, cuenta de salida y destino, aprobación del dueño:
+rama `uso_fondo` en `resolver_aprobacion`; libera la reserva a 3.3.01.01). `pagar_dividendos` /
+`anular_pago_dividendos`. `estado_fondos`, `v_fondo_movimiento`, `v_distribucion`, `v_dividendo_socio`.
+
+**Proyección de flujo (042, `proyecciones.md`)** — `proyeccion_flujo(empresa, 30|60|90, 'semana')`.
+
+**Cuentas nuevas:** 2.1.01.03 Dividendos por pagar a socios (uso `dividendos_por_pagar`, controlada por fondos);
+usos `utilidades_ejercicio` (3.3.01.02) y `utilidades_acumuladas` (3.3.01.01); 3.2.02 "Reservas de fondos" y sus
+subcuentas se crean al crear el primer fondo.
+
+**Permisos:** `fondos.ver` (dueño, admin, contador), `fondos.configurar`, `fondos.distribuir` y `fondos.aprobar`
+(SOLO el dueño, lo vigila `validar_rol_permiso`), `fondos.usar` y `fondos.pagar_dividendos` (dueño; el dueño puede
+dar `usar` a otro puesto y lo sigue aprobando él). Cerrar: dueño y admin (como antes). El contador lee todo.
+
+**Errores nuevos:** `DESCUADRE_CONTABLE`, `MES_ABIERTO`, `MES_SIN_CIERRE`, `SIN_UTILIDAD_COBRADA`, `YA_DISTRIBUIDO`,
+`PORCENTAJES_INVALIDOS`, `SIN_REGLA_DISTRIBUCION`, `FONDO_INSUFICIENTE`, `DISTRIBUCION_USADA`.
+
+**Herramientas:** `ficha.py` y `personal/ficha.schema.json` aceptan `"fondos"`; `docs/PAQUETES.md` (fondos en el
+paquete completo). Pruebas: `preparar_datos.sql` trae `pruebas.preparar_enero()` y `pruebas.crear_contador()`.
+
+**Decisiones tomadas (a confirmar con el dueño; las de dinero marcadas [DINERO])**
+- [DINERO] Utilidad cobrada = utilidad neta − aumento de la utilidad por cobrar (saldo × margen / total de cada
+  factura al crédito); los saldos iniciales de clientes no cuentan; una condonación resta solo su ISV.
+- [DINERO] Reparto solo de un mes cerrado con foto; el asiento usa la fecha indicada (hoy por defecto) en un mes
+  abierto posterior. Si después se reabre y cambia el mes, el reparto queda y el nuevo cierre lo advierte.
+- [DINERO] Usar un fondo libera su reserva a Utilidades acumuladas y el gasto pasa por resultados del mes.
+- [DINERO] Proyección conservadora: CxP vencidas, comisiones y dividendos por pagar en la semana 1; cobros vencidos
+  no se asumen; POS por liquidar va con lo "no disponible aún".
+- Descuadre que bloquea = debe ≠ haber o balance sin cuadrar; un módulo que no cuadra con su cuenta es "alerta de
+  cuadre" (no bloquea), como pide REQUISITOS.
+
+**Cambios que rompen (para quien ya usaba 0.9.2 en pruebas)**
+- Permiso nuevo `fondos.ver` para admin, contador y el proveedor con soporte: se ajustaron las pruebas 19, 31, 48,
+  57 y 69. Dependencia nueva fondos -> dinero (9): pruebas 88, 93 y 101.
+- Se reemplazaron con la misma firma: `public.resolver_aprobacion`, `interno.revisar_activacion_modulo`,
+  `interno.validar_rol_permiso`, `interno.empresa_de_documento`. `cerrar_periodo` y `reabrir_periodo` no cambian.
+
+**Pendiente (honesto):** el uso de un fondo ya aplicado no se anula (se corrige con otro asiento del contador);
+no hay cierre anual (el resultado de años anteriores se muestra en patrimonio sin asiento de cierre); el formato del
+ISV para la SAR y la presentación NIIF los debe validar un contador; no se consultó a los agentes
+constructor-maestro, revisor ni asesor-negocio (esta sesión no los tiene): el revisor debe revisar 0.10.0.
+
 ## 0.9.2 (2026-10-03) — Correcciones de la revisión de 0.9.1
 
 Migración nueva 039 (las 001-038 no se tocaron). 119 pruebas (nuevas 114-119; las 114 a 118 fallan contra 0.9.1 y

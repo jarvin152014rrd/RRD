@@ -18,3 +18,7 @@ solo el último mes cerrado; para uno anterior, reabrir hacia atrás
 
 **Candado:** cerrar, reabrir, registrar y anular toman el mismo candado por
 empresa (`bloquear_libros`), así no se cruzan.
+
+**0.10.0:** el cierre completo es `cerrar_mes` (bloqueo + foto + advertencias, ver
+`cierres.md`). `cerrar_periodo` sigue igual (solo bloquea). Al reabrir un mes, por
+cualquier camino, su foto queda superada.

@@ -42,7 +42,7 @@ BEGIN
   PERFORM pruebas.afirmar((SELECT count(*) FROM public.bitacora WHERE empresa_id = e) > 0, 'con soporte ve bitácora');
   PERFORM pruebas.afirmar((SELECT saldo_final_centavos FROM public.saldo_cuentas(e, NULL, '2026-12-31') WHERE codigo = '1.1.01.01') = 1000, 'con soporte ve saldos');
   PERFORM pruebas.afirmar((SELECT count(*) FROM public.verificar_bitacora(e)) = 0, 'con soporte verifica bitácora');
-  PERFORM pruebas.afirmar((public.mi_perfil(e)->'permisos') = '["aprobaciones.ver", "bitacora.ver", "comisiones.ver", "compras.ver", "contabilidad.ver", "dinero.ver", "inventario.costos", "terceros.ver", "ventas.ver"]'::jsonb, 'perfil del proveedor con soporte');
+  PERFORM pruebas.afirmar((public.mi_perfil(e)->'permisos') = '["aprobaciones.ver", "bitacora.ver", "comisiones.ver", "compras.ver", "contabilidad.ver", "dinero.ver", "fondos.ver", "inventario.costos", "terceros.ver", "ventas.ver"]'::jsonb, 'perfil del proveedor con soporte');
   -- Pero nunca mueve los libros.
   PERFORM pruebas.debe_fallar(pruebas.sql_registrar(e, '2026-01-10', pruebas.lineas('1.1.01.01', '4.1.01.01', 100)), 'SIN_PERMISO', 'soporte no registra');
   PERFORM pruebas.afirmar(NOT public.tiene_permiso('asientos.anular', e), 'soporte no anula');

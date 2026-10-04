@@ -1,4 +1,4 @@
--- PRUEBA: combinaciones de módulos (solo contabilidad, solo servicios, ventas sin inventario, ventas+inventario sin compras, sin ventas, todo encendido, con apartados y comisiones; apagar compras, inventario, dinero, ventas, fiscal_hn, apartados o comisiones a mitad de mes y encender otros): en cada una se opera con lo que hay (también cobros, condonación, devoluciones, apartados y comisiones), lo apagado rechaza lo nuevo y deja corregir, y el cuadre global se cumple (debe = haber, dinero = subcuentas con rastro, kardex = inventario, CxC = Clientes, CxP = Proveedores, saldo a favor, anticipos y comisiones = sus pasivos, ISV por pagar = ventas - notas de crédito, bitácora intacta)
+-- PRUEBA: combinaciones de módulos (con fondos encendido, apagado y encendido a mitad de mes; al final se cierra enero con su foto, que cuadra con los libros, y se reparte la utilidad cobrada con patrimonio coherente; solo contabilidad, solo servicios, ventas sin inventario, ventas+inventario sin compras, sin ventas, todo encendido, con apartados y comisiones; apagar compras, inventario, dinero, ventas, fiscal_hn, apartados o comisiones a mitad de mes y encender otros): en cada una se opera con lo que hay (también cobros, condonación, devoluciones, apartados y comisiones), lo apagado rechaza lo nuevo y deja corregir, y el cuadre global se cumple (debe = haber, dinero = subcuentas con rastro, kardex = inventario, CxC = Clientes, CxP = Proveedores, saldo a favor, anticipos y comisiones = sus pasivos, ISV por pagar = ventas - notas de crédito, bitácora intacta)
 
 -- Ayudantes de esta prueba (la base es una copia desechable).
 CREATE FUNCTION pruebas.c_id(p_emp text, p_clave text) RETURNS uuid LANGUAGE sql STABLE AS
@@ -246,8 +246,84 @@ BEGIN
   PERFORM pruebas.afirmar(NOT EXISTS (SELECT 1 FROM public.verificar_bitacora(e)), p_emp || ': bitácora intacta');
 END $$;
 
+
+-- 0.10.0: cierre de enero con su foto y, si "fondos" está activo, reparto de la utilidad cobrada.
+-- La foto cuadra con los libros (saldo_cuentas): estado de resultados, balance (activo = pasivo + patrimonio),
+-- flujo (inicial + entradas - salidas = final = dinero) y CxC / inventario / CxP iguales a sus cuentas.
+-- p_apagar_fondos: después de repartir se apaga "fondos" y se anula el reparto (corrección permitida).
+CREATE FUNCTION pruebas.c_cierre(p_emp text, p_apagar_fondos boolean DEFAULT false) RETURNS void LANGUAGE plpgsql AS $$
+DECLARE
+  e   uuid := pruebas.empresa(p_emp);
+  r   jsonb;
+  er  jsonb;
+  bg  jsonb;
+  fl  jsonb;
+  f   uuid;
+  v_un bigint;
+BEGIN
+  PERFORM pruebas.como(p_emp);
+  r := public.cerrar_mes(e, 2026, 1, 'Cierre de enero (combinación)');
+  PERFORM pruebas.afirmar(NOT EXISTS (SELECT 1 FROM jsonb_array_elements(r->'advertencias') a WHERE a->>'tipo' = 'alerta_cuadre'),
+    p_emp || ': cierre sin alertas de cuadre: ' || (r->'advertencias')::text);
+  er := public.estado_resultados(e, 2026, 1);
+  bg := public.balance_general(e, 2026, 1);
+  fl := public.flujo_efectivo(e, 2026, 1);
+  SELECT coalesce(sum(CASE WHEN tipo = 'ingreso' THEN 1 ELSE -1 END
+                      * CASE WHEN (naturaleza = 'acreedora') = (tipo = 'ingreso') THEN movimiento_centavos ELSE -movimiento_centavos END), 0)
+    INTO v_un FROM public.saldo_cuentas(e, '2026-01-01', '2026-01-31') WHERE tipo IN ('ingreso', 'costo', 'gasto');
+  PERFORM pruebas.afirmar(er->>'fuente' = 'foto' AND (er->>'utilidad_neta_centavos')::bigint = v_un, p_emp || ': resultados de la foto = libros');
+  PERFORM pruebas.afirmar((bg->>'cuadra')::boolean AND (bg->>'total_activo_centavos')::bigint =
+      (SELECT coalesce(sum(saldo_final_centavos * CASE WHEN naturaleza = 'deudora' THEN 1 ELSE -1 END), 0) FROM public.saldo_cuentas(e, NULL, '2026-01-31') WHERE tipo = 'activo')
+    AND (bg->>'total_pasivo_centavos')::bigint =
+      (SELECT coalesce(sum(saldo_final_centavos * CASE WHEN naturaleza = 'acreedora' THEN 1 ELSE -1 END), 0) FROM public.saldo_cuentas(e, NULL, '2026-01-31') WHERE tipo = 'pasivo'),
+    p_emp || ': balance de la foto = libros y activo = pasivo + patrimonio');
+  PERFORM pruebas.como('superusuario');
+  PERFORM pruebas.afirmar((fl->>'cuadra')::boolean AND (fl->>'saldo_final_centavos')::bigint =
+      coalesce((SELECT sum(monto_centavos) FROM public.dinero_movimiento WHERE empresa_id = e AND fecha_contable <= '2026-01-31'), 0),
+    p_emp || ': flujo inicial + entradas - salidas = dinero al cierre');
+  PERFORM pruebas.afirmar((public.exportar_mes(e, 2026, 1)->'secciones'->'cuentas_por_cobrar'->>'total_centavos')::bigint
+      = coalesce(interno.saldo_libros_al(e, '1.1.02.01', '2026-01-31'), 0)
+    AND (public.exportar_mes(e, 2026, 1)->'secciones'->'inventario'->>'valor_inventario_centavos')::bigint
+      = coalesce(interno.saldo_libros_al(e, '1.1.03.01', '2026-01-31'), 0)
+    AND (public.exportar_mes(e, 2026, 1)->'secciones'->'cuentas_por_pagar'->>'total_centavos')::bigint
+      = coalesce(interno.saldo_libros_al(e, '2.1.01.01', '2026-01-31'), 0), p_emp || ': CxC, inventario y CxP de la foto = libros');
+  IF NOT public.modulo_esta_activo(e, 'fondos') THEN
+    PERFORM pruebas.como(p_emp);
+    PERFORM pruebas.debe_fallar(format('SELECT public.crear_fondo(%L, %L, %L)', e, '{"nombre":"Reinversión"}', 'Sin módulo'), 'MODULO_INACTIVO',
+      p_emp || ': fondos apagado');
+    RETURN;
+  END IF;
+  PERFORM pruebas.como(p_emp);
+  f := (public.crear_fondo(e, '{"nombre": "Reinversión", "tipo": "reinversion"}', 'Fondo de la combinación')->>'fondo_id')::uuid;
+  PERFORM public.guardar_socio(e, jsonb_build_object('user_id', pruebas.usuario(p_emp), 'porcentaje', 100), 'Único socio');
+  IF (er->>'utilidad_cobrada_centavos')::bigint <= 0 THEN
+    PERFORM pruebas.debe_fallar(format('SELECT public.distribuir_utilidades(%L, 2026, 1, %L, %L, gen_random_uuid())', e,
+      jsonb_build_object('fondos', jsonb_build_array(jsonb_build_object('fondo_id', f, 'porcentaje', 50)), 'socios_porcentaje', 50), 'Reparto'),
+      'SIN_UTILIDAD_COBRADA', p_emp || ': sin utilidad cobrada no se reparte');
+    RETURN;
+  END IF;
+  r := public.distribuir_utilidades(e, 2026, 1, jsonb_build_object('fondos', jsonb_build_array(jsonb_build_object('fondo_id', f, 'porcentaje', 50)),
+         'socios_porcentaje', 50), 'Reparto de la combinación', gen_random_uuid());
+  PERFORM pruebas.afirmar((SELECT sum((x->>'monto_centavos')::bigint) FROM jsonb_array_elements(r->'partes') x) = (er->>'utilidad_cobrada_centavos')::bigint,
+    p_emp || ': el reparto suma la utilidad cobrada');
+  IF p_apagar_fondos THEN
+    PERFORM pruebas.como('superusuario');
+    UPDATE public.modulo_activo SET activo = false WHERE empresa_id = e AND modulo = 'fondos';
+    PERFORM pruebas.como(p_emp);
+    PERFORM pruebas.debe_fallar(format('SELECT public.pagar_dividendos(%L, %L, gen_random_uuid())', e, '{}'), 'MODULO_INACTIVO', p_emp || ': fondos apagado no paga');
+    PERFORM public.anular_distribucion((r->>'distribucion_id')::uuid, 'Corrección con fondos apagado', gen_random_uuid());
+  END IF;
+  -- Patrimonio coherente: reservas y dividendos = sus cuentas; el reparto solo mueve patrimonio a reservas y a pasivo.
+  PERFORM pruebas.como('superusuario');
+  PERFORM pruebas.afirmar(interno.saldo_fondo(f) = coalesce(pruebas.saldo_libros(e, (SELECT c.codigo FROM public.fondo x JOIN public.cuenta c ON c.id = x.cuenta_id WHERE x.id = f)), 0)
+    AND interno.total_dividendos_por_pagar(e) = coalesce(pruebas.saldo_libros(e, interno.cuenta_de(e, 'dividendos_por_pagar')), 0)
+    AND coalesce(pruebas.saldo_libros(e, interno.cuenta_de(e, 'utilidades_ejercicio')), 0) = -(interno.saldo_fondo(f) + interno.total_dividendos_por_pagar(e)),
+    p_emp || ': reparto con patrimonio coherente');
+END $$;
+
 -- Una combinación completa: crear, operar, apagar/encender a mitad de mes, operar, corregir y cuadrar.
-CREATE FUNCTION pruebas.c_combinacion(p_emp text, p_modulos text[], p_apagar text[] DEFAULT '{}', p_encender text[] DEFAULT '{}')
+CREATE FUNCTION pruebas.c_combinacion(p_emp text, p_modulos text[], p_apagar text[] DEFAULT '{}', p_encender text[] DEFAULT '{}',
+                                      p_apagar_fondos boolean DEFAULT false)
 RETURNS text LANGUAGE plpgsql AS $$
 DECLARE
   e uuid;
@@ -267,6 +343,8 @@ BEGIN
   PERFORM pruebas.c_preparar(p_emp);
   PERFORM pruebas.c_apagado(p_emp);
   PERFORM pruebas.c_operar(p_emp, 2);
+  PERFORM pruebas.c_cuadre(p_emp);
+  PERFORM pruebas.c_cierre(p_emp, p_apagar_fondos);
   PERFORM pruebas.c_cuadre(p_emp);
   PERFORM pruebas.como('superusuario');
   RETURN p_emp || ' OK';
@@ -296,6 +374,12 @@ BEGIN
   PERFORM pruebas.c_combinacion('apaga_ventas_2b2b', '{ventas,inventario,dinero,fiscal_hn,apartados,comisiones}', '{apartados,comisiones,fiscal_hn,ventas}');
   PERFORM pruebas.c_combinacion('servicios_comisiones', '{ventas,dinero,comisiones}', '{dinero}');
   PERFORM pruebas.c_combinacion('enciende_2b2b_a_mitad', '{ventas,inventario,dinero}', '{}', '{apartados,comisiones}');
+  -- 0.10.0: fondos encendido, encendido a mitad de mes, apagado después de repartir (se corrige anulando) y apagado a mitad de mes.
+  PERFORM pruebas.c_combinacion('todo_fondos', '{ventas,inventario,compras,dinero,fiscal_hn,apartados,comisiones,fondos}');
+  PERFORM pruebas.c_combinacion('servicios_fondos', '{ventas,dinero,fondos}');
+  PERFORM pruebas.c_combinacion('enciende_fondos_a_mitad', '{ventas,inventario,dinero}', '{}', '{fondos}');
+  PERFORM pruebas.c_combinacion('apaga_fondos_tras_reparto', '{ventas,inventario,dinero,fondos}', '{}', '{}', true);
+  PERFORM pruebas.c_combinacion('apaga_fondos_a_mitad', '{ventas,inventario,dinero,fondos}', '{fondos}');
   -- Una dependencia mal pedida a mitad de mes se rechaza y no cambia nada.
   PERFORM pruebas.como('superusuario');
   PERFORM pruebas.debe_fallar(format('UPDATE public.modulo_activo SET activo = false WHERE empresa_id = %L AND modulo = %L',
@@ -303,4 +387,8 @@ BEGIN
   PERFORM pruebas.debe_fallar(format('UPDATE public.modulo_activo SET activo = false WHERE empresa_id = %L AND modulo = %L',
     pruebas.empresa('todo_2b2b'), 'ventas'), 'MODULO_DEPENDENCIA', 'apagar ventas con comisiones y apartados activos');
   PERFORM pruebas.afirmar((SELECT count(*) FROM public.modulo_activo WHERE empresa_id = pruebas.empresa('todo') AND activo) = 6, 'todo sigue encendido');
+  PERFORM pruebas.afirmar((SELECT count(*) FROM public.distribucion WHERE anulada_en IS NULL) >= 3
+    AND (SELECT count(*) FROM public.distribucion WHERE anulada_en IS NOT NULL) = 1
+    AND (SELECT count(*) FROM public.cierre WHERE estado = 'vigente' AND anio = 2026 AND mes = 1) = 25, 'se cerró y se repartió: '
+    || (SELECT count(*) FROM public.distribucion WHERE anulada_en IS NULL) || ' repartos');
 END $$;

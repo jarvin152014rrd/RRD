@@ -148,6 +148,10 @@
             "comisiones": {
               "description": "Comisiones de vendedores (necesita ventas).",
               "type": "boolean"
+            },
+            "fondos": {
+              "description": "Fondos (reinversión, emergencias...) y reparto de utilidades a socios (necesita dinero).",
+              "type": "boolean"
             }
           }
         },
@@ -338,7 +342,8 @@
               "dinero",
               "fiscal_hn",
               "apartados",
-              "comisiones"
+              "comisiones",
+              "fondos"
             ]
           }
         },

@@ -96,6 +96,10 @@ dueño lo crea; nunca recibe permisos que muevan los libros.
 - Usar un fondo exige: qué fondo, para qué, de qué cuenta física sale el dinero
   (caja, caja chica o cuál banco), comprobante y aprobación del dueño.
 - Estado de cada fondo: saldo, aportes, usos y su rastro completo.
+- Hecho en 0.10.0 (módulo `fondos`, necesita dinero): socios, fondos con meta (monto o meses
+  de pagos fijos) y cuenta de dinero opcional, regla guardada que suma 100 %, reparto de la
+  utilidad COBRADA de un mes cerrado (una vez, anulable), separación física opcional, uso con
+  comprobante y aprobación del dueño, pago de dividendos. Ver nucleo/docs/fondos.md.
 
 ## Proyecciones
 
@@ -104,6 +108,8 @@ dueño lo crea; nunca recibe permisos que muevan los libros.
   cuentas por pagar según vencimiento − pagos fijos.
 - Cobros vencidos se muestran aparte (no se asume que entran).
 - Alerta si alguna semana proyectada queda en negativo.
+- Hecho en 0.10.0: `proyeccion_flujo` (30/60/90 días por semana; también comisiones y
+  dividendos por pagar). Ver nucleo/docs/proyecciones.md.
 
 ## Inventario y productos
 
@@ -160,6 +166,9 @@ comprobante, aprobaciones y alertas.
 Selector de cualquier mes anterior con estado de resultados, flujo, saldos de
 clientes, inventario valorizado y balance, descargables en PDF y Excel. Cerrar
 bloquea sin borrar. Reabrir: solo dueño, con motivo, en orden.
+Hecho en 0.10.0: `cerrar_mes` con foto inmutable y versiones, advertencias, estados por mes
+(foto o preliminar) con comparativo y exportación JSON para PDF/Excel (la app arma el PDF).
+Un contador hondureño debe validar los formatos. Ver nucleo/docs/cierres.md y estados.md.
 
 ## Ventas, caja y comisiones (decisiones para la etapa 2b)
 

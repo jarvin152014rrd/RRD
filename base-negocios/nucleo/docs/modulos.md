@@ -17,6 +17,7 @@ PROCEDIMIENTOS P-09). El dueño no los cambia desde la app (puede pedirlos con
 | `fiscal_hn` | Régimen fiscal de Honduras: CAI por caja, facturas numeradas, leyendas. | ventas | `cai.md` |
 | `apartados` (0.9.0) | Apartados con anticipo: reservan mercadería; anticipos como pasivo; se completan como venta. | ventas, inventario | `apartados.md` |
 | `comisiones` (0.9.0) | Comisiones de vendedores: devengo al cobrar, ajustes, pago por período. | ventas | `comisiones.md` |
+| `fondos` (0.10.0) | Fondos (reinversión, emergencias...), socios, reparto de la utilidad cobrada, uso de fondos, dividendos. | dinero | `fondos.md` |
 
 Cobros, saldos iniciales de clientes, saldo a favor / vales y devoluciones (notas de
 crédito) son parte de `ventas` (decisión 0.9.0: todo negocio que vende necesita cobrar
@@ -76,6 +77,7 @@ Nunca se borra nada. Con el módulo apagado:
 | dinero (0.9.0) | además `confirmar_transferencia_cobro` |
 | apartados | `cancelar_apartado` (libera la reserva y resuelve el anticipo) |
 | comisiones | `anular_pago_comisiones` |
+| fondos (0.10.0) | `anular_distribucion`, `anular_pago_dividendos` |
 
   Decisión: **pagar** a un proveedor o **aprobar** una venta o un gasto
   pendiente son operaciones nuevas (mueven dinero o inventario): con su módulo
@@ -88,7 +90,7 @@ Nunca se borra nada. Con el módulo apagado:
   (Inventario 1.1.03.01, Clientes 1.1.02.01, Proveedores 2.1.01.01,
   Diferencias de caja 1.1.02.04; desde 0.9.0 también Saldos a favor 2.1.04.02
   (ventas), Anticipos de clientes 2.1.04.01 (apartados) y Comisiones por pagar
-  2.1.03.04 (comisiones)): `CUENTA_CONTROLADA: ... (ahora apagado)`. Así
+  2.1.03.04 (comisiones); desde 0.10.0 Dividendos por pagar 2.1.01.03 (fondos) y la reserva de cada fondo 3.2.02.NN): `CUENTA_CONTROLADA: ... (ahora apagado)`. Así
   el kardex, la CxC y la CxP siguen iguales a sus cuentas y el módulo se puede
   volver a encender sin `MODULO_CON_SALDO`. `modulo_activo.estuvo_activo` lo
   recuerda (al actualizar a 0.8.0 toda fila que ya existía cuenta como usada).
@@ -109,6 +111,15 @@ saldo a favor, anticipos y comisiones = sus pasivos, bitácora intacta. Desde
 apartados, comisiones o ventas con ellos a mitad de mes, servicios con
 comisiones y encenderlos a mitad de mes); en cada una se cobra, se condona, se
 devuelve, se aparta y se pagan comisiones. Si una falla, `probar.sh` falla.
+
+Desde 0.10.0 son 25 combinaciones (también todo con fondos, servicios con fondos,
+encender fondos a mitad de mes, apagarlo después de repartir y a mitad de mes) y al
+final de cada una se cierra enero con `cerrar_mes`: la foto cuadra con los libros
+(resultados, balance, flujo, CxC, inventario, CxP) y, con fondos, se reparte la utilidad
+cobrada con patrimonio coherente (reservas y dividendos = sus cuentas).
+
+El cierre de mes con foto, los estados por mes y la proyección de flujo son parte de
+`contabilidad` (todos los paquetes): ver `cierres.md`, `estados.md`, `proyecciones.md`.
 
 ## Para un módulo nuevo (por ejemplo comisiones u órdenes de trabajo)
 

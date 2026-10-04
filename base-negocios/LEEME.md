@@ -80,6 +80,10 @@ Qué hace cada migración:
 | 035_devoluciones | devoluciones y notas de crédito (CAI o internas), cambio de producto, tope y aprobación |
 | 036_comisiones | comisiones de vendedores: devengo al cobrar, ajustes, pago por período |
 | 037_cierre_2b2b | claves nuevas de `configurar_empresa`, `MODULO_CON_SALDO` de los módulos nuevos, asistente (clientes con saldos), `estado_cuenta_cliente` |
+| 038 / 039 | correcciones de las revisiones (0.9.1 y 0.9.2) |
+| 040_cierre_mes | cierre de mes con foto inmutable y versiones, advertencias, estados por mes (selector, comparativo, utilidad cobrada) y exportación |
+| 041_fondos | módulo `fondos`: socios, fondos con meta, regla, reparto de la utilidad cobrada, uso de fondos con aprobación del dueño, dividendos |
+| 042_proyeccion_flujo | proyección de flujo de caja por semana a 30/60/90 días con alerta |
 
 Detalle de cada módulo: `nucleo/docs/` (dinero, caja, gastos y arranque en `dinero.md`, `caja.md`, `gastos.md`, `arranque.md`).
 
@@ -201,6 +205,11 @@ Si algo falla, termina con error (código distinto de 0).
 | `dar_baja_vales_vencidos(empresa, datos, motivo, id_operacion)` (0.9.1) | vales vencidos a otros ingresos | cobros.baja_vales (solo dueño) |
 | `crear_apartado` / `abonar_apartado` / `completar_apartado` / `cancelar_apartado` | apartados con anticipo (`apartados.md`) | apartados.registrar / apartados.cancelar |
 | `configurar_comisiones` / `fijar_porcentaje_comision` / `pagar_comisiones` / `anular_pago_comisiones` | comisiones (`comisiones.md`) | comisiones.configurar (dueño) / comisiones.pagar |
+| `cerrar_mes(empresa, año, mes, motivo?)` / `historial_cierres` / `ver_cierre` (0.10.0) | cierre con foto y versiones (`cierres.md`) | periodos.cerrar / contabilidad.ver |
+| `estado_resultados` / `balance_general` / `flujo_efectivo` / `saldos_cuentas_mes` / `cuentas_por_cobrar_mes` / `cuentas_por_pagar_mes` / `inventario_mes` / `dinero_mes` / `isv_mes` / `exportar_mes` (0.10.0) | estados por mes, preliminar si está abierto (`estados.md`) | contabilidad.ver |
+| `guardar_socio` / `crear_fondo` / `editar_fondo` / `guardar_regla_distribucion` (0.10.0) | socios, fondos y regla (`fondos.md`) | fondos.configurar (dueño) |
+| `distribuir_utilidades` / `anular_distribucion` / `usar_fondo` / `pagar_dividendos` / `anular_pago_dividendos` / `estado_fondos` (0.10.0) | reparto de utilidades, fondos y dividendos | fondos.distribuir / fondos.usar / fondos.pagar_dividendos / fondos.ver |
+| `proyeccion_flujo(empresa, dias, 'semana')` (0.10.0) | proyección de flujo (`proyecciones.md`) | contabilidad.ver |
 
 Vistas: `v_existencia` (inventario.ver; costos solo con inventario.costos),
 `v_kardex` (inventario.costos), `v_cxp_documento` y `v_cxp_proveedor` (compras.ver),
@@ -208,6 +217,7 @@ Vistas: `v_existencia` (inventario.ver; costos solo con inventario.costos),
 `v_turno_caja`, `v_diferencia_cajero` (dinero.ver o el propio cajero), `v_gasto`, `v_aprobacion`.
 0.9.0: `v_cobro`, `v_cobros_por_caja`, `v_saldo_favor`, `v_apartado`, `v_devolucion`, `v_comision`,
 `v_comision_vendedor` y `v_mis_comisiones` (cada vendedor las suyas, sin costos).
+0.10.0: `v_fondo_movimiento`, `v_distribucion`, `v_dividendo_socio` (fondos.ver).
 Detalle de cada módulo en `nucleo/docs/` (terceros, productos, inventario, compras, usuarios).
 
 Formato de `lineas` (montos en centavos):
