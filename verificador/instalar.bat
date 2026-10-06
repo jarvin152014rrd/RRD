@@ -9,7 +9,7 @@ if errorlevel 1 (
   pause
   exit /b
 )
-py -m pip install --upgrade playwright openpyxl pypdf xlrd defusedxml anthropic
+py -m pip install --upgrade "playwright>=1.40,<2" "openpyxl>=3.1,<4" "pypdf>=4,<7" "xlrd>=2,<3" "defusedxml>=0.7,<1" "anthropic>=1.11,<2"
 py -m playwright install chromium
 echo.
 echo Listo. Ahora usa ejecutar.bat

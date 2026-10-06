@@ -131,10 +131,11 @@ def paginas_a_enviar(total, maximo):
 
 
 def estimar_usd(cfg, paginas):
-    """Costo aproximado de un PDF: ~2,300 tokens por página + instrucciones, y ~3,000 de salida
-    (incluye el 'pensamiento' del modelo, que también se cobra)."""
+    """Costo aproximado de un PDF: ~4,000 tokens por página (texto + imagen de la página) más
+    instrucciones, y ~3,000 de salida (incluye el 'pensamiento' del modelo, que también se cobra).
+    Se calcula alto a propósito para no quedarse corto."""
     n = len(paginas_a_enviar(paginas, cfg["max_paginas_por_documento"]))
-    entrada = 2500 + 2300 * n
+    entrada = 2500 + 4000 * n
     salida = 3000
     return (entrada * cfg["precio_entrada_usd_por_millon"]
             + salida * cfg["precio_salida_usd_por_millon"]) / 1_000_000
@@ -200,8 +201,9 @@ def revisar(cliente, cfg, ruta, local, ctx):
     indices = paginas_a_enviar(total, cfg["max_paginas_por_documento"])
     salida = {"resultado": None, "costo_usd": 0.0, "error": "", "modelo": cfg["modelo"],
               "paginas_enviadas": len(indices), "paginas_total": total}
-    if SIMULADA:
+    if SIMULADA:  # en pruebas se "cobra" el costo estimado, sin gastar nada
         salida["resultado"] = _simulada(local)
+        salida["costo_usd"] = estimar_usd(cfg, total)
         return salida
     import anthropic
     try:

@@ -144,7 +144,13 @@ def comparar_excel_pdf(analisis_excel, analisis_pdf):
         return "no se pudo comparar", "El PDF es escaneado (sin texto)."
     claves = _claves_excel(analisis_excel.get("filas_excel", []))
     texto = normalizar(analisis_pdf.get("texto", ""))
-    posiciones = [(c, texto.find(c)) for c in claves]
+    # Si un proveedor se repite, cada repetición se busca después de la anterior.
+    ultima, posiciones = {}, []
+    for c in claves:
+        pos = texto.find(c, ultima.get(c, -1) + 1)
+        if pos >= 0:
+            ultima[c] = pos
+        posiciones.append((c, pos))
     encontradas = [(c, p) for c, p in posiciones if p >= 0]
     if len(encontradas) < 3:
         return "no se pudo comparar", f"Solo {len(encontradas)} filas del Excel aparecen en el PDF."

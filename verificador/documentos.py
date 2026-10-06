@@ -10,6 +10,7 @@ import hashlib
 import io
 import os
 import random
+import re
 import time
 import zipfile
 from datetime import datetime
@@ -100,21 +101,23 @@ def _bajar(page, url):
 
 
 def _esperar_humano(page, url):
-    """Abre el enlace en Chrome para que el verificador marque 'Soy humano'."""
+    """Abre el enlace en Chrome para que el verificador marque 'Soy humano' y, mientras
+    espera, vuelve a intentar la descarga cada 15 segundos."""
     print("\n   >>> El portal pide marcar 'Soy humano'. Márcala tú en la ventana de Chrome. <<<")
     sonar()
     try:
         page.goto(url, wait_until="domcontentloaded", timeout=60000)
     except Exception:
-        pass
+        pass  # si el archivo se descarga directo, Chrome no lo muestra: se sigue esperando
     limite = time.time() + ESPERA_HUMANO
     while time.time() < limite:
-        time.sleep(3)
+        time.sleep(1 if PRUEBA else 15)
         try:
-            if not es_casilla_humano(page.title() + " " + page.content()[:3000]):
+            datos, _ = _bajar(page, url)
+            if datos and tipo_archivo(datos):
                 return True
         except Exception:
-            return True  # el visor de PDF ya cargó
+            pass
     return False
 
 
@@ -166,7 +169,8 @@ def descargar_pendientes(page, pendientes, carpeta, registro, guardar_registro):
         if registro.get(enlace, {}).get("archivo"):
             continue
         espera = random.uniform(*PAUSA)
-        print(f"   Documento {i}/{total}: {f.get('descripcion') or f.get('nombre')} "
+        texto = re.sub(r"[\x00-\x1f\x7f]", "", f.get("descripcion") or f.get("nombre") or "")
+        print(f"   Documento {i}/{total}: {texto} "
               f"({f.get('mes')} {f.get('anio')}) (esperando {espera:.0f} s)")
         time.sleep(espera)
         datos, tipo, error = descargar(page, enlace)

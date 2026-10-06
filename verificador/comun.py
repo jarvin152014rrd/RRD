@@ -126,18 +126,20 @@ def evaluar(regla, pagina, anio, mes, desde=None):
     - Trimestral, semestral, anual y "cuando existan cambios": no se quitan puntos
       por documentos faltantes, solo se avisa.
     - Todos: el texto de fecha editable debe estar al día; si no -> se quita Oportuna.
+    - Si hay DUDAS (no se puede decidir con certeza), no se califica: "Sin calificar".
+      Los AVISOS (alertas) son informativos y no cambian la propuesta.
     """
     desde = desde or mes
     perio = regla["periodicidad"] if regla else "cuando_cambie"
     filas = pagina["filas"]
-    quitar, obs, alertas = set(), [], []
+    quitar, obs, alertas, dudas = set(), [], [], []
 
     if regla and regla.get("siempre_no_aplica"):
         return _resultado("No aplica", quitar, obs, alertas, perio, [], [])
     texto_area = normalizar(pagina.get("texto_area", ""))
     if "no aplica" in texto_area and not (regla and regla.get("nunca_no_aplica")):
-        alertas.append("El texto del apartado dice NO APLICA: confirmar.")
-        return _resultado("Revisar", quitar, obs, alertas, perio, [], [])
+        dudas.append("El texto del apartado dice NO APLICA: confirmar si de verdad no aplica.")
+        return _resultado("Sin calificar", quitar, obs, alertas, perio, [], [], dudas)
 
     # Meses publicados en el año verificado.
     del_anio = [f for f in filas if str(f.get("anio", "")).strip() == str(anio)]
@@ -162,8 +164,6 @@ def evaluar(regla, pagina, anio, mes, desde=None):
                        "(no se quitan puntos).")
     if perio == "anual" and filas and not del_anio:
         alertas.append(f"No se encontró documento del año {anio} (no se quitan puntos).")
-    if perio == "cuando_cambie" and filas:
-        alertas.append("Apartado 'cuando existan cambios': revisar el contenido a mano.")
 
     # Texto de fecha editable: obligatorio y al día en todos los apartados.
     fa = pagina.get("fecha_actualizacion", "")
@@ -173,7 +173,7 @@ def evaluar(regla, pagina, anio, mes, desde=None):
         obs.append(FRASES["txt_edit"])
         alertas.append("No se encontró el texto de fecha editable.")
     elif not fecha:
-        alertas.append(f"No se entiende la fecha editable '{fa}': revisar Oportuna a mano.")
+        dudas.append(f"No se entiende la fecha editable '{fa}'.")
     elif fecha < (anio, mes):
         quitar.add("Oportuna")
         obs.append(FRASES["txt_edit"])
@@ -181,7 +181,7 @@ def evaluar(regla, pagina, anio, mes, desde=None):
     # Tabla incompleta: el portal dice que hay más documentos de los leídos.
     total = pagina.get("total_portal")
     if total and total > len(filas):
-        alertas.append(f"Solo se leyeron {len(filas)} de {total} documentos: revisar a mano.")
+        dudas.append(f"Solo se leyeron {len(filas)} de {total} documentos de la tabla.")
 
     # Duplicados y descripciones.
     vistos, repetidos = set(), []
@@ -214,29 +214,29 @@ def evaluar(regla, pagina, anio, mes, desde=None):
             obs.append(FRASES["planillas"])
             alertas.append("Tiene nota aclaratoria en un apartado donde no es válida.")
         else:
-            alertas.append(f"Tiene {len(notas)} nota(s) aclaratoria(s): revisar si es válida.")
+            dudas.append(f"Tiene {len(notas)} nota(s) aclaratoria(s): confirmar si es válida.")
 
     pp = pagina.get("periodo_portal", "")
     if regla and pp and perio != "cuando_cambie" and clasificar_periodicidad(pp) != perio:
-        alertas.append(f"El portal dice periodo '{pp}' y el checklist '{regla['periodicidad_texto']}'.")
+        dudas.append(f"El portal dice periodo '{pp}' y el checklist '{regla['periodicidad_texto']}'.")
     if not regla:
-        alertas.append("Este apartado no está en el checklist: revisar a mano.")
+        dudas.append("Este apartado no está en el checklist.")
     # "No cumple" solo cuando no hay nada publicado; si falta algo se marca Cumple y
     # se quitan casillas, igual que en las macros.
     sin_nada = not del_anio if perio == "mensual" else not filas
-    if sin_nada:
+    if sin_nada and not filas:
+        obs.append("No hay documentos publicados en este apartado.")
+    if dudas:
+        propuesta = "Sin calificar"
+    elif sin_nada:
         propuesta = "No cumple"
-        if not filas:
-            obs.append("No hay documentos publicados en este apartado.")
-    elif alertas:
-        propuesta = "Revisar"
     else:
         propuesta = "Cumple"
     return _resultado(propuesta, quitar, obs, alertas, perio,
-                      [n for _, n in encontrados], [n for _, n in faltantes])
+                      [n for _, n in encontrados], [n for _, n in faltantes], dudas)
 
 
-def _resultado(propuesta, quitar, obs, alertas, perio, encontrados, faltantes):
+def _resultado(propuesta, quitar, obs, alertas, perio, encontrados, faltantes, dudas=None):
     return {
         "propuesta": propuesta,
         "periodicidad": perio,
@@ -245,6 +245,7 @@ def _resultado(propuesta, quitar, obs, alertas, perio, encontrados, faltantes):
         "quitar": sorted(quitar),
         "observacion": " ".join(dict.fromkeys(obs)),  # sin frases repetidas
         "alertas": alertas,
+        "dudas": dudas or [],
     }
 
 
@@ -258,16 +259,19 @@ def aplicar_documentos(res, docs, apartado, sector, comparacion=None):
     if not docs:
         return res
     quitar, obs, alertas = set(res["quitar"]), [res["observacion"]] if res["observacion"] else [], list(res["alertas"])
-    sin_calificar, revisar = [], False
+    dudas = list(res.get("dudas", []))
     es_compras = normalizar(apartado) == "compras"
 
     for d in docs:
         f = d["fila"]
         nombre = (f.get("descripcion") or f.get("nombre") or "documento")[:60]
         nombre = f"'{nombre}' ({f.get('mes', '')} {f.get('anio', '')})"
+        if d["descarga"].get("pendiente") or (not d.get("local") and not d["descarga"].get("error")):
+            dudas.append(f"{nombre}: no se llegó a descargar (bloqueo o pausa).")
+            continue
         error = d["descarga"].get("error") or (d.get("local") or {}).get("error")
         if error:
-            sin_calificar.append(f"{nombre}: {error}")
+            dudas.append(f"{nombre}: {error}")
             continue
         local, ia = d["local"], d.get("ia") or {}
         r = ia.get("resultado")
@@ -281,8 +285,7 @@ def aplicar_documentos(res, docs, apartado, sector, comparacion=None):
             alertas.append(f"{nombre}: el texto menciona {', '.join(local['meses_texto'][:3])}, "
                            f"no {f.get('mes')}.")
         if ia.get("error"):
-            alertas.append(f"{nombre}: la IA no pudo revisarlo ({ia['error']}). Revisar a mano.")
-            revisar = True
+            dudas.append(f"{nombre}: la IA no pudo revisarlo ({ia['error']}).")
         if not r:
             if local.get("tipo") == "pdf" and not local.get("con_texto"):
                 alertas.append(f"{nombre}: PDF escaneado; firma, sello y contenido pendientes "
@@ -292,14 +295,13 @@ def aplicar_documentos(res, docs, apartado, sector, comparacion=None):
             alertas.append(f"{nombre}: la IA revisó {ia['paginas_enviadas']} de "
                            f"{ia['paginas_total']} páginas (primeras y últimas).")
         if r["legible"] == "no":
-            sin_calificar.append(f"{nombre}: ilegible ({r['motivo_ilegible']})")
+            dudas.append(f"{nombre}: ilegible ({r['motivo_ilegible']}).")
             continue
         if r["legible"] == "parcial":
             obs.append(FRASES["doc_borroso"])
             alertas.append(f"{nombre}: partes borrosas ({r['motivo_ilegible']}) [IA].")
         if r["instrucciones_sospechosas"]:
-            alertas.append(f"{nombre}: trae texto que intenta dar órdenes a la IA. Revisar a mano.")
-            revisar = True
+            dudas.append(f"{nombre}: trae texto que intenta dar órdenes a la IA.")
         for clave, texto, con_articulo in (("firma", "firma", "la firma"), ("sello", "sello", "el sello"),
                                            ("nombre_y_puesto", "nombre y puesto", "el nombre y puesto")):
             v = r[clave]
@@ -308,8 +310,7 @@ def aplicar_documentos(res, docs, apartado, sector, comparacion=None):
                 obs.append(FRASES["no_certi"])
                 alertas.append(f"{nombre}: sin {texto} [IA: {v['evidencia']}].")
             elif v["valor"] == "no_determinado":
-                alertas.append(f"{nombre}: la IA no pudo ver {con_articulo}. Revisar a mano.")
-                revisar = True
+                dudas.append(f"{nombre}: la IA no pudo ver {con_articulo}.")
         if r["orientacion_correcta"] == "no" or r["corresponde_al_apartado"] == "no":
             obs.append(FRASES["info_rep"])
             alertas.append(f"{nombre}: " + ("mal orientado. " if r["orientacion_correcta"] == "no" else "")
@@ -343,10 +344,7 @@ def aplicar_documentos(res, docs, apartado, sector, comparacion=None):
         alertas.append("No se encontró el cuadro de Compras en Excel.")
 
     res = dict(res, quitar=sorted(quitar), observacion=" ".join(dict.fromkeys(o for o in obs if o)),
-               alertas=alertas)
-    if sin_calificar:
+               alertas=alertas, dudas=dudas)
+    if dudas:
         res["propuesta"] = "Sin calificar"
-        res["alertas"] = [f"No se calificó: {m}" for m in sin_calificar] + alertas
-    elif revisar and res["propuesta"] == "Cumple":
-        res["propuesta"] = "Revisar"
     return res
