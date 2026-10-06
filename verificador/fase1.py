@@ -61,14 +61,23 @@ def sector_de(texto):
 
 
 def leer_json(ruta, defecto):
+    if not ruta.exists():
+        return defecto
     try:
         return json.loads(ruta.read_text(encoding="utf-8"))
     except (OSError, ValueError):
+        # Archivo dañado (por ejemplo, un corte de luz): se guarda aparte, no se borra.
+        copia = ruta.with_name(ruta.stem + datetime.now().strftime("_danado_%Y%m%d_%H%M%S.json"))
+        ruta.replace(copia)
+        print(f"   Aviso: {ruta.name} estaba dañado; se guardó como {copia.name}.")
         return defecto
 
 
 def guardar_json(ruta, datos):
-    ruta.write_text(json.dumps(datos, ensure_ascii=False, indent=1), encoding="utf-8")
+    """Escribe primero un archivo temporal y luego lo cambia de nombre (no queda a medias)."""
+    tmp = ruta.with_suffix(".tmp")
+    tmp.write_text(json.dumps(datos, ensure_ascii=False, indent=1), encoding="utf-8")
+    tmp.replace(ruta)
 
 
 def leer_lista():
@@ -105,7 +114,9 @@ def verificacion_anterior(id_inst, anio, mes):
 
 def desde_sugerido(id_inst, anio, mes):
     previa = verificacion_anterior(id_inst, anio, mes)
-    if previa and previa["anio"] == anio and previa["mes"] < mes:
+    if previa and previa["anio"] < anio:
+        return 1  # la anterior fue de otro año: se revisa desde enero
+    if previa and previa["mes"] < mes:
         return previa["mes"] + 1
     return mes
 
@@ -297,8 +308,14 @@ def buscar_regla(reglas, sector, nombre):
 
 def calcular(reglas, cfg, lectura):
     """Vuelve a calcular la propuesta con lo guardado (sin abrir el portal)."""
-    sector = cfg["sector"] or ("municipalidad" if "municipalidad" in normalizar(lectura["institucion"])
-                               else "institucion")
+    sector, supuesto = cfg["sector"], False
+    if not sector:
+        nombre = normalizar(lectura["institucion"])
+        if "municipal" in nombre or "alcaldia" in nombre:
+            sector = "municipalidad"
+        else:
+            sector = "institucion"
+            supuesto = nombre.startswith("institucion ")  # no se pudo leer el nombre
     previa = verificacion_anterior(cfg["id"], cfg["anio"], cfg["mes"])
     resultados = []
     apartados = lectura["apartados"][:cfg["limite"]] if cfg["limite"] else lectura["apartados"]
@@ -323,6 +340,12 @@ def calcular(reglas, cfg, lectura):
                     fecha_actualizacion=datos["fecha_actualizacion"], filas=filas,
                     nuevos=sum(1 for f in filas if f["nuevo"]) if previa else None)
         resultados.append(base)
+    if supuesto:
+        print("   Aviso: no se leyó el nombre; se usan reglas de Institución. Si es "
+              "Municipalidad, vuelve a correrlo y responde M.")
+        for r in resultados:
+            r["alertas"].append("No se leyó el nombre de la institución: se usaron reglas de "
+                                "Institución. Si es Municipalidad, vuelve a correrlo con M.")
     return sector, previa, resultados
 
 
@@ -485,8 +508,10 @@ def preparar_lectura(cfg, preguntar_si_existe):
                       "¿Retomar (R) o empezar de cero (N)?", "R") if preguntar_si_existe else "R"
         if not r.upper().startswith("N"):
             return lectura, ruta, True
-    # Se empieza de cero: la lectura anterior se guarda aparte por si el portal bloquea.
-    ruta.replace(ruta.with_name(ruta.stem + "_anterior.json"))
+    # Se empieza de cero. Si la lectura anterior estaba completa se guarda aparte por si
+    # el portal bloquea; una lectura a medias no reemplaza esa copia.
+    if lectura.get("completa"):
+        ruta.replace(ruta.with_name(ruta.stem + "_anterior.json"))
     return nueva, ruta, True
 
 
@@ -497,16 +522,20 @@ def procesar(page, reglas, cfg, preguntar_si_existe=True):
     """
     lectura, ruta_lectura, leer = preparar_lectura(cfg, preguntar_si_existe)
     resumen = {"N° portal": cfg["id"]}
-    bloqueado = None
+    bloqueado, error = None, None
     if leer:
         try:
             lectura["completa"] = leer_institucion(page, cfg, lectura, ruta_lectura)
         except Bloqueado as e:
             bloqueado = e
+        except Exception as e:  # por ejemplo, la portada no cargó
+            error = str(e).splitlines()[0]
+            print(f"   No se pudo leer el portal: {error}")
         guardar_json(ruta_lectura, lectura)
     if not lectura["apartados"]:
-        resumen.update({"Institución": lectura["institucion"],
-                        "Estado": "Detenida por bloqueo" if bloqueado else "Sin menú de apartados"})
+        estado = ("Detenida por bloqueo" if bloqueado else
+                  f"Error: {error}" if error else "Sin menú de apartados")
+        resumen.update({"Institución": lectura["institucion"], "Estado": estado})
         return resumen, bloqueado
     sector, previa, resultados = calcular(reglas, cfg, lectura)
     ruta = guardar_excel(cfg, lectura, sector, previa, resultados)
@@ -516,7 +545,8 @@ def procesar(page, reglas, cfg, preguntar_si_existe=True):
     for r in resultados:
         conteo[r["propuesta"]] = conteo.get(r["propuesta"], 0) + 1
     resumen.update(conteo, **{"Institución": lectura["institucion"],
-                              "Estado": "Completa" if lectura.get("completa") else "Incompleta",
+                              "Estado": "Completa" if lectura.get("completa") else
+                              (f"Incompleta ({error})" if error else "Incompleta"),
                               "Alertas": sum(len(r["alertas"]) for r in resultados),
                               "Archivo": ruta.name})
     print(f"\nExcel listo: {ruta}")
@@ -545,8 +575,7 @@ def main():
                      ultimas.get("modo", "1"))
     anio = pedir_numero("Año a verificar", ultimas.get("anio", anterior[0]), 2015, 2100)
     mes = pedir_numero("Mes a verificar (1-12)", ultimas.get("mes", anterior[1]), 1, 12)
-    limite = preguntar("¿Cuántos apartados revisar por institución? (Enter = todos)",
-                       ultimas.get("limite", ""))
+    limite = preguntar("¿Cuántos apartados revisar por institución? (Enter = todos)", "")
     limite = int(limite) if limite.isdigit() and int(limite) > 0 else None
 
     trabajos = []
@@ -566,14 +595,13 @@ def main():
                             ultimas.get("id", ""))
         if not id_inst.isdigit():
             sys.exit("Debe ser un número.")
-        sector = sector_de(preguntar("¿Municipalidad (M), Institución (I) o Enter = automático?",
-                                     ultimas.get("sector", "")))
+        sector = sector_de(preguntar("¿Municipalidad (M), Institución (I) o Enter = automático?"))
         sugerido = desde_sugerido(id_inst, anio, mes)
         desde = pedir_numero("¿Desde qué mes revisar? (tu última verificación)", sugerido, 1, mes)
         trabajos.append({"id": id_inst, "sector": sector, "anio": anio, "mes": mes,
                          "desde": desde, "limite": limite, "releer": "S"})
-        ultimas.update(id=id_inst, sector=sector[:1].upper())
-    ultimas.update(modo=modo, anio=anio, mes=mes, limite=str(limite or ""))
+        ultimas.update(id=id_inst)
+    ultimas.update(modo=modo, anio=anio, mes=mes)
     guardar_json(RESPUESTAS, ultimas)
 
     resumen, ruta_excel = [], None
