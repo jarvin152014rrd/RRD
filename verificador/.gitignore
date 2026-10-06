@@ -1,2 +1,4 @@
 resultados/
 __pycache__/
+pruebas/archivos/
+*.tmp

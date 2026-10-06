@@ -3,6 +3,7 @@
 Copia la forma de portalunico.iaip.gob.hn vista en las capturas (FONAC, id 28).
 """
 from http.server import BaseHTTPRequestHandler, HTTPServer
+from pathlib import Path
 from urllib.parse import quote
 import sys
 
@@ -13,15 +14,21 @@ MENU = [(1, "Organigrama"), (7, "Remuneracion de Empleados"), (12, "Licitacion")
         (20, "Compras"), (31, "Diario Oficial La Gaceta"), (40, "Apartado Raro"),
         (50, "Balance General"), (60, "Gasto")]
 
-def fila(n, d, s, a, m):
+ARCHIVOS = Path(__file__).parent / "archivos"
+VISTOS = set()  # para que 'bloqueo_una_vez' dé Error 1015 solo la primera vez
+
+
+def fila(n, d, s, a, m, archivo=None):
+    enlace = archivo or quote(d + m)
     return (f"<tr><td>{n}</td><td>{d}</td><td>{s}</td><td>{a}</td><td>{m}</td>"
-            f"<td><a href='/ver_archivo/{quote(d + m)}'>PDF</a></td></tr>")
+            f"<td><a href='/ver_archivo/{enlace}'>PDF</a></td></tr>")
 
 DATOS = {
     1: ("", "Periodo de Actualización: Cuando existan cambios.", "Agosto 2026",
-        [fila("Organigrama", "Organigrama 2026", "2026-01-10", "2026", "Enero")]),
+        [fila("Organigrama", "Organigrama 2026", "2026-01-10", "2026", "Enero", "organigrama.pdf")]),
     7: ("", "Periodo de Actualización: Mensual.", "Agosto 2026", [
-        fila("Remuneración de Empleados", "Sueldos mes de Agosto 2026", "2026-09-14", "2026", "Agosto"),
+        fila("Remuneración de Empleados", "Sueldos mes de Agosto 2026", "2026-09-14", "2026", "Agosto",
+             "planilla_agosto.pdf"),
         fila("Remuneración de Empleados", "Sueldos Julio 2026", "2026-08-14", "2026", "Julio"),
         fila("Remuneración de Empleados", "Sueldos junio 2026", "2026-07-14", "2026", "Junio"),
         fila("Remuneracion de Empleados", "Sueldos Mayo 2026", "2026-06-12", "2026", "Mayo"),
@@ -32,6 +39,8 @@ DATOS = {
     12: ("FONAC NO APLICA", "Periodo de Actualización: Anual.", "Agosto 2026",
          [fila("Licitación", "Licitación Enero 2026", "2026-02-12", "2026", "Enero")]),
     20: ("", "Periodo de Actualización: Mensual.", "Mayo 2026", [
+        fila("Compras", "Cuadro de compras agosto", "2026-09-05", "2026", "Agosto", "compras_agosto.xlsx"),
+        fila("Compras", "Soporte de compras agosto", "2026-09-05", "2026", "Agosto", "compras_agosto.pdf"),
         fila("Compras", "", "2026-02-12", "2026", "Enero"),
         fila("Compras", "Compras de marzo", "2026-04-12", "2026", "Marzo")]),
     31: ("", "Periodo de Actualización: Trimestral.", "Junio 2026", [
@@ -40,15 +49,18 @@ DATOS = {
     50: ("", "Periodo de Actualización: Mensual.", "31/08/2026", [
         fila("Balance", "Notas a los estados financieros junio", "2026-07-02", "2026", "Junio"),
         fila("Balance", "Balance julio", "2026-08-02", "2026", "Julio"),
-        fila("Balance", "Balance agosto", "2026-09-02", "2026", "Agosto")]),
+        fila("Balance", "Balance agosto", "2026-09-02", "2026", "Agosto", "escaneado.pdf"),
+        fila("Balance", "Balance agosto anexo", "2026-09-02", "2026", "Agosto", "danado.pdf")]),
     60: ("", "Periodo de Actualización: Mensual.", "Agosto 2026", [
-        fila("Gasto", "Gasto agosto", "2026-09-02", "2026", "Agosto"),
+        fila("Gasto", "Gasto agosto", "2026-09-02", "2026", "Agosto", "bloqueo_una_vez"),
         fila("Gasto", "=SUMA raro\x07", "2026-09-02", "2026", "Agosto")]),
 }
 PIE = {60: "<div>Mostrando 1 a 1 de 4 registros</div>"}
 
 class H(BaseHTTPRequestHandler):
     def do_GET(self):
+        if self.path.startswith("/ver_archivo/"):
+            return self.archivo(self.path.split("/")[-1])
         partes = [p for p in self.path.split("/") if p]
         inst = partes[0] if partes else "28"
         nombre = NOMBRES.get(inst, "Institucion X")
@@ -58,7 +70,7 @@ class H(BaseHTTPRequestHandler):
             area, perio, fecha, filas = DATOS[int(partes[1])]
             if VERSION >= 2 and int(partes[1]) == 7:  # en la versión 2 aparece un documento nuevo
                 filas = [fila("Remuneración de Empleados", "Sueldos Septiembre 2026", "2026-10-01",
-                              "2026", "Septiembre")] + filas
+                              "2026", "Septiembre", "planilla_sin_firma.pdf")] + filas
             cuerpo += (f"<h3>{nombre}</h3><h2>TITULO</h2>"
                        f"<span>Fecha de actualizacion: 14/09/26</span><div>{area}</div>"
                        f"<div>Fecha de Actualización: {fecha}</div><div>{perio}</div>"
@@ -72,6 +84,25 @@ class H(BaseHTTPRequestHandler):
         self.send_header("Content-Type", "text/html; charset=utf-8")
         self.end_headers()
         self.wfile.write(html.encode())
+    def archivo(self, nombre):
+        if nombre == "bloqueo_una_vez" and nombre not in VISTOS:
+            VISTOS.add(nombre)
+            return self.responder(b"<html><body>Error 1015 You are being rate limited</body></html>",
+                                  "text/html")
+        if nombre == "bloqueo_una_vez":
+            nombre = "gasto_agosto.pdf"
+        ruta = ARCHIVOS / nombre
+        if ruta.exists():
+            tipo = "application/pdf" if nombre.endswith(".pdf") else "application/octet-stream"
+            return self.responder(ruta.read_bytes(), tipo)
+        self.responder("<html><body>Documento no disponible</body></html>".encode(), "text/html")
+
+    def responder(self, datos, tipo):
+        self.send_response(200)
+        self.send_header("Content-Type", tipo)
+        self.end_headers()
+        self.wfile.write(datos)
+
     def log_message(self, *a):
         pass
 

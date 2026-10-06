@@ -1,0 +1,10 @@
+{
+ "_ayuda": "Pon ia_activada en true solo con autorización del IAIP. La clave va en la variable de Windows ANTHROPIC_API_KEY, nunca aquí.",
+ "ia_activada": false,
+ "modelo": "claude-opus-5-5",
+ "esfuerzo": "medium",
+ "tope_usd_por_corrida": 5.0,
+ "max_paginas_por_documento": 20,
+ "precio_entrada_usd_por_millon": 4.0,
+ "precio_salida_usd_por_millon": 20.0
+}

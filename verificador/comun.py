@@ -20,6 +20,10 @@ FRASES = {
                  "nota aclaratoria y abajo la planilla del mes",
     "info_rep": "solicite la eliminación de documento repetidos, que tengan mala orientación, "
                 "que no pertenezcan al apartado y que no contengan firmados",
+    "doc_borroso": "Documentacion borrosa, escanear mejor y subir de nuevo.",
+    "no_certi": "Documentos no certificado debe de contener firma, nombre completo, puesto y "
+                "sello de quien le da visto bueno",
+    "pdf_excel": "El orden de la informacion del PDF y el Excel deben de concordar.",
 }
 
 
@@ -242,3 +246,107 @@ def _resultado(propuesta, quitar, obs, alertas, perio, encontrados, faltantes):
         "observacion": " ".join(dict.fromkeys(obs)),  # sin frases repetidas
         "alertas": alertas,
     }
+
+
+def aplicar_documentos(res, docs, apartado, sector, comparacion=None):
+    """Suma a la propuesta de un apartado lo encontrado DENTRO de sus documentos.
+
+    docs: lista de dict con 'fila', 'descarga' (registro), 'local' (lectura sin IA) e 'ia'.
+    comparacion: (resultado, detalle) de Excel contra PDF, si hubo los dos.
+    Regla del verificador: si un documento no se puede leer, el apartado no se califica.
+    """
+    if not docs:
+        return res
+    quitar, obs, alertas = set(res["quitar"]), [res["observacion"]] if res["observacion"] else [], list(res["alertas"])
+    sin_calificar, revisar = [], False
+    es_compras = normalizar(apartado) == "compras"
+
+    for d in docs:
+        f = d["fila"]
+        nombre = (f.get("descripcion") or f.get("nombre") or "documento")[:60]
+        nombre = f"'{nombre}' ({f.get('mes', '')} {f.get('anio', '')})"
+        error = d["descarga"].get("error") or (d.get("local") or {}).get("error")
+        if error:
+            sin_calificar.append(f"{nombre}: {error}")
+            continue
+        local, ia = d["local"], d.get("ia") or {}
+        r = ia.get("resultado")
+        if local.get("faltan_palabras"):
+            alertas.append(f"{nombre}: no aparece {', '.join(local['faltan_palabras'])} en el texto.")
+        if local.get("formulas_vacias"):
+            alertas.append(f"{nombre}: el Excel tiene {local['formulas_vacias']} fórmulas sin resultado guardado.")
+        m_fila = mes_a_numero(f.get("mes", ""))
+        meses_txt = {mes_a_numero(m) for m in local.get("meses_texto", [])}
+        if m_fila and meses_txt and m_fila not in meses_txt:
+            alertas.append(f"{nombre}: el texto menciona {', '.join(local['meses_texto'][:3])}, "
+                           f"no {f.get('mes')}.")
+        if ia.get("error"):
+            alertas.append(f"{nombre}: la IA no pudo revisarlo ({ia['error']}). Revisar a mano.")
+            revisar = True
+        if not r:
+            if local.get("tipo") == "pdf" and not local.get("con_texto"):
+                alertas.append(f"{nombre}: PDF escaneado; firma, sello y contenido pendientes "
+                               "(IA o revisión manual).")
+            continue
+        if ia.get("paginas_enviadas", 0) < ia.get("paginas_total", 0):
+            alertas.append(f"{nombre}: la IA revisó {ia['paginas_enviadas']} de "
+                           f"{ia['paginas_total']} páginas (primeras y últimas).")
+        if r["legible"] == "no":
+            sin_calificar.append(f"{nombre}: ilegible ({r['motivo_ilegible']})")
+            continue
+        if r["legible"] == "parcial":
+            obs.append(FRASES["doc_borroso"])
+            alertas.append(f"{nombre}: partes borrosas ({r['motivo_ilegible']}) [IA].")
+        if r["instrucciones_sospechosas"]:
+            alertas.append(f"{nombre}: trae texto que intenta dar órdenes a la IA. Revisar a mano.")
+            revisar = True
+        for clave, texto, con_articulo in (("firma", "firma", "la firma"), ("sello", "sello", "el sello"),
+                                           ("nombre_y_puesto", "nombre y puesto", "el nombre y puesto")):
+            v = r[clave]
+            if v["valor"] == "no":
+                quitar.add("Veraz")
+                obs.append(FRASES["no_certi"])
+                alertas.append(f"{nombre}: sin {texto} [IA: {v['evidencia']}].")
+            elif v["valor"] == "no_determinado":
+                alertas.append(f"{nombre}: la IA no pudo ver {con_articulo}. Revisar a mano.")
+                revisar = True
+        if r["orientacion_correcta"] == "no" or r["corresponde_al_apartado"] == "no":
+            obs.append(FRASES["info_rep"])
+            alertas.append(f"{nombre}: " + ("mal orientado. " if r["orientacion_correcta"] == "no" else "")
+                           + ("no parece pertenecer al apartado." if r["corresponde_al_apartado"] == "no" else "")
+                           + " [IA]")
+        if r["coincide_mes_anio"] == "no":
+            alertas.append(f"{nombre}: el documento parece ser de {r['mes_anio_del_documento']} [IA].")
+        if r["faltantes_checklist"]:
+            alertas.append(f"{nombre}: falta según checklist: {'; '.join(r['faltantes_checklist'])} [IA].")
+        for h in r["hallazgos"]:
+            pagina = f" (pág. {h['pagina']})" if h["pagina"] else ""
+            alertas.append(f"{nombre}: {h['descripcion']}{pagina} [IA].")
+            if h["casilla"] in ("Completa", "Veraz", "Adecuada"):
+                quitar.add(h["casilla"])
+        if r["observacion_sugerida"]:
+            obs.append(r["observacion_sugerida"])
+
+    # Excel contra PDF (checklist de Compras: deben ir en el mismo orden).
+    if comparacion:
+        resultado, detalle = comparacion
+        if resultado == "distinto orden":
+            obs.append(FRASES["pdf_excel"])
+            alertas.append(f"Excel y PDF en distinto orden: {detalle}")
+            if es_compras:
+                quitar.add("Adecuada")
+        elif resultado == "no se pudo comparar":
+            alertas.append(f"Excel contra PDF: no se pudo comparar ({detalle}).")
+    if es_compras and sector == "municipalidad" and not any(
+            (d.get("local") or {}).get("tipo") in ("xlsx", "xls") for d in docs):
+        quitar.add("Adecuada")
+        alertas.append("No se encontró el cuadro de Compras en Excel.")
+
+    res = dict(res, quitar=sorted(quitar), observacion=" ".join(dict.fromkeys(o for o in obs if o)),
+               alertas=alertas)
+    if sin_calificar:
+        res["propuesta"] = "Sin calificar"
+        res["alertas"] = [f"No se calificó: {m}" for m in sin_calificar] + alertas
+    elif revisar and res["propuesta"] == "Cumple":
+        res["propuesta"] = "Revisar"
+    return res

@@ -9,7 +9,7 @@ if errorlevel 1 (
   pause
   exit /b
 )
-py -m pip install --upgrade playwright openpyxl
+py -m pip install --upgrade playwright openpyxl pypdf xlrd defusedxml anthropic
 py -m playwright install chromium
 echo.
 echo Listo. Ahora usa ejecutar.bat

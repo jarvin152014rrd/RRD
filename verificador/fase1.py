@@ -19,7 +19,11 @@ from openpyxl.styles import Alignment, Font, PatternFill
 from openpyxl.worksheet.datavalidation import DataValidation
 from playwright.sync_api import sync_playwright
 
-from comun import MESES, evaluar, normalizar
+import analisis
+import documentos
+import ia
+from comun import MESES, aplicar_documentos, evaluar, mes_a_numero, normalizar
+from documentos import Bloqueado
 
 PRUEBA = "PORTAL_PRUEBA" in os.environ  # solo para pruebas locales
 PORTAL = os.environ.get("PORTAL_PRUEBA", "https://portalunico.iaip.gob.hn")
@@ -30,10 +34,7 @@ RESULTADOS = CARPETA / "resultados"
 LISTA = CARPETA / "instituciones.txt"
 RESPUESTAS = RESULTADOS / "ultimas_respuestas.json"
 DECISIONES = ["Cumple", "No cumple", "No aplica"]
-
-
-class Bloqueado(Exception):
-    pass
+DOCUMENTOS = RESULTADOS / "documentos"
 
 
 # ---------- preguntas ----------
@@ -306,17 +307,19 @@ def buscar_regla(reglas, sector, nombre):
     return None
 
 
-def calcular(reglas, cfg, lectura):
+def detectar_sector(cfg, lectura):
+    """Devuelve (sector, supuesto). 'supuesto' = no se pudo leer el nombre."""
+    if cfg["sector"]:
+        return cfg["sector"], False
+    nombre = normalizar(lectura["institucion"])
+    if "municipal" in nombre or "alcaldia" in nombre:
+        return "municipalidad", False
+    return "institucion", nombre.startswith("institucion ")
+
+
+def calcular(reglas, cfg, lectura, sector, supuesto, previa, docs=None):
     """Vuelve a calcular la propuesta con lo guardado (sin abrir el portal)."""
-    sector, supuesto = cfg["sector"], False
-    if not sector:
-        nombre = normalizar(lectura["institucion"])
-        if "municipal" in nombre or "alcaldia" in nombre:
-            sector = "municipalidad"
-        else:
-            sector = "institucion"
-            supuesto = nombre.startswith("institucion ")  # no se pudo leer el nombre
-    previa = verificacion_anterior(cfg["id"], cfg["anio"], cfg["mes"])
+    docs = docs or {}
     resultados = []
     apartados = lectura["apartados"][:cfg["limite"]] if cfg["limite"] else lectura["apartados"]
     for ap in apartados:
@@ -336,6 +339,12 @@ def calcular(reglas, cfg, lectura):
         anteriores = set(previa["enlaces"].get(ap["url"], [])) if previa else None
         filas = [dict(f, nuevo=(f["enlace"] not in anteriores) if anteriores is not None else None)
                  for f in datos["filas"]]
+        if ap["url"] in docs:
+            res = aplicar_documentos(res, docs[ap["url"]]["docs"], ap["nombre"], sector,
+                                     docs[ap["url"]]["comparacion"])
+            if docs[ap["url"]]["excedio"]:
+                res["alertas"].append(f"Hay más de {documentos.MAX_POR_APARTADO} documentos para "
+                                      "revisar; se revisaron los primeros. Mirar el resto a mano.")
         base.update(res, regla=regla["apartado"] if regla else None,
                     fecha_actualizacion=datos["fecha_actualizacion"], filas=filas,
                     nuevos=sum(1 for f in filas if f["nuevo"]) if previa else None)
@@ -346,7 +355,130 @@ def calcular(reglas, cfg, lectura):
         for r in resultados:
             r["alertas"].append("No se leyó el nombre de la institución: se usaron reglas de "
                                 "Institución. Si es Municipalidad, vuelve a correrlo con M.")
-    return sector, previa, resultados
+    return resultados
+
+
+# ---------- documentos (Fase 3) ----------
+
+def ruta_docs(cfg):
+    return DOCUMENTOS / str(cfg["id"])
+
+
+def bajar_documentos(page, reglas, cfg, lectura, sector, previa):
+    """Elige los documentos nuevos y del periodo de cada apartado y los descarga."""
+    carpeta = ruta_docs(cfg)
+    carpeta.mkdir(parents=True, exist_ok=True)
+    ruta_registro = carpeta / "registro.json"
+    registro = leer_json(ruta_registro, {})
+    elegidos, pendientes = {}, []
+    apartados = lectura["apartados"][:cfg["limite"]] if cfg["limite"] else lectura["apartados"]
+    for ap in apartados:
+        if ap["url"] not in lectura["leido"]:
+            continue
+        regla = buscar_regla(reglas, sector, ap["nombre"])
+        perio = regla["periodicidad"] if regla else "cuando_cambie"
+        anteriores = set(previa["enlaces"].get(ap["url"], [])) if previa else None
+        filas, excedio = documentos.seleccionar(lectura["leido"][ap["url"]]["datos"]["filas"], perio,
+                                                cfg["anio"], cfg["desde"], cfg["mes"], anteriores)
+        elegidos[ap["url"]] = {"enlaces": [f["enlace"] for f in filas], "excedio": excedio}
+        pendientes += [f for f in filas if not registro.get(f["enlace"], {}).get("archivo")]
+    lectura["documentos"] = elegidos
+    print(f"\nDocumentos a revisar: {sum(len(e['enlaces']) for e in elegidos.values())} "
+          f"({len(pendientes)} por descargar).")
+    documentos.descargar_pendientes(page, pendientes, carpeta, registro,
+                                    lambda: guardar_json(ruta_registro, registro))
+
+
+def reunir_documentos(reglas, cfg, lectura, sector):
+    """Junta, por apartado, cada documento con su descarga, su lectura local y lo de la IA."""
+    elegidos = lectura.get("documentos") or {}
+    if not elegidos:
+        return {}
+    carpeta = ruta_docs(cfg)
+    registro = leer_json(carpeta / "registro.json", {})
+    cache_ia = leer_json(carpeta / "ia.json", {})
+    salida = {}
+    for ap in lectura["apartados"]:
+        if ap["url"] not in elegidos or ap["url"] not in lectura["leido"]:
+            continue
+        por_enlace = {f["enlace"]: f for f in lectura["leido"][ap["url"]]["datos"]["filas"]}
+        docs = []
+        for enlace in elegidos[ap["url"]]["enlaces"]:
+            fila = por_enlace.get(enlace, {"enlace": enlace})
+            descarga = registro.get(enlace) or {"pendiente": True}
+            local = None
+            if descarga.get("archivo"):
+                local = analisis.analizar(carpeta / descarga["archivo"], descarga["tipo"], fila,
+                                          sector, ap["nombre"])
+            docs.append({"fila": fila, "descarga": descarga, "local": local,
+                         "ia": cache_ia.get(descarga.get("sha", ""))})
+        salida[ap["url"]] = {"docs": docs, "comparacion": comparar_en_apartado(docs),
+                             "excedio": elegidos[ap["url"]].get("excedio")}
+    return salida
+
+
+def comparar_en_apartado(docs):
+    """Si en el mismo mes hay un Excel y un PDF, revisa que vayan en el mismo orden."""
+    por_mes = {}
+    for d in docs:
+        local = d.get("local") or {}
+        if local.get("error") or not local.get("tipo"):
+            continue
+        clave = (str(d["fila"].get("anio")), mes_a_numero(d["fila"].get("mes", "")))
+        por_mes.setdefault(clave, {}).setdefault("excel" if local["tipo"] in ("xlsx", "xls") else "pdf", local)
+    for grupo in por_mes.values():
+        if "excel" in grupo and "pdf" in grupo:
+            return analisis.comparar_excel_pdf(grupo["excel"], grupo["pdf"])
+    return None
+
+
+def usar_ia(cfg, docs, lectura, sector, reglas, preguntar_si_existe):
+    """Manda a la IA los PDF que aún no tiene revisados, con confirmación y tope de gasto."""
+    conf = ia.cargar_config()
+    ok, motivo = ia.disponible(conf)
+    if not ok:
+        print(f"IA: no se usa ({motivo}).")
+        return 0.0
+    carpeta = ruta_docs(cfg)
+    ruta_cache = carpeta / "ia.json"
+    cache = leer_json(ruta_cache, {})
+    pendientes = []
+    for url, info in docs.items():
+        nombre_ap = next(a["nombre"] for a in lectura["apartados"] if a["url"] == url)
+        for d in info["docs"]:
+            local, sha = d.get("local") or {}, d["descarga"].get("sha")
+            if sha and local.get("tipo") == "pdf" and not local.get("error") and \
+                    not (cache.get(sha) or {}).get("resultado"):
+                pendientes.append((nombre_ap, d))
+    if not pendientes:
+        return 0.0
+    estimado = sum(ia.estimar_usd(conf, d["local"]["paginas"]) for _, d in pendientes)
+    tope = float(conf["tope_usd_por_corrida"])
+    print(f"\nIA: {len(pendientes)} PDF por revisar. Costo aproximado US${estimado:.2f} "
+          f"(tope por corrida US${tope:.2f}).")
+    if preguntar_si_existe and not preguntar("¿Enviarlos a la IA? (S/N)", "S").upper().startswith("S"):
+        return 0.0
+    cliente = ia.crear_cliente()
+    gastado = 0.0
+    for i, (nombre_ap, d) in enumerate(pendientes, 1):
+        if gastado + ia.estimar_usd(conf, d["local"]["paginas"]) > tope:
+            print(f"   Se llegó al tope de gasto (US${tope:.2f}). Los demás quedan pendientes.")
+            break
+        fila = d["fila"]
+        print(f"   IA {i}/{len(pendientes)}: {fila.get('descripcion') or fila.get('nombre')}")
+        ctx = {"institucion": lectura["institucion"], "sector": sector, "apartado": nombre_ap,
+               "regla": buscar_regla(reglas, sector, nombre_ap), "fila": fila,
+               "anio": cfg["anio"], "mes": cfg["mes"]}
+        salida = ia.revisar(cliente, conf, ruta_docs(cfg) / d["descarga"]["archivo"], d["local"], ctx)
+        gastado += salida["costo_usd"]
+        d["ia"] = salida
+        if salida["resultado"]:  # los errores se reintentan la próxima vez
+            cache[d["descarga"]["sha"]] = salida
+            guardar_json(ruta_cache, cache)
+        print(f"     -> {'error: ' + salida['error'] if salida['error'] else 'revisado'} "
+              f"(US${salida['costo_usd']:.3f})")
+    print(f"IA: gasto de esta corrida US${gastado:.2f}.")
+    return gastado
 
 
 # ---------- Excel ----------
@@ -377,7 +509,7 @@ def ruta_libre(ruta):
     return ruta.with_name(ruta.stem + datetime.now().strftime("_%Y%m%d_%H%M%S") + ruta.suffix)
 
 
-def guardar_excel(cfg, lectura, sector, previa, resultados):
+def guardar_excel(cfg, lectura, sector, previa, resultados, docs=None):
     anio, mes = cfg["anio"], cfg["mes"]
     institucion = lectura["institucion"]
     wb = openpyxl.Workbook()
@@ -396,7 +528,7 @@ def guardar_excel(cfg, lectura, sector, previa, resultados):
     for col in ("L", "M", "N"):  # las columnas que corrige el verificador
         ws[f"{col}2"].fill = PatternFill("solid", fgColor="1565C0")
     colores = {"Cumple": "C8E6C9", "No cumple": "FFCDD2", "Revisar": "FFF59D",
-               "No aplica": "E0E0E0", "No se pudo revisar": "FFAB91"}
+               "No aplica": "E0E0E0", "No se pudo revisar": "FFAB91", "Sin calificar": "FFAB91"}
     lista = DataValidation(type="list", formula1='"' + ",".join(DECISIONES) + '"', allow_blank=True)
     ws.add_data_validation(lista)
     for r in resultados:
@@ -438,6 +570,8 @@ def guardar_excel(cfg, lectura, sector, previa, resultados):
     for col, ancho in zip("ABCDEFGHI", (6, 30, 7, 28, 60, 12, 7, 12, 40)):
         wd.column_dimensions[col].width = ancho
 
+    hoja_documentos(wb, resultados, docs or {})
+
     wsr = wb.create_sheet("Sin regla")
     agregar(wsr, ["N°", "Apartado del menú que no está en el checklist", "Enlace"])
     encabezado(wsr)
@@ -463,17 +597,67 @@ def guardar_excel(cfg, lectura, sector, previa, resultados):
     return ruta
 
 
+def _ia_valor(r, clave):
+    v = r.get(clave) or {}
+    return f"{v.get('valor', '')}" + (f" (pág. {v['pagina']})" if v.get("pagina") else "")
+
+
+def hoja_documentos(wb, resultados, docs):
+    ws = wb.create_sheet("Análisis documentos")
+    agregar(ws, ["N°", "Apartado", "Documento", "Mes", "Año", "Tipo", "Páginas", "Texto",
+                 "Meses en el texto", "Palabras que faltan", "IA legible", "IA firma", "IA sello",
+                 "IA nombre y puesto", "IA hallazgos", "IA observación", "Costo IA (US$)",
+                 "Estado", "Archivo"])
+    encabezado(ws)
+    for r in resultados:
+        info = docs.get(r["url"])
+        if not info:
+            continue
+        for d in info["docs"]:
+            f, local, des = d["fila"], d.get("local") or {}, d["descarga"]
+            sal = d.get("ia") or {}
+            res = sal.get("resultado") or {}
+            if des.get("pendiente"):
+                estado = "Pendiente de descargar"
+            elif des.get("error") or local.get("error"):
+                estado = "Error: " + (des.get("error") or local.get("error"))
+            elif sal.get("error"):
+                estado = "IA: " + sal["error"]
+            elif res:
+                estado = "Revisado con IA"
+            else:
+                estado = "Leído sin IA"
+            texto = "" if local.get("con_texto") is None else (
+                "Sí" if local["con_texto"] and not local.get("paginas_escaneadas") else
+                "Escaneado" if not local["con_texto"] else f"Parcial ({local['paginas_escaneadas']} escaneadas)")
+            agregar(ws, [r["numero"], r["apartado"], f.get("descripcion") or f.get("nombre"),
+                         f.get("mes"), f.get("anio"), (local.get("tipo") or des.get("tipo") or "").upper(),
+                         local.get("paginas"), texto, ", ".join(local.get("meses_texto", [])),
+                         ", ".join(local.get("faltan_palabras", [])), res.get("legible", ""),
+                         _ia_valor(res, "firma"), _ia_valor(res, "sello"),
+                         _ia_valor(res, "nombre_y_puesto"),
+                         "\n".join(h["descripcion"] for h in res.get("hallazgos", [])),
+                         res.get("observacion_sugerida", ""), round(sal.get("costo_usd", 0), 4),
+                         estado, des.get("archivo", "")])
+    for col, ancho in zip("ABCDEFGHIJKLMNOPQRS",
+                          (6, 26, 40, 11, 6, 6, 8, 12, 22, 18, 10, 14, 14, 14, 45, 45, 10, 28, 22)):
+        ws.column_dimensions[col].width = ancho
+    for fila in ws.iter_rows(min_row=2):
+        for c in fila:
+            c.alignment = Alignment(wrap_text=True, vertical="top")
+
+
 def guardar_resumen(filas):
     wb = openpyxl.Workbook()
     ws = wb.active
     ws.title = "Resumen"
     cab = ["N° portal", "Institución", "Estado", "Cumple", "No cumple", "Revisar", "No aplica",
-           "No se pudo revisar", "Alertas", "Archivo"]
+           "Sin calificar", "No se pudo revisar", "Alertas", "Costo IA (US$)", "Archivo"]
     agregar(ws, cab)
     encabezado(ws)
     for f in filas:
         agregar(ws, [f.get(c, "") for c in cab])
-    for col, ancho in zip("ABCDEFGHIJ", (10, 40, 22, 9, 10, 9, 10, 12, 9, 55)):
+    for col, ancho in zip("ABCDEFGHIJKL", (10, 40, 22, 9, 10, 9, 10, 12, 12, 9, 12, 55)):
         ws.column_dimensions[col].width = ancho
     ruta = ruta_libre(RESULTADOS / f"resumen_{datetime.now():%Y%m%d_%H%M}.xlsx")
     wb.save(ruta)
@@ -537,8 +721,20 @@ def procesar(page, reglas, cfg, preguntar_si_existe=True):
                   f"Error: {error}" if error else "Sin menú de apartados")
         resumen.update({"Institución": lectura["institucion"], "Estado": estado})
         return resumen, bloqueado
-    sector, previa, resultados = calcular(reglas, cfg, lectura)
-    ruta = guardar_excel(cfg, lectura, sector, previa, resultados)
+    sector, supuesto = detectar_sector(cfg, lectura)
+    previa = verificacion_anterior(cfg["id"], cfg["anio"], cfg["mes"])
+    costo_ia = 0.0
+    if cfg.get("documentos") and not bloqueado:  # solo baja lo que falte
+        try:
+            bajar_documentos(page, reglas, cfg, lectura, sector, previa)
+        except Bloqueado as e:
+            bloqueado = e
+        guardar_json(ruta_lectura, lectura)
+    docs = reunir_documentos(reglas, cfg, lectura, sector)
+    if cfg.get("documentos") and docs:
+        costo_ia = usar_ia(cfg, docs, lectura, sector, reglas, preguntar_si_existe)
+    resultados = calcular(reglas, cfg, lectura, sector, supuesto, previa, docs)
+    ruta = guardar_excel(cfg, lectura, sector, previa, resultados, docs)
     if lectura.get("completa"):
         guardar_historial(cfg["id"], cfg["anio"], cfg["mes"], lectura)
     conteo = {}
@@ -548,6 +744,7 @@ def procesar(page, reglas, cfg, preguntar_si_existe=True):
                               "Estado": "Completa" if lectura.get("completa") else
                               (f"Incompleta ({error})" if error else "Incompleta"),
                               "Alertas": sum(len(r["alertas"]) for r in resultados),
+                              "Costo IA (US$)": round(costo_ia, 2),
                               "Archivo": ruta.name})
     print(f"\nExcel listo: {ruta}")
     if bloqueado:
@@ -570,13 +767,15 @@ def main():
     hoy = date.today()
     anterior = (hoy.year, hoy.month - 1) if hoy.month > 1 else (hoy.year - 1, 12)
 
-    print("=== FASE 1: revisión del portal público (sin enviar nada) ===\n")
+    print("=== Verificador IAIP: revisión del portal público (no envía nada al formulario) ===\n")
     modo = preguntar("¿Una institución (1) o la lista de instituciones.txt (2)?",
                      ultimas.get("modo", "1"))
     anio = pedir_numero("Año a verificar", ultimas.get("anio", anterior[0]), 2015, 2100)
     mes = pedir_numero("Mes a verificar (1-12)", ultimas.get("mes", anterior[1]), 1, 12)
     limite = preguntar("¿Cuántos apartados revisar por institución? (Enter = todos)", "")
     limite = int(limite) if limite.isdigit() and int(limite) > 0 else None
+    con_docs = preguntar("¿Descargar y revisar los documentos nuevos y del periodo? (S/N)",
+                         ultimas.get("documentos", "S")).upper().startswith("S")
 
     trabajos = []
     if modo == "2":
@@ -588,7 +787,8 @@ def main():
         for f in lista:
             desde = f["desde"] or desde_sugerido(f["id"], anio, mes)
             trabajos.append({"id": f["id"], "sector": f["sector"], "anio": anio, "mes": mes,
-                             "desde": min(desde, mes), "limite": limite, "releer": releer})
+                             "desde": min(desde, mes), "limite": limite, "releer": releer,
+                             "documentos": con_docs})
         print(f"Se revisarán {len(trabajos)} instituciones.")
     else:
         id_inst = preguntar("Número de la institución en el portal (ej. 28 para FONAC)",
@@ -599,9 +799,10 @@ def main():
         sugerido = desde_sugerido(id_inst, anio, mes)
         desde = pedir_numero("¿Desde qué mes revisar? (tu última verificación)", sugerido, 1, mes)
         trabajos.append({"id": id_inst, "sector": sector, "anio": anio, "mes": mes,
-                         "desde": desde, "limite": limite, "releer": "S"})
+                         "desde": desde, "limite": limite, "releer": "S",
+                         "documentos": con_docs})
         ultimas.update(id=id_inst)
-    ultimas.update(modo=modo, anio=anio, mes=mes)
+    ultimas.update(modo=modo, anio=anio, mes=mes, documentos="S" if con_docs else "N")
     guardar_json(RESPUESTAS, ultimas)
 
     resumen, ruta_excel = [], None
