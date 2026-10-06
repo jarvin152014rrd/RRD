@@ -1,0 +1,1673 @@
+[
+ {
+  "sector": "municipalidad",
+  "componente": "Estructura Orgánica",
+  "apartado": "Organigrama",
+  "alias": [
+   "organigrama"
+  ],
+  "periodicidad": "cuando_cambie",
+  "periodicidad_texto": "Cuando exsitan cambios en el organigrama.",
+  "publicar": [
+   "En el Organigrama, tanto la imagen y el último documento publicado deben ser los mismos. Si no, deben quitar Completa. Si no tienen colores, quitar Adecuada y si no está la fecha en el área de texto, quitar Oportuna."
+  ],
+  "observaciones": [
+   "Deben estar en color. Si no hay imagen, agregarlo como sugerencia. Deben incluir el Certificado de Punto de Acta dondes se aprobó el Organigrama vigente (si no está, solo recordárselos)."
+  ]
+ },
+ {
+  "sector": "municipalidad",
+  "componente": "Estructura Orgánica",
+  "apartado": "Funciones",
+  "alias": [
+   "funciones"
+  ],
+  "periodicidad": "cuando_cambie",
+  "periodicidad_texto": "Cuando exsitan reformas al Artículo 13 o cuando se actualize la Reseña Histórica.",
+  "publicar": [
+   "Artículo 13 de la Ley de Municipalidades con sus reformas",
+   "Reseña Histórica del Municipio"
+  ],
+  "observaciones": [
+   "Puede ser:",
+   "- Formato La Gaceta ó",
+   "- Documento firmado por Secretario/a Municipal ó",
+   "- Copia digital de la versión de la AMHON"
+  ]
+ },
+ {
+  "sector": "municipalidad",
+  "componente": "Estructura Orgánica",
+  "apartado": "Atribuciones por Unidad Administrativa",
+  "alias": [
+   "atribuciones por unidad administrativa"
+  ],
+  "periodicidad": "cuando_cambie",
+  "periodicidad_texto": "Cuando existan cambios a las funciones o se actualize el Manual.",
+  "publicar": [
+   "Manual de Puestos y Funciones ó",
+   "Documentos de cada Unidad, con sus respectivas firmas"
+  ],
+  "observaciones": [
+   "Deben incluir el Certificado del Punto de Acta donde fue aprobado el Manual. Los documentos de cada Unidad deben de contener el nombre, puesto, firma y sello del Jefe de la Unidad."
+  ]
+ },
+ {
+  "sector": "municipalidad",
+  "componente": "Estructura Orgánica",
+  "apartado": "Servicios Prestados, Procedimientos y Requisitos",
+  "alias": [
+   "servicios prestados",
+   "procedimiento",
+   "procedimientos",
+   "requisitos"
+  ],
+  "periodicidad": "cuando_cambie",
+  "periodicidad_texto": "Solo cuando existan cambios.",
+  "publicar": [
+   "Listado de los servicios con sus respectivos procedimientos y requisitos que debe cumplir un ciudadano para obtener dicho servicio."
+  ],
+  "observaciones": [
+   "Para que esté completo, deben estar por lo menos los Servicios de:",
+   "- Secretaria Municipal",
+   "- Catastro",
+   "- Justicia Municipal",
+   "- Control Tributario",
+   "- Unidad Municipal Ambiental",
+   "Incluir Solicitudes de Información (obligatoria)"
+  ]
+ },
+ {
+  "sector": "municipalidad",
+  "componente": "Estructura Orgánica",
+  "apartado": "Formatos",
+  "alias": [
+   "formatos"
+  ],
+  "periodicidad": "cuando_cambie",
+  "periodicidad_texto": "Solo cuando existan cambios.",
+  "publicar": [
+   "Formatos vacios que debe llenar el ciudadano"
+  ],
+  "observaciones": [
+   "No deben estar las Constancias, Permisos u otros documentos que la Municipalidad le entrega al Ciudadano."
+  ]
+ },
+ {
+  "sector": "municipalidad",
+  "componente": "Estructura Orgánica",
+  "apartado": "Tasas y Derechos",
+  "alias": [
+   "tasas y derechos"
+  ],
+  "periodicidad": "anual",
+  "periodicidad_texto": "Anual",
+  "publicar": [
+   "Plan de Arbitrios del Año vigente"
+  ],
+  "observaciones": [
+   "Deben incluir el Certificado del Punto de Acta donde fue aprobado."
+  ]
+ },
+ {
+  "sector": "municipalidad",
+  "componente": "Estructura Orgánica",
+  "apartado": "Información Catastral",
+  "alias": [
+   "informacion catastral"
+  ],
+  "periodicidad": "trimestral",
+  "periodicidad_texto": "Trimestral",
+  "publicar": [
+   "Principalmente debe estar publicado el cuadro indicado en los Lineamientos, la Forma 09 es una solución temporal."
+  ],
+  "observaciones": [
+   "Incluir el enlace a la página del Instituto de la Propiedad y deben actualizar cada trimestre."
+  ]
+ },
+ {
+  "sector": "municipalidad",
+  "componente": "Estructura Orgánica",
+  "apartado": "Registro Público",
+  "alias": [
+   "registro publico",
+   "registros publicos"
+  ],
+  "periodicidad": "mensual",
+  "periodicidad_texto": "Mensual para los Registros y trimestral para los Inventarios.",
+  "publicar": [
+   "Para completo, que inlcuyan por lo menos los registros indicados en negrillas. Si faltan los demás, favor indicarlo como recomendación.",
+   "- Matrimonios Civiles (solo fecha y nombres de contrayentes)",
+   "- Registro de Guías Francas o de Traslado",
+   "- Registro de Armas de Fuego",
+   "- Registro de Fierro de Herrar",
+   "- Registro de Cartas de Venta",
+   "- Registro de Dominis Plenos",
+   "- Registro de Moto Sierras"
+  ],
+  "observaciones": [
+   "También deben incluir lo siguiente:",
+   "Cada Trimestre:",
+   "- Inventario de Mobiliario y Equipo ó",
+   "- Forma 09 de la Redición de Cuentas",
+   "Favor indicar que el inventario es de publicación obligatoria."
+  ]
+ },
+ {
+  "sector": "municipalidad",
+  "componente": "Estructura Orgánica",
+  "apartado": "Oficial de Información Pública (OIP)",
+  "alias": [
+   "oficial de informacion publica (oip)",
+   "oficial de informacion publica"
+  ],
+  "periodicidad": "cuando_cambie",
+  "periodicidad_texto": "Solo cuando se cambie al OIP.",
+  "publicar": [
+   "En área de texto:",
+   "- Nombre del OIP",
+   "- Dirección de la Oficina",
+   "- Horario de Atención",
+   "- Correo Electrónico Institucional",
+   "- Teléfono Fijo de la Municipalidad (si hay)",
+   "Constancia de Nombramiento o Certificado del Punto de Acta del nombramiento (este último de preferencia)."
+  ],
+  "observaciones": [
+   "- La información del OIP en el área de texto es obligatoria, si no está, quitar Completa.",
+   "- Si no esta el Certificado o Constancia de Nombramiento, quitar Veraz.",
+   "- Debe estar la fecha de actualización en el área de texto, si no está, quitar Oportuna."
+  ]
+ },
+ {
+  "sector": "municipalidad",
+  "componente": "Planeación y Rendición Cuentas",
+  "apartado": "Plan Operativo Anual",
+  "alias": [
+   "plan operativo"
+  ],
+  "periodicidad": "anual",
+  "periodicidad_texto": "Anual",
+  "publicar": [
+   "Puede ser:",
+   "- Reporte SAMI (para los que esten utilizado el sistema) ó",
+   "- Informe Narrativo con todos los Proyectos, Inversiones y Objetivos por Unidades Administrativas"
+  ],
+  "observaciones": [
+   "Incluir el Certificado del Punto de Acta donde el POA fue aprobado por la Corporación Municipal."
+  ]
+ },
+ {
+  "sector": "municipalidad",
+  "componente": "Planeación y Rendición Cuentas",
+  "apartado": "Plan Estratégico",
+  "alias": [
+   "plan estrategico"
+  ],
+  "periodicidad": "cuando_cambie",
+  "periodicidad_texto": "Cuando se publique el nuevo PDM. El Plan de Emergencia Municipal es Anual.",
+  "publicar": [
+   "Plan de Desarrollo Municipal (PDM) activo",
+   "Si está en desarrollo, publicar cada tres meses lo siguiente:",
+   "- Resumén de lo ejecutado en ese período ó",
+   "- Certificado emitido por la Secretaría de Gobernación por ese período",
+   "- Publicar el Plan de Emergencia Municipal"
+  ],
+  "observaciones": [
+   "Deben incluir el Certificado del Punto de Acta donde fue aprobado el PDM por la Corporación Municipal.",
+   "Incluir el Certificado de Punto de Acta y el Certificado de COPECO."
+  ]
+ },
+ {
+  "sector": "municipalidad",
+  "componente": "Planeación y Rendición Cuentas",
+  "apartado": "Plan Anual de Compras y Contrataciones",
+  "alias": [
+   "plan anual de compras y contrataciones"
+  ],
+  "periodicidad": "anual",
+  "periodicidad_texto": "Anual",
+  "publicar": [
+   "Si están adscritos a ONCAE, deben publicar:",
+   "- Reporte PACC generado por Honducompras,",
+   "- Enlace al PACC de la Municipalidad en Honducompras,",
+   "- Cuadro PACC aprobado por la Corporación Municipal",
+   "Si no, los siguientes documentos:",
+   "- Plan de Inversión Municipal del año vigente y",
+   "- Presupuesto de Ingresos y Egresos aprobados por la Corporación para el año vigente (si estos no estan publicados, favor solo hacer la recomendación)."
+  ],
+  "observaciones": [
+   "El Plan de Inversión Municipal debe contener el nombre, puesto, firma y sello del responsable o responsables de las misma o el Certificado de Punto de Acta donde fue aprobado por la Corporación Municipal.",
+   "Los Presupuestos de Ingresos y Egresos pueden ser los reportes del SAMI o los institucionales, con estos últimos deben incluir el nombre, puesto, firma y sello del responsable o responsables o el Certificado del Punto de Acta donde fueron aprobados por la Corporación Municipal."
+  ]
+ },
+ {
+  "sector": "municipalidad",
+  "componente": "Planeación y Rendición Cuentas",
+  "apartado": "Programa y Proyecto",
+  "alias": [
+   "programa y proyecto"
+  ],
+  "periodicidad": "mensual",
+  "periodicidad_texto": "Por preferencia Mensual",
+  "publicar": [
+   "Puede ser:",
+   "- Reportes SAMI (para los que esten utilizado el sistema) ó",
+   "- Cuadros institucional con la información solicitada en los Lineamientos (este es el reporte por preferencia)"
+  ],
+  "observaciones": [
+   "Con los reportes SAMI, se acepta que esté publicado cualquiera de los reportes que se les indicó, pero recordarles que deben estar ambos. Se pueden aceptar de manera trimestral, pero por obligación es mensual."
+  ]
+ },
+ {
+  "sector": "municipalidad",
+  "componente": "Planeación y Rendición Cuentas",
+  "apartado": "Actividades",
+  "alias": [
+   "actividades"
+  ],
+  "periodicidad": "mensual",
+  "periodicidad_texto": "Mensual",
+  "publicar": [
+   "Puede ser:",
+   "- Reporte SAMI (para los que esten utilizado el sistema) ó",
+   "- Mismos reportes de Programa y Proyecto ó",
+   "- Informe de Actividades por Unidad"
+  ],
+  "observaciones": [
+   "Puede ser cualquier otro reporte, no necesariamente los indicados."
+  ]
+ },
+ {
+  "sector": "municipalidad",
+  "componente": "Planeación y Rendición Cuentas",
+  "apartado": "Remuneración de Empleados",
+  "alias": [
+   "remuneracion de empleados"
+  ],
+  "periodicidad": "mensual",
+  "periodicidad_texto": "Mensual",
+  "publicar": [
+   "Planillas a incluir:",
+   "- Planilla de Empleados Permanentes (siempre)",
+   "- Planilla de Pago de Dietas Regidores (siempre)",
+   "- Planilla de Empleados Temporales (eventual)",
+   "- Planilla de Jornales (eventual)"
+  ],
+  "observaciones": [
+   "Procurar que utilizen la plantilla indicada en los Lineamientos. Revisar siempre que en las Planillas Permanentes aparezcan el Alcalde y Vice-Alcalde; si no están quitar Completa y solicitar que indiquen la razón dentro de la planilla. En junio y diciembre deben incluir los aguinaldos."
+  ],
+  "nota_no_valida": true
+ },
+ {
+  "sector": "municipalidad",
+  "componente": "Planeación y Rendición Cuentas",
+  "apartado": "Licitación",
+  "alias": [
+   "licitacion",
+   "licitaciones"
+  ],
+  "periodicidad": "mensual",
+  "periodicidad_texto": "Mensual",
+  "publicar": [
+   "Deben publicar la información de las Licitaciones y Concursos según la etapa en que la misma se encuentra, siguiendo lo indicado en los Lineamientos."
+  ],
+  "observaciones": [
+   "Con uno de los documentos que falte, indicarlo en las Recomendaciones y quitar Veraz."
+  ]
+ },
+ {
+  "sector": "municipalidad",
+  "componente": "Planeación y Rendición Cuentas",
+  "apartado": "Compras",
+  "alias": [
+   "compras"
+  ],
+  "periodicidad": "mensual",
+  "periodicidad_texto": "Mensual",
+  "publicar": [
+   "Nuevo Cuadro de Compras y Proveedores en Formato Excel, las compras por medio de Caja Chica y/o Fondo Rotatorio, pueden ir en cuadros Excel diferentes.",
+   "Documentos de Respaldo a publicar:",
+   "- Orden de Compra",
+   "- Orden de Pago",
+   "- Facturas",
+   "- Acta de Recepción",
+   "- Cotizaciones (si hay)",
+   "Si no está el cuadro Excel, se quita Adecuado. Si no hay documentación soporte, quitar Veraz. Si el cuadro no está en el orden de la documentación soporte, se quita Adecuada.",
+   "El orden de la información soporte debe estar en el orden del llenado del cuadro de compras.",
+   "NO se deben incluir pagos mensuales de servicios públicos, Internet, etc."
+  ],
+  "observaciones": [
+   "Compras debe incluir:",
+   "- Suministros de Oficina",
+   "- Alimentos",
+   "- Materiales de Construcción",
+   "- Medicamentos",
+   "- Mobiliario y Equipo (eventual)",
+   "- Vehículos (eventual)",
+   "- Repuestos",
+   "Servicios a incluir:",
+   "- Internet (solo cuando se compra el servicio)",
+   "- Publicidad (Diarios, Radio y TV)",
+   "- Celular (recargas)",
+   "- Fotocopiado/Impresoras",
+   "- Mantenimientos de Mobiliario, Equipo y Vehículos"
+  ]
+ },
+ {
+  "sector": "municipalidad",
+  "componente": "Planeación y Rendición Cuentas",
+  "apartado": "Contrataciones",
+  "alias": [
+   "contrataciones"
+  ],
+  "periodicidad": "mensual",
+  "periodicidad_texto": "Mensual",
+  "publicar": [
+   "Nuevo Cuadro de Contrataciones y de Proveedores en formato Excel.",
+   "Documentos de Respaldo a publicar:",
+   "- Copía íntegra del Contrato",
+   "- Cotizaciones (si hay)",
+   "- Orden de Pago",
+   "- Orden de Inicio",
+   "- Facturas"
+  ],
+  "observaciones": [
+   "- Recordar que debein ir TODOS los tipos de contratos, incluyendo los de personal temporal.",
+   "- Si no hay contratos firmados, publicar nota aclaratoria.",
+   "- Los contratos a publicar son solo los que se firman en el mes, el cuadro NO es para publicar pagos mensuales de contratos."
+  ]
+ },
+ {
+  "sector": "municipalidad",
+  "componente": "Planeación y Rendición Cuentas",
+  "apartado": "Fideicomisos",
+  "alias": [
+   "fideicomisos",
+   "fideicomiso"
+  ],
+  "periodicidad": "mensual",
+  "periodicidad_texto": "Mensual",
+  "publicar": [
+   "Siempre seleccionar No Aplica. Hay Municipalidades que tienen Fideicomisos, pero por lo general, solo aplica a Categoria A."
+  ],
+  "observaciones": [
+   "Si no hay información publicada, no quitar puntos. Solo indicarles que en vez de notas aclaratorias, indicar en el área de texto que este Apartado No Aplica a la Municipalidad."
+  ],
+  "siempre_no_aplica": true
+ },
+ {
+  "sector": "municipalidad",
+  "componente": "Planeación y Rendición Cuentas",
+  "apartado": "Concesiones",
+  "alias": [
+   "concesiones"
+  ],
+  "periodicidad": "mensual",
+  "periodicidad_texto": "Mensual",
+  "publicar": [
+   "Cuadro de Concesiones Otorgadas con la siguiente información:",
+   "- Fecha de Otorgación de Concesión",
+   "- Nombre de Beneficiario",
+   "- Número de Expediente",
+   "- Tiempo de Duaración de la Concesión",
+   "- Fecha de Finalización de la Concesión",
+   "Incluir Certificado del Punto de Acta donde fue aprobada la concesión"
+  ],
+  "observaciones": [
+   "Si no hay información, indicar en el área de texto que el Apartado se actualizara cuando existan procesos y concesiones aprobadas por la Corporación Municipal. Si hay concesiones, publicar cuadro institucional con la información indicada para los Apartados de Permisos y Licencias."
+  ]
+ },
+ {
+  "sector": "municipalidad",
+  "componente": "Planeación y Rendición Cuentas",
+  "apartado": "Permisos",
+  "alias": [
+   "permisos"
+  ],
+  "periodicidad": "mensual",
+  "periodicidad_texto": "Mensual",
+  "publicar": [
+   "Para que esté completo, deben incluir:",
+   "- Permisos de Construcción",
+   "- Permisos de Operación (obligatorio, si no están, quitar Completa)",
+   "Otros Permisos eventuales:",
+   "- Permisos de Terraje",
+   "- Permisos de Destace",
+   "- Cualquier otro que la Municipalidad maneje",
+   "En caso de indicar que no tengan, deben hacer cruce con los reportes de Ventas para corroborar."
+  ],
+  "observaciones": [
+   "Cuadro deben incluir la siguiente información:",
+   "- Fecha de Otorgamiento del Permiso",
+   "- Nombre del Beneficiario",
+   "- Tipo de Permiso",
+   "- Tiempo de Duración",
+   "- Fecha de Incio",
+   "- Fecha de Finalización",
+   "- Observaciones (si es reanudación)"
+  ]
+ },
+ {
+  "sector": "municipalidad",
+  "componente": "Planeación y Rendición Cuentas",
+  "apartado": "Licencias",
+  "alias": [
+   "licencias"
+  ],
+  "periodicidad": "mensual",
+  "periodicidad_texto": "Mensual",
+  "publicar": [
+   "Pueden ser:",
+   "- Licencias otorgadas por ICF para Uso No Comercial (Alcaldía solo es enlace)",
+   "- Licencias de Baile (depende de cada Municipalidad)",
+   "- Cualquier otro que la Municipalidad maneje",
+   "En caso de indicar que no tengan, deben hacer cruce con los reportes de Ventas para corroborar."
+  ],
+  "observaciones": [
+   "Cuadro deben incluir la siguiente información:",
+   "- Fecha de Otorgamiento del Permiso",
+   "- Nombre del Beneficiario",
+   "- Tipo de Permiso",
+   "- Tiempo de Duración",
+   "- Fecha de Incio",
+   "- Fecha de Finalización",
+   "- Observaciones (si es reanudación)"
+  ]
+ },
+ {
+  "sector": "municipalidad",
+  "componente": "Planeación y Rendición Cuentas",
+  "apartado": "Ventas",
+  "alias": [
+   "ventas"
+  ],
+  "periodicidad": "mensual",
+  "periodicidad_texto": "Mensual",
+  "publicar": [
+   "Puede ser:",
+   "- Reporte SAMI (para los que esten utilizado el sistema) ó",
+   "- Reporte Rentístico de Ingresos"
+  ],
+  "observaciones": [
+   "Por preferencia, solicitar publicar ambos reportes."
+  ]
+ },
+ {
+  "sector": "municipalidad",
+  "componente": "Planeación y Rendición Cuentas",
+  "apartado": "Subastas de Obras",
+  "alias": [
+   "subastas de obras",
+   "subastas"
+  ],
+  "periodicidad": "mensual",
+  "periodicidad_texto": "Mensual",
+  "publicar": [
+   "Si no hay información, indicar en el área de texto que el Apartado se actualizara cuando existan procesos de Subastas."
+  ],
+  "observaciones": [
+   "Si hay subastas de productos o animales decomisados, deben publicar toda la información de la subasta."
+  ]
+ },
+ {
+  "sector": "municipalidad",
+  "componente": "Finanzas",
+  "apartado": "Balance General",
+  "alias": [
+   "balance general"
+  ],
+  "periodicidad": "mensual",
+  "periodicidad_texto": "Mensual",
+  "publicar": [
+   "Puede ser:",
+   "- Reporte SAMI (para los que esten utilizado el sistema) ó",
+   "- Balance General Institucional",
+   "- Forma 12 de la Rendición de Cuentas (publicar solo como opción)"
+  ],
+  "observaciones": [
+   "Cuando una Municipalidad indica que solo genera el reporte trimestralmentes, favor indicarles esto en las Observaciones: 'Sobre los cierres contables trimestrales, esto se hace para cumplir con la Rendición de Cuentas a la Secretaría de Gobernación, pero SAMI debe ser cerrado mensualmente, por lo tanto, SAMI puede generar estos reportes de manera mensual, tal y como lo indica la Ley y los Lineamientos'."
+  ]
+ },
+ {
+  "sector": "municipalidad",
+  "componente": "Finanzas",
+  "apartado": "Estado de Resultados",
+  "alias": [
+   "estado de resultados"
+  ],
+  "periodicidad": "mensual",
+  "periodicidad_texto": "Mensual",
+  "publicar": [
+   "Puede ser:",
+   "- Reporte SAMI (para los que esten utilizado el sistema) ó",
+   "- Estado de Resultados Institucional",
+   "- Forma 11 de la Rendición de Cuentas (publicar solo como opción)"
+  ],
+  "observaciones": [
+   "Cuando una Municipalidad indica que solo genera el reporte trimestralmentes, favor indicarles esto en las Observaciones: 'Sobre los cierres contables trimestrales, esto se hace para cumplir con la Rendición de Cuentas a la Secretaría de Gobernación, pero SAMI debe ser cerrado mensualmente, por lo tanto, SAMI puede generar estos reportes de manera mensual, tal y como lo indica la Ley y los Lineamientos'."
+  ]
+ },
+ {
+  "sector": "municipalidad",
+  "componente": "Finanzas",
+  "apartado": "Liquidación Presupuestaria",
+  "alias": [
+   "liquidacion presupuestaria"
+  ],
+  "periodicidad": "mensual",
+  "periodicidad_texto": "Mensual",
+  "publicar": [
+   "Puede ser:",
+   "- Reportes SAMI a publicar (para los que esten utilizado el sistema):",
+   "• Liquidación Presupuestaria y",
+   "• Ejecución Presupuestaria de Ingresos por Periodo",
+   "- Liquidación Presupuestaria de Ingresos Institucional"
+  ],
+  "observaciones": [
+   "Cuando una Municipalidad indica que solo genera el reporte trimestralmentes, favor indicarles esto en las Observaciones: 'Sobre los cierres contables trimestrales, esto se hace para cumplir con la Rendición de Cuentas a la Secretaría de Gobernación, pero SAMI debe ser cerrado mensualmente, por lo tanto, SAMI puede generar estos reportes de manera mensual, tal y como lo indica la Ley y los Lineamientos'."
+  ]
+ },
+ {
+  "sector": "municipalidad",
+  "componente": "Finanzas",
+  "apartado": "Presupuesto Mensual",
+  "alias": [
+   "presupuesto mensual"
+  ],
+  "periodicidad": "mensual",
+  "periodicidad_texto": "Mensual",
+  "publicar": [
+   "Puede ser:",
+   "- Reportes SAMI a publicar (para los que esten utilizado el sistema):",
+   "• Reporte Presupuesto Mensual y",
+   "• Ejecución de Egresos del Ejercicio",
+   "- Liquidación Presupuestaria de Egresos Institucional"
+  ],
+  "observaciones": [
+   "Reporte debe ser publicado mensualmente, no se aceptan trimestrales."
+  ]
+ },
+ {
+  "sector": "municipalidad",
+  "componente": "Finanzas",
+  "apartado": "Informe Anual",
+  "alias": [
+   "informe anual"
+  ],
+  "periodicidad": "anual",
+  "periodicidad_texto": "Anual",
+  "publicar": [
+   "Informe de Rendición de Cuentas enviado a Secretaría de Gobernación del Año Anterior ó Presentación de Rendición de Cuentas Municipales del Cabildo Abierto."
+  ],
+  "observaciones": [
+   "Informe debe contener las 14 Formas. Si no están las 14 formas, pero está la Presentación de Rendición de Cuentas del Cabildo Abierto, se toma como válida."
+  ]
+ },
+ {
+  "sector": "municipalidad",
+  "componente": "Finanzas",
+  "apartado": "Transferencia Mensual",
+  "alias": [
+   "transferencia mensual"
+  ],
+  "periodicidad": "mensual",
+  "periodicidad_texto": "Mensual",
+  "publicar": [
+   "Puede ser:",
+   "- Reportes SAMI (para los que esten utilizado el sistema) ó",
+   "- Cuadro Institucional con la siguiente información: fecha de ingreso de transferencia, valor de la transferencia y procedencia de la transferencia.",
+   "Si han recibido donaciones en especies, incluir cuadro institucional con el siguiente detalle: fecha de recepción, donante, detalle y cantidad de lo donado."
+  ],
+  "observaciones": [
+   "Deben incluir todas las transferencias recibidas, ya sea de sector público como sector privado y este valor debe cuadrar con lo indicado en los Ingresos por Transferencias del Estado de Resultados. Solicitar que se incluyan las transferencias realizadas por la Municipalidad.",
+   "Reporte debe ser publicado mensualmente, no se aceptan trimestrales."
+  ]
+ },
+ {
+  "sector": "municipalidad",
+  "componente": "Finanzas",
+  "apartado": "Gasto",
+  "alias": [
+   "gasto"
+  ],
+  "periodicidad": "mensual",
+  "periodicidad_texto": "Mensual",
+  "publicar": [
+   "Puede ser:",
+   "- Reportes SAMI (para los que esten utilizado el sistema) ó",
+   "- Reporte Rentístico de Egresos Institucional",
+   "- Incluir cuadro institucional con el gasto de combustibles mensual, el que debe incluir la siguiente información: fecha de compra de combustible, placa y descripción del vehículo y detalle del uso del vehículo."
+  ],
+  "observaciones": [
+   "Reporte debe ser publicado mensualmente, no se aceptan trimestrales.",
+   "Si publican los reportes de Liquidación y Presupuesto de forma mensual, estos deben de cuadrar con el reporte de Gasto."
+  ]
+ },
+ {
+  "sector": "municipalidad",
+  "componente": "Finanzas",
+  "apartado": "Inversión Física",
+  "alias": [
+   "inversion fisica"
+  ],
+  "periodicidad": "mensual",
+  "periodicidad_texto": "Mensual",
+  "publicar": [
+   "Publicar los cuadros indicados en los Lineamientos:",
+   "- Cuadro de Asignación de Bienes de Uso",
+   "- Cuadro de Mejoras y Mantenimientos de Infraestructura Municipal"
+  ],
+  "observaciones": [
+   "Si en el cuadro de Compras hay adquisiciones de mobiliario, equipo o  vehiculos para uso de la Municipalidad, estos deben reflejarse en el Cuadro de Bienes. Con Infraestructura Municipal, estos se deben reflejar en los reportes de de Programa y Proyecto."
+  ]
+ },
+ {
+  "sector": "municipalidad",
+  "componente": "Finanzas",
+  "apartado": "Inversión Financiera",
+  "alias": [
+   "inversion financiera"
+  ],
+  "periodicidad": "mensual",
+  "periodicidad_texto": "Mensual",
+  "publicar": [
+   "Por lo general es una nota aclaratoria."
+  ],
+  "observaciones": [
+   "Como alternativas a la nota aclaratoria, pueden publicar informe de los intereses percibidos por las cuentas de ahorro (esto por preferencia)."
+  ]
+ },
+ {
+  "sector": "municipalidad",
+  "componente": "Finanzas",
+  "apartado": "Deuda y Morosidad",
+  "alias": [
+   "deuda y morosidad"
+  ],
+  "periodicidad": "mensual",
+  "periodicidad_texto": "Mensual",
+  "publicar": [
+   "Detalle de las Cuentas por Pagar, usando el formato indicado en los Lineamientos."
+  ],
+  "observaciones": [
+   "Revisar las Cuentas por Pagar del Balance General, si hay y ellos publican nota indicando que no tienen, quitar completo. De los contrario se acepta la nota como válida. Pueden publicar la Mora que la ciudadanía le debe a la Municipalidad, pero solo publicar datos generales por rubro, nada de detalles, ya que esto puede violentar el Artículo 3, numeral 7 de la LTAIP."
+  ]
+ },
+ {
+  "sector": "municipalidad",
+  "componente": "Regulación",
+  "apartado": "Leyes",
+  "alias": [
+   "leyes"
+  ],
+  "periodicidad": "cuando_cambie",
+  "periodicidad_texto": "Cuando exsitan reformas a las Leyes o se aprueben nuevas Leyes.",
+  "publicar": [
+   "- Ley de Municipalidades y sus Reformas",
+   "- Ley de Transparencia y Acceso a la Información Pública",
+   "- Ley de la Carrera Administrativa Municipal",
+   "- Ley de Contratación del Estado y sus Reformas",
+   "- Ley de Procedimiento Administrativo y sus Reformas",
+   "- Ley de Compras Eficientes y Transparentes a Través de Medio Electrónicos",
+   "- Ley del Ente Regulador de los Servicios de Agua Potable y Saneamiento (ERSAPS)",
+   "- Ley de Ordenamiento Territorial",
+   "- Ley de Mecanismos de Participación Ciudadana y sus reformas*",
+   "- Ley de Patronatos y Asociaciones Comunitarias y sus reformas*",
+   "- Otras Leyes de Observancia Generalque afectan la operación y funcionamiento de la Municipalidad."
+  ],
+  "observaciones": [
+   "Todas las Leyes deben estar como aparecen en La Gaceta o las versiones emitidas por la AMHON, IAIP u otra Institución Nacional o Secretaría de Estado. Si está la Ley General del Trabajo, esta se acepta en el formato que esté. Si faltan una o varias, no hay que quitarles puntos."
+  ]
+ },
+ {
+  "sector": "municipalidad",
+  "componente": "Regulación",
+  "apartado": "Reglamentos",
+  "alias": [
+   "reglamentos"
+  ],
+  "periodicidad": "cuando_cambie",
+  "periodicidad_texto": "Cuando existan cambios.",
+  "publicar": [
+   "- Reglamento de Caja Chica",
+   "- Reglamento de Viáticos",
+   "- Lineamientos emitidos por el IAIP",
+   "- Estatutos Laborales (si tienen)",
+   "- Manual de Transparencia, Rendición de Cuentas y Acceso a la Información para Juntas de Agua para Personas Facilitadoras (RAS-HON).",
+   "Otros Reglamentos internos de la Municipalidad."
+  ],
+  "observaciones": [
+   "Incluido con los Reglamentos Internos, debe ir el Certificado del Punto de Acta donde fue aprobado por la Corporación Municipal. Si esta solamente el Reglamento, se acepta como válida."
+  ]
+ },
+ {
+  "sector": "municipalidad",
+  "componente": "Regulación",
+  "apartado": "Acuerdos",
+  "alias": [
+   "acuerdos"
+  ],
+  "periodicidad": "mensual",
+  "periodicidad_texto": "Mensual",
+  "publicar": [
+   "Convenios o Acuerdos firmados por la Municipalidad con:",
+   "- Instituciones Nacionales",
+   "- Organismos de Cooperación",
+   "- Empresas Nacionales"
+  ],
+  "observaciones": [
+   "En vez de notas aclaratorias, favor indicarles que publiquen en el área de texto editable lo siguiente: 'Este Apartado se actualiza cuando existan Convenios y Acuerdos firmados por la Municipalidad'."
+  ]
+ },
+ {
+  "sector": "municipalidad",
+  "componente": "Regulación",
+  "apartado": "Circulares",
+  "alias": [
+   "circulares"
+  ],
+  "periodicidad": "mensual",
+  "periodicidad_texto": "Mensual",
+  "publicar": [
+   "- Cirulares Internas emitidas a todos los miembros de la Municipalidad",
+   "- Ordenanzas Municipales"
+  ],
+  "observaciones": [
+   "No aceptar memorandos entre Unidades."
+  ]
+ },
+ {
+  "sector": "municipalidad",
+  "componente": "Regulación",
+  "apartado": "Diario Oficial La Gaceta",
+  "alias": [
+   "diario oficial la gaceta"
+  ],
+  "periodicidad": "trimestral",
+  "periodicidad_texto": "Trimestral",
+  "publicar": [
+   "- Decretos Legislativos que afectan a las Municipalidades",
+   "- Publicaciones de Instituciones que afectan a las Municipalidades, ej. Lineamientos de Archivos",
+   "- Publicaciones de la Municipalidad en La Gaceta, ej. Aviso de Licitación Pública o Concurso Público"
+  ],
+  "observaciones": [
+   "Apartado debe estar actualizado de forma trimestral: marzo, junio, septiembre y diciembre. Que incluyan los enlaces a las páginas web de la ENAG y La Gaceta. Favor indicarles que deben publicar el Presupuesto de Ingresos y Egresos de la República del año vigente. Si no hay información, no quitarles la puntuación, colocar: No Aplica."
+  ]
+ },
+ {
+  "sector": "municipalidad",
+  "componente": "Regulación",
+  "apartado": "Decreto Ejecutivo",
+  "alias": [
+   "decreto ejecutivo"
+  ],
+  "periodicidad": "mensual",
+  "periodicidad_texto": "Mensual",
+  "publicar": [
+   "Todos los PCM emitidos que afectan directamente a las Municipalidades."
+  ],
+  "observaciones": [
+   "En vez de nota aclaratoria, indicarles que publiquen en el área de texto que este Apartado se actualizará cuando existan PDM's. Si no hay información, seleccionar No Aplica."
+  ]
+ },
+ {
+  "sector": "municipalidad",
+  "componente": "Regulación",
+  "apartado": "Acuerdos Institucional",
+  "alias": [
+   "acuerdos institucional"
+  ],
+  "periodicidad": "mensual",
+  "periodicidad_texto": "Mensual",
+  "publicar": [
+   "Acuerdos internos emitidos por la Corporación Municipal durante las Reuniones Ordinarias y Extraordinarias. Puedens ser: nombramientos de personal, declaraciones de emergencia, modificaciones presupestarias, aprobaciones de proyectos de infraestructura o programas sociales, etc."
+  ],
+  "observaciones": [
+   "Publicar el Acuerdo ó el Certificado del Punto de Acta donde se aprobó por parte de la Corporación Municipal."
+  ]
+ },
+ {
+  "sector": "municipalidad",
+  "componente": "Regulación",
+  "apartado": "Resoluciones",
+  "alias": [
+   "resoluciones"
+  ],
+  "periodicidad": "mensual",
+  "periodicidad_texto": "Mensual",
+  "publicar": [
+   "Actas Municipales Ordinarias y Extraordinarias en el mes, se pueden presentar de cualquiera de las siguientes formas:",
+   "- Copia Integra de las Actas como estan en el Libro de Actas",
+   "- Resumen Ejecutivo o transcripción de las Actas emitido por el Secretario/a Municipal",
+   "- Certificados de los Puntos de Actas relevantes."
+  ],
+  "observaciones": [
+   "Según la Ley, se deben hacer dos Reuniones Mensuales de la Corporación. Pero debido a procesos internos, por lo general solo se publica un Acta en el Mes debido a que el Acta de la Primera Reunión se aprueba hasta la Seguna Reunión. Si solo hay una, no quitar puntos. Si hay Reuniones Extraordinarias, también se deben publicar."
+  ]
+ },
+ {
+  "sector": "municipalidad",
+  "componente": "Participación Ciudadana",
+  "apartado": "Participación Ciudadana",
+  "alias": [
+   "participacion ciudadana"
+  ],
+  "periodicidad": "mensual",
+  "periodicidad_texto": "Mensual",
+  "publicar": [
+   "Actas de los Cabildos Abiertos realizados en el año, se pueden presentar de cualquiera de las siguientes formas:",
+   "- Copia Integra de las Acta como estan en el Libro de Actas",
+   "- Resumen Ejecutivo o transcripción del Acta emitido por el Secretario/a Municipal",
+   "- Certificados de los Puntos de Actas",
+   "Adicionalmente deben publicar: las Invitaciones a los Cabildos y los Listados de Participación.",
+   "Otros documentos que se pueden publicar de manera mensual:",
+   "- Juramentaciones de Patronatos o Juntas de Agua",
+   "- Eventos donde exista participación directa con la Ciudadanía",
+   "- Actividades realizadas por la  Oficina Municipal de la Mujer",
+   "- Actividades Realizadas por la Oficina de la Niñez y Juventud",
+   "En el Área de Texto debe estar el enlace a la Encuesta de Satisfacción y publicar cada 6 meses los resultados de dicha encuesta."
+  ],
+  "observaciones": [
+   "- Según la Ley de Municipalidades, se deben, como mínimo, cinco Cabildos Abiertos en el Año (Artículo 32), adicionalmente, en el mes de enero deben tener publicado el Cabildo Abierto de Rendición de Cuentas del año anterior.",
+   "- Siempre revisar que el enlace a la encuesta electrónica funcione. En caso que no, quitar Adecuada.",
+   "- Si no esta el enlace a la encuesta electrónica de satisfacción, quitar Completa.",
+   "- Si no están los resultados de la encuesta cada 6 meses, quitar Adecuada.",
+   "NUNCA indicar No Aplica en este Apartado."
+  ],
+  "nunca_no_aplica": true
+ },
+ {
+  "sector": "institucion",
+  "componente": "Estructura Orgánica",
+  "apartado": "Organigrama",
+  "alias": [
+   "organigrama"
+  ],
+  "periodicidad": "cuando_cambie",
+  "periodicidad_texto": "Cuando existan cambios en el organigrama.",
+  "publicar": [
+   "Organigrama en formato PDF junto con la imagen"
+  ],
+  "observaciones": [
+   "Deben estar en color. Si no hay imagen, agregarlo como sugerencia."
+  ]
+ },
+ {
+  "sector": "institucion",
+  "componente": "Estructura Orgánica",
+  "apartado": "Funciones",
+  "alias": [
+   "funciones"
+  ],
+  "periodicidad": "cuando_cambie",
+  "periodicidad_texto": "Cuando existan reformas a la Ley o Decreto de Creación.",
+  "publicar": [
+   "Artículo donde se plasman las funciones de la Institución según su Ley o Decreto de creación",
+   "Reseña Histórica de la Institución"
+  ],
+  "observaciones": [
+   "Puede ser:",
+   "- Formato La Gaceta",
+   "- Documento firmado por Secretario/a General"
+  ]
+ },
+ {
+  "sector": "institucion",
+  "componente": "Estructura Orgánica",
+  "apartado": "Atribuciones por Unidad Administrativa",
+  "alias": [
+   "atribuciones por unidad administrativa"
+  ],
+  "periodicidad": "cuando_cambie",
+  "periodicidad_texto": "Cuando existan cambiosen las funciones o se actualize el Manual.",
+  "publicar": [
+   "Manual de Puestos y Funciones ó",
+   "Documentos de cada Unidad, con sus respectivas firmas"
+  ],
+  "observaciones": [
+   "Deben estar firmado y avalado por las autoridades de la institución."
+  ]
+ },
+ {
+  "sector": "institucion",
+  "componente": "Estructura Orgánica",
+  "apartado": "Servicios Prestados, Procedimientos y Requisitos",
+  "alias": [
+   "servicios prestados",
+   "procedimiento",
+   "procedimientos",
+   "requisitos"
+  ],
+  "periodicidad": "cuando_cambie",
+  "periodicidad_texto": "Solo cuando existan cambios (se pueden actualizar anualmente, pero no es obligatorio).",
+  "publicar": [
+   "Listado de los servicios con sus respectivos procedimientos y requisitos que debe cumplir un ciudadano para obtener dicho servicio. Si la Institución presta servicos de manera digital, incluir los enlaces."
+  ],
+  "observaciones": [
+   "Depende de cada Institución, no hay un criterio base como en Municipalidades.",
+   "Si la Institución no presta ningún servicio, debe estar, de manera obligatoria, el Servico de Solicitud de Información."
+  ]
+ },
+ {
+  "sector": "institucion",
+  "componente": "Estructura Orgánica",
+  "apartado": "Formatos",
+  "alias": [
+   "formatos"
+  ],
+  "periodicidad": "cuando_cambie",
+  "periodicidad_texto": "Solo cuando existan cambios a los formato o se agregre un formato nuevo.",
+  "publicar": [
+   "Formatos vacios que debe llenar el ciudadano"
+  ],
+  "observaciones": [
+   "Depende de cada Institución, no hay un criterio base como en Municipalidades."
+  ]
+ },
+ {
+  "sector": "institucion",
+  "componente": "Estructura Orgánica",
+  "apartado": "Tasas y Derechos",
+  "alias": [
+   "tasas y derechos"
+  ],
+  "periodicidad": "cuando_cambie",
+  "periodicidad_texto": "Solo cuando existan cambios o actualizaciones.",
+  "publicar": [
+   "Documento con las Tasas y Derechos que la Institución cobra por sus servicios."
+  ],
+  "observaciones": [
+   "Por lo general es una publicación en el Diario Oficial La Gaceta, pero depende de cada Institución. Si no cobran por servicios, nota aclaratoria."
+  ]
+ },
+ {
+  "sector": "institucion",
+  "componente": "Estructura Orgánica",
+  "apartado": "Información Catastral",
+  "alias": [
+   "informacion catastral"
+  ],
+  "periodicidad": "semestral",
+  "periodicidad_texto": "Cada 6 meses.",
+  "publicar": [
+   "Cuadro indicado en los Lineamientos, si no tienen, la nota aclaratoria."
+  ],
+  "observaciones": [
+   "Incluir el enlace a la página del Instituto de la Propiedad y deben actualizar cada semestre."
+  ]
+ },
+ {
+  "sector": "institucion",
+  "componente": "Estructura Orgánica",
+  "apartado": "Registro Público",
+  "alias": [
+   "registro publico",
+   "registros publicos"
+  ],
+  "periodicidad": "cuando_cambie",
+  "periodicidad_texto": "Registros son mensuales.",
+  "publicar": [
+   "Depende de cada Institución, existe la posibilidad que no tengan Registros Públicos, pero si deben publicar lo siguiente:",
+   "Cada Trimestre:",
+   "- Inventario de Mobiliario y Equipo",
+   "- Inventario de Vehículo",
+   "Anual:",
+   "- Listado de Proveedores"
+  ],
+  "observaciones": []
+ },
+ {
+  "sector": "institucion",
+  "componente": "Estructura Orgánica",
+  "apartado": "Oficial de Información Pública (OIP)",
+  "alias": [
+   "oficial de informacion publica (oip)",
+   "oficial de informacion publica"
+  ],
+  "periodicidad": "cuando_cambie",
+  "periodicidad_texto": "Solo cuando se cambie al OIP. Si la Institución cambia de local, se debe actualizar esa información.",
+  "publicar": [
+   "En área de texto:",
+   "- Nombre del OIP",
+   "- Dirección de la Oficina",
+   "- Horario de Atención",
+   "- Correo Electrónico Institucional",
+   "- Teléfono Fijo de la Municipalidad"
+  ],
+  "observaciones": [
+   "Debe estar publicada la: Constancia de Nombramiento como OIP, Certificado de nombramiento como OIP o Acuerdo de Nombramiento."
+  ]
+ },
+ {
+  "sector": "institucion",
+  "componente": "Planeación y Rendición Cuentas",
+  "apartado": "Plan Operativo Anual",
+  "alias": [
+   "plan operativo"
+  ],
+  "periodicidad": "anual",
+  "periodicidad_texto": "Anual",
+  "publicar": [
+   "Reporte SIAFI-GES: PRODUCTO POR UNIDADES EJECUTORAS (POA), sino, el POA narrativo con sus respectivas firmas y sellos."
+  ],
+  "observaciones": [
+   "Todas las Instituciones Centralizadas, Descentralizadas y Desconcentradas deben generar el reporte del SIAFI-GES. Dicho reporte debe indicar en ESTADO: EN_EJECUCION"
+  ]
+ },
+ {
+  "sector": "institucion",
+  "componente": "Planeación y Rendición Cuentas",
+  "apartado": "Plan Estratégico",
+  "alias": [
+   "plan estrategico"
+  ],
+  "periodicidad": "anual",
+  "periodicidad_texto": "Anual (solo cuando es el reporte del SIAFI-GES) ó cuando se publique el nuevo PEI.",
+  "publicar": [
+   "Deben publicar el Plan Estratégico del período ó el reporte de SIAFI-GES: PLAN ESTRATÉGICO INSTITUCIONAL (PEI) del año en curso."
+  ],
+  "observaciones": [
+   "Todas las Instituciones Centralizadas, Descentralizadas y Desconcentradas pueden generar el reporte del SIAFI-GES. Dicho reporte debe indicar en ESTADO: AUTORIZADO"
+  ]
+ },
+ {
+  "sector": "institucion",
+  "componente": "Planeación y Rendición Cuentas",
+  "apartado": "Plan Anual de Compras y Contrataciones",
+  "alias": [
+   "plan anual de compras y contrataciones"
+  ],
+  "periodicidad": "anual",
+  "periodicidad_texto": "Anual",
+  "publicar": [
+   "Si están adscritos a ONCAE, deben publicar:",
+   "- Reporte PACC generado por Honducompras",
+   "- Enlace al PACC de la Institución en Honducompras",
+   "Si no, el PACC narrativo."
+  ],
+  "observaciones": [
+   "Todas las Instituciones Centralizadas, Descentralizadas y Desconcentradas deben estar registrados en ONCAE, sin excepción."
+  ]
+ },
+ {
+  "sector": "institucion",
+  "componente": "Planeación y Rendición Cuentas",
+  "apartado": "Programa y Proyecto",
+  "alias": [
+   "programa y proyecto"
+  ],
+  "periodicidad": "mensual",
+  "periodicidad_texto": "Preferiblemente Mensual",
+  "publicar": [
+   "Publicar el reporte SIAFI-GES: PRODUCCIÓN DE PRODUCTOS POR CATEGORÍA PROGRAMÁTICA, sino, según lo indicado en los Lineamientos"
+  ],
+  "observaciones": [
+   "Reporte debe ser publicado de manera mensual, aunque hay Instituciones que operan esta información trimestralmente, pero son raras."
+  ]
+ },
+ {
+  "sector": "institucion",
+  "componente": "Planeación y Rendición Cuentas",
+  "apartado": "Actividades",
+  "alias": [
+   "actividades"
+  ],
+  "periodicidad": "mensual",
+  "periodicidad_texto": "Mensual",
+  "publicar": [
+   "Por ahora se pide que publiquen el mismo reporte de Programas y Proyectos"
+  ],
+  "observaciones": [
+   "Idem"
+  ]
+ },
+ {
+  "sector": "institucion",
+  "componente": "Planeación y Rendición Cuentas",
+  "apartado": "Remuneración de Empleados",
+  "alias": [
+   "remuneracion de empleados"
+  ],
+  "periodicidad": "mensual",
+  "periodicidad_texto": "Mensual",
+  "publicar": [
+   "Planillas a incluir:",
+   "- Planilla de Empleados Permanentes (siempre)",
+   "- Planilla de Empleados por Contrato (casí permanente)",
+   "- Planilla de Jornales (depende, hay Instituciones que si tienen)"
+  ],
+  "observaciones": [
+   "Procurar que utilizen la plantilla indicada en los Lineamientos. Revisar que el valor total del Sueldo Bruto concuerde con el item Sueldos Básicos en el reporte del Presupuesto Mensual"
+  ],
+  "nota_no_valida": true
+ },
+ {
+  "sector": "institucion",
+  "componente": "Planeación y Rendición Cuentas",
+  "apartado": "Licitación",
+  "alias": [
+   "licitacion",
+   "licitaciones"
+  ],
+  "periodicidad": "mensual",
+  "periodicidad_texto": "Mensual",
+  "publicar": [
+   "Deben estar todos los documentos indicados en los Lineamientos"
+  ],
+  "observaciones": [
+   "Deben incluir los enlaces a los módulos de Honducompras utilizados para cada Licitación o Concurso, donde aplica."
+  ]
+ },
+ {
+  "sector": "institucion",
+  "componente": "Planeación y Rendición Cuentas",
+  "apartado": "Compras",
+  "alias": [
+   "compras"
+  ],
+  "periodicidad": "mensual",
+  "periodicidad_texto": "Mensual",
+  "publicar": [
+   "Nuevo Cuadro de Compras y Proveedores en Formato Excel, las compras por medio de Caja Chica y/o Fondo Rotatorio, pueden ir en cuadros Excel diferentes.",
+   "Documentos de Respaldo a publicar (como mínimo):",
+   "- Orden de Compra",
+   "- Orden de Pago",
+   "- Cotizaciones (si hay )",
+   "- Acta de Recepción",
+   "- Facturas",
+   "El orden de la información soporte debe estar en el orden del llenado del cuadro de compras."
+  ],
+  "observaciones": [
+   "Compras debe incluir:",
+   "- Suministros de Oficina",
+   "- Alimentos",
+   "- Materiales de Construcción",
+   "- Medicamentos",
+   "- Mobiliario y Equipo (eventual)",
+   "- Vehículos (eventual)",
+   "- Repuestos",
+   "Servicios a incluir:",
+   "- Internet (cuando se compra el servicio)",
+   "- Publicidad (Diarios, Radio y TV)",
+   "- Celular (recargas)",
+   "- Fotocopiado/Impresoras",
+   "- Mantenimientos de Mobiliario, Equipo y Vehículos"
+  ]
+ },
+ {
+  "sector": "institucion",
+  "componente": "Planeación y Rendición Cuentas",
+  "apartado": "Contrataciones",
+  "alias": [
+   "contrataciones"
+  ],
+  "periodicidad": "mensual",
+  "periodicidad_texto": "Mensual",
+  "publicar": [
+   "Nuevo Cuadro de Contrataciones y de Proveedores en formato Excel.",
+   "Documentos de Respaldo a publicar:",
+   "- Copía íntegra del Contrato",
+   "- Cotizaciones (si hay)",
+   "- Orden de Pago",
+   "- Orden de Inicio",
+   "- Facturas"
+  ],
+  "observaciones": [
+   "Si no tienen, notas aclaratorias."
+  ]
+ },
+ {
+  "sector": "institucion",
+  "componente": "Planeación y Rendición Cuentas",
+  "apartado": "Fideicomisos",
+  "alias": [
+   "fideicomisos",
+   "fideicomiso"
+  ],
+  "periodicidad": "mensual",
+  "periodicidad_texto": "Mensual",
+  "publicar": [
+   "Depende de que Instiución es, no todas tienen Fideicomiso. Si tienen, deben publicar la información indicada en los Lineamientos e incluir los Estados Financieros que envía el Banco."
+  ],
+  "observaciones": [
+   "Si no tienen, notas aclaratorias."
+  ]
+ },
+ {
+  "sector": "institucion",
+  "componente": "Planeación y Rendición Cuentas",
+  "apartado": "Concesiones",
+  "alias": [
+   "concesiones"
+  ],
+  "periodicidad": "mensual",
+  "periodicidad_texto": "Mensual",
+  "publicar": [
+   "Depende de la Institución, son contadas las que dan concesiones. Por lo general es nota aclaratoria."
+  ],
+  "observaciones": [
+   "Cuadro de Concesiones Otorgadas con la siguiente información:",
+   "- Fecha de Otorgación de Concesión",
+   "- Nombre de Beneficiario",
+   "- Número de Expediente",
+   "- Tiempo de Duaración de la Concesión",
+   "- Fecha de Finalización de la Concesión"
+  ]
+ },
+ {
+  "sector": "institucion",
+  "componente": "Planeación y Rendición Cuentas",
+  "apartado": "Permisos",
+  "alias": [
+   "permisos"
+  ],
+  "periodicidad": "mensual",
+  "periodicidad_texto": "Mensual",
+  "publicar": [
+   "Depende de la institución, no son todas las que dan Permisos. Si no hay, nota aclaratoria."
+  ],
+  "observaciones": [
+   "Cuadro deben incluir la siguiente información:",
+   "- Fecha de Otorgamiento del Permiso",
+   "- Nombre del Beneficiario",
+   "- Tipo de Permiso",
+   "- Tiempo de Duración",
+   "- Fecha de Incio",
+   "- Fecha de Finalización",
+   "- Observaciones (si es reanudación)"
+  ]
+ },
+ {
+  "sector": "institucion",
+  "componente": "Planeación y Rendición Cuentas",
+  "apartado": "Licencias",
+  "alias": [
+   "licencias"
+  ],
+  "periodicidad": "mensual",
+  "periodicidad_texto": "Mensual",
+  "publicar": [
+   "Depende de la institución, no son todas las que dan Permisos. Si no hay, nota aclaratoria."
+  ],
+  "observaciones": [
+   "Cuadro deben incluir la siguiente información:",
+   "- Fecha de Otorgamiento del Permiso",
+   "- Nombre del Beneficiario",
+   "- Tipo de Permiso",
+   "- Tiempo de Duración",
+   "- Fecha de Incio",
+   "- Fecha de Finalización",
+   "- Observaciones (si es reanudación)"
+  ]
+ },
+ {
+  "sector": "institucion",
+  "componente": "Planeación y Rendición Cuentas",
+  "apartado": "Ventas",
+  "alias": [
+   "ventas"
+  ],
+  "periodicidad": "mensual",
+  "periodicidad_texto": "Mensual",
+  "publicar": [
+   "Depende de cada institución, por lo general, es nota aclaratoria.",
+   "Si tienen, el reporte de ingresos percibidos en el mes."
+  ],
+  "observaciones": []
+ },
+ {
+  "sector": "institucion",
+  "componente": "Planeación y Rendición Cuentas",
+  "apartado": "Subastas de Obras",
+  "alias": [
+   "subastas de obras",
+   "subastas"
+  ],
+  "periodicidad": "mensual",
+  "periodicidad_texto": "Mensual",
+  "publicar": [
+   "Por lo general va a ser nota aclaratoria."
+  ],
+  "observaciones": [
+   "Si hay, la información que se pide en los Lineamientos"
+  ]
+ },
+ {
+  "sector": "institucion",
+  "componente": "Finanzas",
+  "apartado": "Balance General / Estado de Resultados",
+  "alias": [
+   "balance general",
+   "estado de resultados"
+  ],
+  "periodicidad": "mensual",
+  "periodicidad_texto": "Mensual",
+  "publicar": [
+   "Las Instituciones Centralizadas, Descentralizadas y Desconcentradas no generan estados financieros ya que están adscritas a la Contaduria General de la República. Son muy raro los casos en que publican está información."
+  ],
+  "observaciones": [
+   "Deben publicar una nota indicado que son parte de la Contaduría General de la República e incluir el enlace a los Estados Financieros del País como aparecen en la página Institucional de SEFIN."
+  ]
+ },
+ {
+  "sector": "institucion",
+  "componente": "Finanzas",
+  "apartado": "Liquidación Presupuestaria",
+  "alias": [
+   "liquidacion presupuestaria"
+  ],
+  "periodicidad": "mensual",
+  "periodicidad_texto": "Mensual",
+  "publicar": [
+   "La mayor parte de las Instituciones del Estado deben usar SIAFI para su información financiera. Hay excepciones.",
+   "Reporte SIAFI a publicar:",
+   "EJECUCION DEL PRESUPUESTO POR PROGRAMA, FUENTE DE FINANCIAMIENTO Y TIPO DE FONDO",
+   "Sino, el Institucional."
+  ],
+  "observaciones": [
+   "Reporte SIAFI debe indicar:",
+   "En fecha: del primero al último día del mes verificado",
+   "Debe decir en MOMENTO: DEVENGADO y en ESTADO: APROBADO"
+  ]
+ },
+ {
+  "sector": "institucion",
+  "componente": "Finanzas",
+  "apartado": "Presupuesto Mensual",
+  "alias": [
+   "presupuesto mensual"
+  ],
+  "periodicidad": "mensual",
+  "periodicidad_texto": "Mensual",
+  "publicar": [
+   "La mayor parte de las Instituciones del Estado deben usar SIAFI para su información financiera. Hay excepciones.",
+   "Reporte SIAFI a publicar:",
+   "EJECUCION DEL PRESUPUESTO DE EGRESOS POR GRUPO Y OBJETO DEL GASTO TODAS LAS FUENTES",
+   "Sino, el Institucional."
+  ],
+  "observaciones": [
+   "Reporte SIAFI debe indicar:",
+   "En fecha: del primero al último día del mes verificado",
+   "Debe decir en MOMENTO: DEVENGADO y en ESTADO: APROBADO"
+  ]
+ },
+ {
+  "sector": "institucion",
+  "componente": "Finanzas",
+  "apartado": "Informe Anual",
+  "alias": [
+   "informe anual"
+  ],
+  "periodicidad": "anual",
+  "periodicidad_texto": "Anual",
+  "publicar": [
+   "Reporte Financiero del Año anterior o la Memoria Institucional del Año Anterior"
+  ],
+  "observaciones": []
+ },
+ {
+  "sector": "institucion",
+  "componente": "Finanzas",
+  "apartado": "Transferencia Mensual",
+  "alias": [
+   "transferencia mensual"
+  ],
+  "periodicidad": "mensual",
+  "periodicidad_texto": "Mensual",
+  "publicar": [
+   "La mayor parte de las Instituciones del Estado deben usar SIAFI para su información financiera. Hay excepciones.",
+   "Son dos reportes del SIAFI a publicar:",
+   "EJECUCION DEL PRESUPUESTO POR CLASE DE GASTO",
+   "- TRANSFERENCIAS SECTOR PRIVADO",
+   "- TRANSFERENCIAS"
+  ],
+  "observaciones": [
+   "Si no tienen SIAFI, reportes según los indicado en los Lineamientos."
+  ]
+ },
+ {
+  "sector": "institucion",
+  "componente": "Finanzas",
+  "apartado": "Gasto",
+  "alias": [
+   "gasto"
+  ],
+  "periodicidad": "mensual",
+  "periodicidad_texto": "Mensual",
+  "publicar": [
+   "La mayor parte de las Instituciones del Estado deben usar SIAFI para su información financiera. Hay excepciones.",
+   "Son nueve reportes del SIAFI a publicar:",
+   "EJECUCION DEL PRESUPUESTO POR CLASE DE GASTO",
+   "- SERVICIOS PROFESIONALES Y TÉCNICOS",
+   "- BIENES Y SERVICIOS",
+   "- PASAJES Y VIATICOS",
+   "- COMBUSTIBLES Y LUBRICANTES",
+   "- SERVICIOS PERSONALES",
+   "- ALIMENTOS",
+   "- ALQUILERES Y SERVICIOS BÁSICOS",
+   "- PRODUCTOS FARMACÉUTICOS Y MEDICINALES",
+   "- OTROS"
+  ],
+  "observaciones": [
+   "Si no tienen SIAFI, reportes según los indicado en los Lineamientos."
+  ]
+ },
+ {
+  "sector": "institucion",
+  "componente": "Finanzas",
+  "apartado": "Inversión Física",
+  "alias": [
+   "inversion fisica"
+  ],
+  "periodicidad": "mensual",
+  "periodicidad_texto": "Mensual",
+  "publicar": [
+   "La mayor parte de las Instituciones del Estado deben usar SIAFI para su información financiera. Hay excepciones.",
+   "Son nueve reportes del SIAFI a publicar:",
+   "EJECUCION DEL PRESUPUESTO POR CLASE DE GASTO",
+   "- CONSTRUCCIONES",
+   "- BIENES DE USO"
+  ],
+  "observaciones": [
+   "Si no tienen SIAFI, reportes según los indicado en los LineaMientos."
+  ]
+ },
+ {
+  "sector": "institucion",
+  "componente": "Finanzas",
+  "apartado": "Inversión Financiera",
+  "alias": [
+   "inversion financiera"
+  ],
+  "periodicidad": "mensual",
+  "periodicidad_texto": "Mensual",
+  "publicar": [
+   "Igual, son raros los casos que una Institución tenga Inversiones Financieras. Por lo general es una nota aclaratoria."
+  ],
+  "observaciones": [
+   "Si tienen, lo indicado en los Lineamientos"
+  ]
+ },
+ {
+  "sector": "institucion",
+  "componente": "Finanzas",
+  "apartado": "Deuda y Morosidad",
+  "alias": [
+   "deuda y morosidad"
+  ],
+  "periodicidad": "mensual",
+  "periodicidad_texto": "Mensual",
+  "publicar": [
+   "Es muy rara la Institución Centralizada, Descentralizada y Desconcentrada que tenga una Deuda, ya que todo se maneja por SIAFI y Honducompras. Pero en caso que haya, el reporte según lo indicado en los Lineamientos. Favor incluir el reporte SIAFI: FORMULARIOS F01 Y F07 DEVENGADOS PENDIENTES DE PAGO"
+  ],
+  "observaciones": [
+   "Si publican el reoprte SIAFI: \"EJECUCION DEL PRESUPUESTO POR CLASE DE GASTO - DEUDA PUBLICA\" se acepta como válido, sino, nota aclaratoria."
+  ]
+ },
+ {
+  "sector": "institucion",
+  "componente": "Regulación",
+  "apartado": "Leyes",
+  "alias": [
+   "leyes"
+  ],
+  "periodicidad": "cuando_cambie",
+  "periodicidad_texto": "Cuando exsitan reformas a las Leyes o se aprueben nuevas Leyes.",
+  "publicar": [
+   "- Ley o Decreto de Creación",
+   "- Ley de Transparencia y Acceso a la Información Pública",
+   "- Ley de Simplificación Administrativa",
+   "- Ley de Contratación del Estado y sus Reformas",
+   "- Ley de Procedimiento Administrativo y sus Reformas",
+   "- Ley de Compras Eficientes y Transparentes a Través de Medios Electrónicos",
+   "- Código de Conducta y Ética del Servidor Público",
+   "- Cualquier otra Ley de Observancia General que afecta las operaciones y funciones de la Institución"
+  ],
+  "observaciones": [
+   "Todas las Leyes deben estar como aparecen en La Gaceta o las versiones emitidas por Institución Nacional o Secretaría de Estado. Si está la Ley General del Trabajo, esta se acepta en el formato que esté."
+  ]
+ },
+ {
+  "sector": "institucion",
+  "componente": "Regulación",
+  "apartado": "Reglamentos",
+  "alias": [
+   "reglamentos"
+  ],
+  "periodicidad": "cuando_cambie",
+  "periodicidad_texto": "Cuando existan cambios.",
+  "publicar": [
+   "Se publican:",
+   "- Reglamentos Internos de Trabajo",
+   "- Estatutos Laborales",
+   "- Manuales de Procedimientos",
+   "- Políticas Institucionales"
+  ],
+  "observaciones": [
+   "Si el Reglamento y/o Estatutos fueron publicados en el Diario Oficial La Gaceta, deben subirlos en ese formato."
+  ]
+ },
+ {
+  "sector": "institucion",
+  "componente": "Regulación",
+  "apartado": "Acuerdos",
+  "alias": [
+   "acuerdos"
+  ],
+  "periodicidad": "mensual",
+  "periodicidad_texto": "Mensual",
+  "publicar": [
+   "Convenios o Acuerdos firmados por la Institución con:",
+   "- Instituciones Nacionales",
+   "- Organismos de Cooperación",
+   "- Empresas Nacionales"
+  ],
+  "observaciones": [
+   "Por lo general será nota aclaratoria."
+  ]
+ },
+ {
+  "sector": "institucion",
+  "componente": "Regulación",
+  "apartado": "Circulares",
+  "alias": [
+   "circulares"
+  ],
+  "periodicidad": "mensual",
+  "periodicidad_texto": "Mensual",
+  "publicar": [
+   "- Cirulares Internas emitidas a todos los miembros de la Institución",
+   "- Comunicados Generales a la Población"
+  ],
+  "observaciones": [
+   "No aceptar memorandos entre Unidades."
+  ]
+ },
+ {
+  "sector": "institucion",
+  "componente": "Regulación",
+  "apartado": "Diario Oficial La Gaceta",
+  "alias": [
+   "diario oficial la gaceta"
+  ],
+  "periodicidad": "trimestral",
+  "periodicidad_texto": "Trimestral",
+  "publicar": [
+   "- Decretos Legislativos que afectan a las Instituciones",
+   "- Publicaciones de otras Instituciones que afectan directamente las operaciones, ej. Lineamientos de Archivos",
+   "- Presupuesto General de Ingresos y Egresos de la República",
+   "- Publicaciones de la Institución en La Gaceta, ej. Aviso de Licitación Pública"
+  ],
+  "observaciones": [
+   "Apartado debe estar actualizado de forma trimestral: marzo, junio, septiembre y diciembre. Que incluyan los enlaces a las páginas web de la ENAG y La Gaceta."
+  ]
+ },
+ {
+  "sector": "institucion",
+  "componente": "Regulación",
+  "apartado": "Decreto Ejecutivo",
+  "alias": [
+   "decreto ejecutivo"
+  ],
+  "periodicidad": "mensual",
+  "periodicidad_texto": "Mensual",
+  "publicar": [
+   "Todos los PCM emitidos que afectan directamente a la Institución."
+  ],
+  "observaciones": [
+   "Si no hay, nota aclaratoria."
+  ]
+ },
+ {
+  "sector": "institucion",
+  "componente": "Regulación",
+  "apartado": "Acuerdos Institucional",
+  "alias": [
+   "acuerdos institucional"
+  ],
+  "periodicidad": "mensual",
+  "periodicidad_texto": "Mensual",
+  "publicar": [
+   "Publicar las Actas emitidas por la autoridad máxima, para instituciones: Plano de Comisionados o Magistrados, Juntas Directivas o Juntas Interventoras (según el caso).",
+   "Actas de Delegación de Autoridad",
+   "Acta de Nombramiento por Acuerdo"
+  ],
+  "observaciones": [
+   "Todos estos documentos deben estar publicados en forma íntegra y con todas sus firmas y sellos. Si no hay, notas aclaratorias."
+  ]
+ },
+ {
+  "sector": "institucion",
+  "componente": "Regulación",
+  "apartado": "Resoluciones",
+  "alias": [
+   "resoluciones"
+  ],
+  "periodicidad": "mensual",
+  "periodicidad_texto": "Mensual",
+  "publicar": [
+   "Cuadro con todas las Resoluciones, Recursos, Denuncias,  Dictámenes o cualquier determinación que les conceda la Ley.",
+   "El cuadro debe incluir: número de expediente, tipo de expediente, Peticionario, Institución, Resolución y fecha de emisión de la resolución"
+  ],
+  "observaciones": [
+   "Si no hay, nota aclaratoria."
+  ]
+ },
+ {
+  "sector": "institucion",
+  "componente": "Participación Ciudadana",
+  "apartado": "Participación Ciudadana",
+  "alias": [
+   "participacion ciudadana"
+  ],
+  "periodicidad": "mensual",
+  "periodicidad_texto": "Mensual",
+  "publicar": [
+   "- Informe de toda actividad realizada por la Institución que tenga participación directa de la ciudadanía: ferias, conferencias, etc.",
+   "- Gráfico de Solicitudes de Información recibidas y atendidas por medio del Sistema SIELHO (ver portal del IAIP como guía).",
+   "- Enlace a una Encuesta de Satisfación en el Área de Texto.",
+   "- Publicar cada semestre el resultado de la encuesta."
+  ],
+  "observaciones": []
+ }
+]
