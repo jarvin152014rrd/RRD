@@ -30,6 +30,21 @@ def normalizar(texto):
     return re.sub(r"\s+", " ", t).strip().lower()
 
 
+def clasificar_periodicidad(texto):
+    """'Mensual', 'Registros son mensuales', 'Cada 6 meses'... -> mensual/trimestral/..."""
+    t = normalizar(texto)
+    # Palabras completas: "manual" o "anualmente" no deben contar como "anual".
+    if re.search(r"\bmensual(es)?\b", t):
+        return "mensual"
+    if re.search(r"\btrimestral(es)?\b", t):
+        return "trimestral"
+    if "6 meses" in t or re.search(r"\bsemestral(es)?\b", t):
+        return "semestral"
+    if re.search(r"\banual(es)?\b", t):
+        return "anual"
+    return "cuando_cambie"
+
+
 def mes_a_numero(texto):
     """'Agosto' -> 8, '08' -> 8, texto sin mes -> None."""
     t = normalizar(texto)
@@ -167,7 +182,10 @@ def evaluar(regla, pagina, anio, mes, desde=None):
     # Duplicados y descripciones.
     vistos, repetidos = set(), []
     for f in filas:
-        clave = (str(f.get("anio")), normalizar(f.get("mes")), normalizar(f.get("descripcion")))
+        if not normalizar(f.get("descripcion")):
+            continue  # sin descripción no se puede saber si es el mismo documento
+        clave = (str(f.get("anio")), normalizar(f.get("mes")), normalizar(f.get("nombre")),
+                 normalizar(f.get("descripcion")))
         if clave in vistos:
             repetidos.append(f"{f.get('mes')} {f.get('anio')}")
         vistos.add(clave)
@@ -194,6 +212,9 @@ def evaluar(regla, pagina, anio, mes, desde=None):
         else:
             alertas.append(f"Tiene {len(notas)} nota(s) aclaratoria(s): revisar si es válida.")
 
+    pp = pagina.get("periodo_portal", "")
+    if regla and pp and perio != "cuando_cambie" and clasificar_periodicidad(pp) != perio:
+        alertas.append(f"El portal dice periodo '{pp}' y el checklist '{regla['periodicidad_texto']}'.")
     if not regla:
         alertas.append("Este apartado no está en el checklist: revisar a mano.")
     # "No cumple" solo cuando no hay nada publicado; si falta algo se marca Cumple y

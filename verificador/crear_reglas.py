@@ -4,13 +4,12 @@ Uso:  py crear_reglas.py Checklist_Municipalidades.xlsx Checklist_Instituciones.
 (el primer archivo es el de Municipalidades y el segundo el de Instituciones)
 """
 import json
-import re
 import sys
 from pathlib import Path
 
 import openpyxl
 
-from comun import normalizar
+from comun import clasificar_periodicidad, normalizar
 
 # Nombres del Excel que en el portal aparecen como varios apartados.
 ALIAS = {
@@ -37,20 +36,6 @@ ESPECIALES = {
 }
 
 
-def periodicidad(texto):
-    t = normalizar(texto)
-    # Palabras completas: "manual" o "anualmente" no deben contar como "anual".
-    if re.search(r"\bmensual\b", t):
-        return "mensual"
-    if re.search(r"\btrimestral\b", t):
-        return "trimestral"
-    if "6 meses" in t or re.search(r"\bsemestral\b", t):
-        return "semestral"
-    if re.search(r"\banual\b", t):
-        return "anual"
-    return "cuando_cambie"
-
-
 def leer(archivo, sector):
     reglas = []
     wb = openpyxl.load_workbook(archivo, data_only=True)
@@ -69,7 +54,7 @@ def leer(archivo, sector):
                     "componente": hoja.title.strip(),
                     "apartado": nombre.rstrip(":"),
                     "alias": ALIAS.get(clave, [clave.rstrip(":")]),
-                    "periodicidad": periodicidad(perio),
+                    "periodicidad": clasificar_periodicidad(perio),
                     "periodicidad_texto": perio,
                     "publicar": [publicar] if publicar else [],
                     "observaciones": [obs] if obs else [],

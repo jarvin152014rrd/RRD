@@ -1,0 +1,6 @@
+# Lista de instituciones para revisar seguidas (opción 2 del programa).
+# Una por línea:   número del portal ; M (municipalidad) o I (institución) ; desde qué mes (opcional)
+# Si no pones M o I, se detecta por el nombre. Si no pones "desde", se usa tu verificación anterior.
+# Las líneas que empiezan con # no se leen. Ejemplo:
+# 28 ; I
+# 520 ; M ; 7

@@ -1004,7 +1004,7 @@
    "registro publico",
    "registros publicos"
   ],
-  "periodicidad": "cuando_cambie",
+  "periodicidad": "mensual",
   "periodicidad_texto": "Registros son mensuales.",
   "publicar": [
    "Depende de cada Institución, existe la posibilidad que no tengan Registros Públicos, pero si deben publicar lo siguiente:",
