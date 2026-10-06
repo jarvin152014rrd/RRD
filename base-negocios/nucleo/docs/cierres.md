@@ -25,7 +25,12 @@ Reintento seguro: si el mes ya está cerrado con su foto devuelve la misma (`ya_
 Un mes cerrado antes de 0.10.0 (o con `cerrar_periodo`) se puede pasar por `cerrar_mes`
 para guardarle la foto sin abrirlo.
 
-## Reabrir (sin cambios: `reabrir_periodo`, solo el dueño, motivo, en orden)
+## Reabrir (`reabrir_periodo`, solo el dueño, motivo, en orden)
+
+**0.13.1:** un mes con reparto de utilidades vigente NO se reabre (`MES_CON_REPARTO`): primero se anula
+el reparto (`anular_distribucion`) y después se reabre. Lo revisa un trigger en `periodo` (vale por
+cualquier camino). Por eso la advertencia `reparto_version_anterior` solo puede salir en meses que se
+reabrieron antes de 0.13.1.
 
 Al reabrir, la foto vigente queda **superada** (con quién, cuándo y el motivo); nunca se
 borra. Al volver a cerrar se crea la **versión siguiente**. `historial_cierres(empresa,

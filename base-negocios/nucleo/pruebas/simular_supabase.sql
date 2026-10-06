@@ -4,7 +4,7 @@
 -- Imita lo mínimo de Supabase para que las migraciones y las pruebas
 -- se comporten igual que en la nube:
 --   * roles anon, authenticated, service_role
---   * esquema auth con auth.users, auth.uid() y auth.role()
+--   * esquema auth con auth.users, auth.sessions (0.13.1), auth.uid() y auth.role()
 --   * permisos por defecto "generosos" de Supabase en el esquema public
 --     (así comprobamos que nuestras migraciones los quitan bien)
 -- =====================================================================
@@ -29,6 +29,14 @@ CREATE SCHEMA IF NOT EXISTS auth;
 CREATE TABLE IF NOT EXISTS auth.users (
   id         uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   email      text UNIQUE,
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+
+-- Sesiones de Supabase Auth (lo mínimo): cada inicio de sesión crea una fila; el JWT
+-- lleva su id en el claim "session_id" y la renovación del token conserva ese id.
+CREATE TABLE IF NOT EXISTS auth.sessions (
+  id         uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id    uuid NOT NULL,
   created_at timestamptz NOT NULL DEFAULT now()
 );
 

@@ -1,4 +1,4 @@
-# Pendientes (núcleo 0.13.0, 128 pruebas OK)
+# Pendientes (núcleo 0.13.1, 129 pruebas OK)
 
 Estado: etapa 2 terminada. Las correcciones de la revisión de la etapa 2 están
 HECHAS en la migración 038 (núcleo 0.9.1) y las de la revisión de 0.9.1 en la
@@ -52,9 +52,26 @@ etapa 3.
 - HECHO: vigilancia por empleado, bitácora legible, cerrar sesión a distancia, horario por puesto (`control.md`).
 - HECHO: prueba de volumen `herramientas/prueba_volumen.sh` (20,000 ventas; tiempos en CHANGELOG 0.13.0).
 - FALTA: que el revisor revise 0.13.0.
-- FALTA: filtrar por sucursal los reportes de toda la empresa (estados, libros, resumen_hoy, alertas, dónde está mi dinero);
+- FALTA: filtrar por sucursal los reportes de toda la empresa (estados, libros, dónde está mi dinero; resumen_hoy y alertas HECHO en 0.13.1);
   envíos sin recibir en alertas; Edge Function que revoque tokens de Supabase Auth al cerrar sesión; reportes automáticos diario
   y semanal; aviso al proveedor cuando la base se acerque al límite de su plan; prueba con cientos de miles de ventas en Supabase real.
+
+## Corregir de la revisión de 0.13.0 (todo HECHO en 0.13.1, migración 048, prueba 129)
+
+IMPORTANTE
+1. HECHO. Cerrar sesión ya no se salta al renovar el token: se usa el `session_id` del JWT y la hora de inicio de
+   la sesión (`auth.sessions`) contra la del cierre; sin `session_id`, el `iat` como antes (`control.md`).
+2. HECHO. Un mes con reparto de utilidades vigente no se reabre (`MES_CON_REPARTO`): primero se anula el reparto
+   (`cierres.md`). Se ajustó la prueba 121.
+3. HECHO. `resumen_hoy`, `alertas_activas` y `exportar_plantilla` filtran por sucursal al usuario restringido;
+   CxC = ventas al crédito emitidas en sus sucursales (`alertas.md`, `excel.md`).
+
+MENOR
+4. HECHO. Conciliación tipo "otro" no acepta cuentas que mueve un módulo (`conciliacion.md`).
+5. HECHO. Importar y emparejar en la conciliación exigen la sucursal del banco (`conciliacion.md`).
+
+- FALTA: que el revisor confirme 0.13.1; Edge Function que revoque los tokens de Supabase Auth; confirmar en el
+  Supabase real que se puede leer `auth.sessions`.
 
 ## Decisiones del dueño para el final
 

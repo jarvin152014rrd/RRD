@@ -4,6 +4,45 @@ Formato: versión (fecha) y lista de cambios. La versión vive en `VERSION_NUCLE
 y queda guardada en cada base al migrar (vista `version_esquema`).
 Números: MAYOR.MENOR.ARREGLO (ver `docs/CONVENCIONES.md`).
 
+## 0.13.1 (2026-10-06) — Correcciones de la revisión de 0.13.0
+
+Migración nueva 048 (las 001-047 no se tocaron). 129 pruebas (nueva 129: sus 5 partes fallan contra 0.13.0 y pasan
+con 0.13.1, con las cifras hechas a mano en sus comentarios). Se ajustó la prueba 121 (ver "Cambios que rompen").
+El simulador local ahora tiene `auth.sessions` y los usuarios de prueba llevan `session_id` en el token.
+
+**Importante**
+- **Cerrar sesión ya no se salta al renovar el token:** la sesión se reconoce por el `session_id` del token de
+  Supabase (no cambia al renovar) y la hora en que se inició (`auth.sessions.created_at`) contra la del cierre.
+  Sesión anterior al cierre, que ya no existe o de otro usuario = `SESION_CERRADA`. Sin `session_id` (o sin poder
+  leer `auth.sessions`): la regla anterior con `iat`. `interno.revisar_acceso` y `mi_estado_sesion` reemplazadas
+  (misma firma); nueva `interno.sesion_anterior_al_cierre`.
+- **Un mes con reparto de utilidades vigente no se reabre** (`MES_CON_REPARTO`): primero `anular_distribucion`.
+  Trigger `reabrir_sin_reparto` en `periodo` (vale por cualquier camino).
+- **Usuarios restringidos por sucursal:** `resumen_hoy`, `alertas_activas` y `exportar_plantilla` solo cuentan sus
+  sucursales (ventas, dinero, existencias de sus bodegas, cajas, turnos y bancos). Criterio de cuentas por cobrar:
+  ventas al crédito EMITIDAS en sus sucursales (sin saldos iniciales de clientes, que no tienen sucursal); igual en
+  cuentas por pagar con las compras. La ganancia de hoy y del mes (de toda la empresa) se les oculta. Nueva clave
+  `solo_mis_sucursales` en `resumen_hoy`. Dueño y no restringidos: igual que antes. Reemplazadas (misma firma):
+  `interno.ventas_del`, `interno.alertas_de`, `public.resumen_hoy`, `public.exportar_plantilla`.
+
+**Menores**
+- Conciliación tipo "otro": la contrapartida no puede ser una cuenta que controla un módulo (`CUENTA_INVALIDA`,
+  como `usar_fondo`). Hoy ninguna de esas cuentas es de ingresos, costos o gastos: la regla queda vigilada.
+- Conciliación: importar el estado de cuenta, emparejar, deshacer, marcar anteriores, crear diferencias y cerrar
+  exigen la sucursal de la cuenta de banco (`SUCURSAL_NO_PERMITIDA`; triggers en `conciliacion` y
+  `banco_movimiento`, `interno.conciliacion_para_escribir` reemplazada).
+
+**Errores nuevos:** `MES_CON_REPARTO`.
+
+**Cambios que rompen (para quien ya usaba 0.13.0 en pruebas)**
+- Prueba 121: reabría enero con su reparto vigente (y avisaba `reparto_version_anterior` al volver a cerrar); ahora
+  comprueba que da `MES_CON_REPARTO`. Esa advertencia solo puede salir en meses reabiertos antes de 0.13.1.
+
+**Pendiente (honesto):** Edge Function que revoque los tokens de Supabase Auth al cerrar sesión (etapa de
+pantallas); confirmar en el Supabase real que el dueño de las funciones lee `auth.sessions` (si no, queda la regla
+del `iat`); estados, libros ISV, `donde_esta_mi_dinero` y cierres siguen sin filtrar por sucursal; no se repitió la
+prueba de volumen (los filtros nuevos no corren para el dueño ni para usuarios sin restricción).
+
 ## 0.13.0 (2026-10-04) — Etapa 3b-2b: sucursales y centro de control del dueño
 
 Migración nueva 047 (las 001-046 no se tocaron). 128 pruebas (nueva 128, con las cifras hechas a mano en sus comentarios;

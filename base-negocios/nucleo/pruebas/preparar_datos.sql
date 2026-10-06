@@ -22,6 +22,9 @@ INSERT INTO pruebas.usuario (apodo, id) VALUES
   ('dueno_b',     'b0000000-0000-0000-0000-000000000001'),
   ('sin_empresa', 'c0000000-0000-0000-0000-000000000001');
 INSERT INTO auth.users (id, email) SELECT id, apodo || '@prueba.hn' FROM pruebas.usuario;
+-- 0.13.1: cada usuario de prueba tiene una sesión de Supabase Auth iniciada ayer (claim "session_id").
+INSERT INTO auth.sessions (id, user_id, created_at)
+SELECT md5('sesion:' || id::text)::uuid, id, now() - interval '1 day' FROM pruebas.usuario;
 
 -- ---------------------------------------------------------------------
 -- Ayudantes
@@ -50,7 +53,8 @@ BEGIN
       RAISE EXCEPTION 'FALLA: usuario de prueba desconocido %', p_quien;
     END IF;
     PERFORM set_config('request.jwt.claims',
-      json_build_object('sub', pruebas.usuario(p_quien), 'role', 'authenticated')::text, true);
+      json_build_object('sub', pruebas.usuario(p_quien), 'role', 'authenticated',
+                        'session_id', md5('sesion:' || pruebas.usuario(p_quien)::text)::uuid)::text, true);
     PERFORM set_config('role', 'authenticated', true);
   END IF;
 END $$;

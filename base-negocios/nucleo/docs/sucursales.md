@@ -69,9 +69,11 @@ vez. Si llegó menos, se anota en la nota y se hace un ajuste en la bodega desti
 
 ## Pendiente (honesto)
 
-- Los reportes de toda la empresa (estado de resultados, libros de ISV, `resumen_hoy`, `alertas_activas`,
-  `donde_esta_mi_dinero`, cierres) NO se filtran por sucursal: dé esos permisos solo a usuarios sin
-  restricción. Vistas que solo suman (`v_ventas_por_dia`, `v_ventas_por_vendedor`, `v_cxc_cliente`,
+- HECHO en 0.13.1: `resumen_hoy`, `alertas_activas` y `exportar_plantilla` ya filtran por sucursal (ver
+  `alertas.md` y `excel.md`; cuentas por cobrar = ventas al crédito emitidas en sus sucursales) y la
+  conciliación exige la sucursal del banco.
+- Los demás reportes de toda la empresa (estado de resultados, libros de ISV, `donde_esta_mi_dinero`,
+  cierres) NO se filtran por sucursal: dé esos permisos solo a usuarios sin restricción. Vistas que solo suman (`v_ventas_por_dia`, `v_ventas_por_vendedor`, `v_cxc_cliente`,
   `v_saldo_favor`, `v_comision_vendedor`) tampoco.
 - Los envíos de dinero sin recibir no salen todavía en `alertas_activas` (sí en `pendientes_entre_sucursales`).
 - Traslados entre sucursales: la mercadería cuenta en el destino desde que sale (no hay bodega "en camino").

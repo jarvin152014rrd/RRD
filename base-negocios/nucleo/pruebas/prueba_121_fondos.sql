@@ -183,12 +183,10 @@ BEGIN
   PERFORM pruebas.afirmar((public.estado_resultados(e, 2026, 2)->>'utilidad_cobrada_centavos')::bigint = -4000, 'cobrada de febrero');
   PERFORM pruebas.debe_fallar(format('SELECT public.distribuir_utilidades(%L, 2026, 2, %L, %L, gen_random_uuid())', e, '{}', 'Reparto de febrero'),
     'SIN_UTILIDAD_COBRADA', 'cobrada negativa no se reparte');
-  -- Reabrir y volver a cerrar enero: avisa que su reparto salió de la versión anterior.
+  -- 0.13.1: enero tiene su reparto vigente: no se reabre (antes se reabría y avisaba al volver a cerrar).
   PERFORM public.reabrir_periodo(e, 2026, 2, 'Revisar el reparto');
-  PERFORM public.reabrir_periodo(e, 2026, 1, 'Revisar el reparto');
-  r := public.cerrar_mes(e, 2026, 1);
-  PERFORM pruebas.afirmar((r->>'version')::integer = 2 AND EXISTS (SELECT 1 FROM jsonb_array_elements(r->'advertencias') a
-    WHERE a->>'tipo' = 'reparto_version_anterior' AND (a->>'monto_centavos')::bigint = 35159), 'aviso del reparto anterior: ' || (r->'advertencias')::text);
+  PERFORM pruebas.debe_fallar(format('SELECT public.reabrir_periodo(%L, 2026, 1, %L)', e, 'Revisar el reparto'),
+    'MES_CON_REPARTO', 'enero con reparto vigente no se reabre');
 
   -- ===================== Apagar fondos: solo corregir =====================
   PERFORM pruebas.como('superusuario');

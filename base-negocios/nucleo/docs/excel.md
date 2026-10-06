@@ -65,6 +65,10 @@ fija al crear), `categoria`, `subcategoria` (tercer nivel: `"Sub > Sub-sub"`), `
 `activo` y un `extra.<clave>` por cada campo extra activo de la empresa.
 Grises: `costo_promedio`, `valor_inventario`, `margen_porcentaje` (solo con costos), `existencia_total`, `precio_sin_isv`,
 `precio_con_isv`, `ultima_venta`, `ultima_compra`.
+Usuario restringido por sucursal (0.13.1): `existencia_total`, `valor_inventario` y `costo_promedio` solo con sus
+bodegas; `ultima_venta` y `ultima_compra` de sus sucursales. En **clientes_proveedores** los saldos siguen el
+criterio de `resumen_hoy` (ventas al crédito y compras de sus sucursales; sin saldos iniciales) y
+`ultimo_cobro` es de sus sucursales. **existencias_iniciales** y **conteo_fisico** solo traen sus bodegas.
 El precio cambia con `cambiar_precio_producto` (historial de precios con el motivo); "precio incluye ISV" pide `productos.precios`.
 
 **clientes_proveedores** — exportar: `terceros.ver`. Editables: `codigo` (vacío = nuevo, el programa le pone

@@ -30,7 +30,8 @@ como diferencia para emparejarlo o crear el movimiento que falta. **Nada se borr
    - Sale del banco: Dr gasto / Cr banco. Entra: Dr banco / Cr ingreso. Con rastro de dinero
      (`operacion = 'diferencia_banco'`) y se empareja solo.
    - Cuentas: comisión 6.2.01.02, intereses que cobra el banco 6.2.01.01, intereses que paga
-     4.2.01.01; "otro" = cuenta de detalle activa de ingresos, costos o gastos.
+     4.2.01.01; "otro" = cuenta de detalle activa de ingresos, costos o gastos que no mueva un módulo
+     (0.13.1, igual que usar un fondo: `CUENTA_INVALIDA`).
    - Fecha por defecto la del banco (mes abierto; si está cerrado, indique otra fecha).
 6. **Cerrar el mes** — `cerrar_conciliacion(conciliacion, saldo_final?)`: solo un mes ya terminado,
    en orden (`CONCILIACION_EN_ORDEN`) y si cuadra (`CONCILIACION_NO_CUADRA` dice la diferencia):
@@ -65,3 +66,9 @@ cierra sin pendientes en 913,984 = libros.
   acredita juntos): hoy se hace con "crear lo que falta" o emparejando uno a uno.
 - Un movimiento creado desde la conciliación no tiene función para anularlo (lo corrige el contador).
 - Cuentas en otra moneda (USD).
+
+## Sucursales (0.13.1)
+
+Un usuario restringido por sucursal solo concilia bancos de sus sucursales o de toda la empresa
+(sin sucursal): importar, emparejar (automático y a mano), deshacer, marcar anteriores, crear diferencias
+y cerrar dan `SUCURSAL_NO_PERMITIDA` con el banco de otra sucursal.

@@ -31,11 +31,18 @@ use `siguiente_antes_de`). Cada fila trae fecha, hora, persona, tipo, motivo y u
   reglas que desactivar: el admin solo a cajeros y vendedores; nadie a sí mismo). Desde ese momento el
   servidor rechaza todo lo que haga con su sesión anterior (`SESION_CERRADA`). La app consulta
   `mi_estado_sesion(empresa)` al abrir y cada pocos minutos: si `debe_salir` es true, cierra la sesión
-  en el aparato. Al entrar de nuevo trabaja normal (el servidor compara la hora del token `iat` con la
-  del cierre).
-  **Pendiente (etapa de pantallas):** una Edge Function con la llave service_role llamará
-  `auth.admin.signOut(usuario)` de Supabase para revocar también los tokens de renovación (hoy el
-  bloqueo lo hace la base, que es lo que protege los datos).
+  en el aparato. Al entrar de nuevo trabaja normal.
+  **Cómo reconoce la sesión (0.13.1):** por el `session_id` del token de Supabase, que NO cambia al
+  renovar el token. La base busca esa sesión en `auth.sessions` y la rechaza si se inició antes del
+  cierre, si ya no existe o si es de otro usuario. Así, aunque el aparato perdido renueve su token
+  (nuevo `iat`), sigue rechazado; solo entra quien inicia una sesión nueva con correo y contraseña.
+  Si el token no trae `session_id` (o la base no puede leer `auth.sessions`) se usa la regla anterior:
+  la hora del token `iat` contra la del cierre (en 0.13.0 esa regla se saltaba al renovar el token).
+  **Qué cubre la base:** ningún dato se lee ni se guarda con la sesión cerrada (`SESION_CERRADA`).
+  **Qué falta en Supabase (etapa de pantallas):** una Edge Function con la llave service_role llamará
+  `auth.admin.signOut(usuario)` para revocar también los tokens de renovación (así el aparato ni
+  siquiera obtiene tokens nuevos). Revisar en el proyecto real que el dueño de las funciones
+  (`postgres`) pueda leer `auth.sessions` (en Supabase sí puede); si no, queda la regla del `iat`.
 - **Desactivar al instante:** `desactivar_usuario_empresa` (ya existía): desde ese momento no lee ni
   escribe nada de la empresa (`NO_PERTENECE`). Confirmado en la prueba 128.
 - **Horario por puesto:** `configurar_horario_acceso(empresa, rol, horario, motivo)` (solo dueño).

@@ -39,9 +39,22 @@ ni costos. Cada alerta de un módulo apagado no sale.
   (tabla `alerta_preferencia`, no se borra; queda en la bitácora). Los tipos y sus nombres están
   en la tabla `alerta_tipo`.
 
+**Usuario restringido por sucursal (0.13.1):** solo recibe lo de sus sucursales: CAI de sus cajas, cuentas y
+bancos de sus sucursales (o sin sucursal), depósitos que salen o llegan a ellas, arqueos de sus turnos, crédito
+vencido de ventas emitidas en sus sucursales y stock mínimo con la existencia de SUS bodegas. Cierre de mes,
+aprobaciones, pagos fijos, licencia y límites son de toda la empresa y salen igual (con su permiso).
+
 ## `resumen_hoy(empresa)` — "¿Cuánto gané hoy?"
 
-Para el panel del dueño. Cada parte solo con su permiso (lo que no se puede ver va en `ocultos`):
+Para el panel del dueño. Cada parte solo con su permiso (lo que no se puede ver va en `ocultos`).
+
+**Usuario restringido por sucursal (0.13.1, `solo_mis_sucursales` = true):** ventas solo de sus sucursales;
+`te_deben` = ventas al crédito emitidas en sus sucursales (criterio elegido: aunque el cliente compre también en
+otras; los saldos iniciales de clientes, que no tienen sucursal, no los ve); `debes` = compras de sus sucursales;
+`dinero` = cuentas de sus sucursales y las de toda la empresa (como en las demás lecturas); `ganancia_hoy` y
+`ganancia_mes` van en null y en `ocultos` (son de toda la empresa). El dueño y quien no tiene restricción ven
+todo igual que antes.
+
 
 | Parte | Qué trae | Permiso |
 |---|---|---|
