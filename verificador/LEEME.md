@@ -33,6 +33,22 @@ Revisa el **portal público**, descarga y revisa los **documentos nuevos** y te 
   Participación Ciudadana municipal, donde el checklist dice que nunca se marca No aplica).
 - El Excel **nunca se reemplaza**: si ya existe, se crea otro con la fecha y hora.
 
+## Fase 2: llenar el sistema de evaluación
+1. Corrige en el Excel las columnas azules (**DECISIÓN FINAL / QUITAR FINAL / OBSERVACIÓN FINAL**), **guárdalo y ciérralo**.
+2. Doble clic en **`llenar.bat`** y elige el Excel.
+3. Se abre Chrome. La primera vez **inicia sesión tú** (la contraseña no se guarda; Chrome recuerda la sesión).
+4. Por cada apartado el programa:
+   - revisa que la **institución** del sistema sea la del Excel (si no, **se detiene**);
+   - revisa en el reporte del sistema si **ya está verificado** ese mes (si sí, **lo salta**);
+   - elige Apartado, Año y Mes, marca Cumple / No cumple / No aplica, las casillas de calidad
+     (todas menos las de QUITAR FINAL), escribe las Recomendaciones y **pega la captura** (descripción vacía);
+   - suena y **espera a que tú revises y pulses Enviar**. En la ventana negra: **S** = saltar ese apartado, **Q** = terminar.
+5. Comprueba que el mensaje "Se han guardado…" diga la misma institución, apartado, año y mes.
+6. Al final abre **`envios_….xlsx`**: qué se envió, qué se saltó y por qué, con una foto del formulario antes de enviar.
+- Los **Sin calificar** (sin decisión) no se llenan: hazlos tú a mano.
+- Si QUITAR FINAL tiene un error al escribir (ej. "Completo"), ese apartado **no se llena** y te avisa.
+- La carpeta **`perfil_chrome`** guarda la sesión del sistema: **no la compartas**.
+
 ## Documentos (PDF y Excel)
 Si respondes **S** a "¿Descargar y revisar los documentos…?":
 - Baja **los nuevos** desde tu verificación anterior y **los del periodo** (en anuales o "cuando existan cambios", el más reciente).
@@ -66,9 +82,10 @@ Si la institución y el mes ya se leyeron, pregunta si **leer de nuevo** (por si
 ## Archivos
 - `reglas.json` — tus checklists convertidos en reglas. Si cambias los Excel: `py crear_reglas.py Municipalidades.xlsx Instituciones.xlsx`.
 - `comun.py` — las frases y la lógica de decisión.
-- `fase1.py` — el programa principal.
+- `fase1.py` — revisión del portal (Fase 1). `fase2.py` — llenado del sistema de evaluación (Fase 2).
 - `documentos.py` — descarga segura. `analisis.py` — lectura sin IA. `ia.py` — revisión con IA.
 - `config_ia.json` — IA apagada/encendida, modelo, tope de gasto.
 - `resultados/` — Excel, lo leído (`lectura_…json`) y el historial para comparar (`historial_…json`).
+- `pruebas/servidor_gvt.py` — copia falsa del sistema de evaluación para probar la Fase 2.
 - `pruebas/servidor_prueba.py` — portal falso para probar sin tocar el real
   (`pruebas/crear_archivos_prueba.py` crea sus documentos).

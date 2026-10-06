@@ -2,4 +2,6 @@ resultados/
 __pycache__/
 pruebas/archivos/
 pruebas/resultados/
+pruebas/perfil_chrome/
+perfil_chrome/
 *.tmp
