@@ -188,8 +188,10 @@ def evaluar(regla, pagina, anio, mes, desde=None):
     for f in filas:
         if not normalizar(f.get("descripcion")):
             continue  # sin descripción no se puede saber si es el mismo documento
+        # Puede haber varias publicaciones en un mes: solo es repetido si coincide todo,
+        # incluida la fecha en que se subió.
         clave = (str(f.get("anio")), normalizar(f.get("mes")), normalizar(f.get("nombre")),
-                 normalizar(f.get("descripcion")))
+                 normalizar(f.get("descripcion")), normalizar(f.get("subido")))
         if clave in vistos:
             repetidos.append(f"{f.get('mes')} {f.get('anio')}")
         vistos.add(clave)
@@ -209,12 +211,9 @@ def evaluar(regla, pagina, anio, mes, desde=None):
     notas = [f for f in del_anio if re.search(
         r"\bnota aclaratoria\b|\bnota\b(?! a los)",
         normalizar(f.get("nombre")) + " " + normalizar(f.get("descripcion")))]
-    if notas:
-        if regla and regla.get("nota_no_valida"):
-            obs.append(FRASES["planillas"])
-            alertas.append("Tiene nota aclaratoria en un apartado donde no es válida.")
-        else:
-            dudas.append(f"Tiene {len(notas)} nota(s) aclaratoria(s): confirmar si es válida.")
+    if notas and regla and regla.get("nota_no_valida"):  # en los demás la nota sí es válida
+        obs.append(FRASES["planillas"])
+        alertas.append("Tiene nota aclaratoria en un apartado donde no es válida.")
 
     pp = pagina.get("periodo_portal", "")
     if regla and pp and perio != "cuando_cambie" and clasificar_periodicidad(pp) != perio:
@@ -260,7 +259,8 @@ def aplicar_documentos(res, docs, apartado, sector, comparacion=None):
         return res
     quitar, obs, alertas = set(res["quitar"]), [res["observacion"]] if res["observacion"] else [], list(res["alertas"])
     dudas = list(res.get("dudas", []))
-    es_compras = normalizar(apartado) == "compras"
+    # Compras y Contrataciones: deben tener el cuadro en Excel y el PDF en el mismo orden.
+    con_cuadro = normalizar(apartado) in ("compras", "contrataciones")
 
     for d in docs:
         f = d["fila"]
@@ -276,7 +276,8 @@ def aplicar_documentos(res, docs, apartado, sector, comparacion=None):
         local, ia = d["local"], d.get("ia") or {}
         r = ia.get("resultado")
         if local.get("faltan_palabras"):
-            alertas.append(f"{nombre}: no aparece {', '.join(local['faltan_palabras'])} en el texto.")
+            dudas.append(f"{nombre}: no aparece {', '.join(local['faltan_palabras'])} en el texto "
+                         "(lo pide el checklist).")
         if local.get("formulas_vacias"):
             alertas.append(f"{nombre}: el Excel tiene {local['formulas_vacias']} fórmulas sin resultado guardado.")
         m_fila = mes_a_numero(f.get("mes", ""))
@@ -334,14 +335,14 @@ def aplicar_documentos(res, docs, apartado, sector, comparacion=None):
         if resultado == "distinto orden":
             obs.append(FRASES["pdf_excel"])
             alertas.append(f"Excel y PDF en distinto orden: {detalle}")
-            if es_compras:
+            if con_cuadro:
                 quitar.add("Adecuada")
         elif resultado == "no se pudo comparar":
             alertas.append(f"Excel contra PDF: no se pudo comparar ({detalle}).")
-    if es_compras and sector == "municipalidad" and not any(
-            (d.get("local") or {}).get("tipo") in ("xlsx", "xls") for d in docs):
+    if con_cuadro and not any((d.get("local") or {}).get("tipo") in ("xlsx", "xls") for d in docs):
         quitar.add("Adecuada")
-        alertas.append("No se encontró el cuadro de Compras en Excel.")
+        obs.append(FRASES["pdf_excel"])
+        alertas.append(f"No se encontró el cuadro de {apartado} en Excel.")
 
     res = dict(res, quitar=sorted(quitar), observacion=" ".join(dict.fromkeys(o for o in obs if o)),
                alertas=alertas, dudas=dudas)

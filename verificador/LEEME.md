@@ -18,11 +18,15 @@ Revisa el **portal público**, descarga y revisa los **documentos nuevos** y te 
 
 ## El Excel
 - **Propuesta:** un renglón por apartado.
-  - PROPUESTA, casillas a quitar y observación ya escrita.
+  - PROPUESTA (Cumple / No cumple / No aplica / **Sin calificar**), casillas a quitar y observación ya escrita.
+  - **Dudas:** por qué no se calificó. **Avisos:** información que no cambia la propuesta.
+  - **Captura:** vínculo a la imagen del apartado (institución, apartado, fecha editable y tabla).
   - **Docs nuevos:** cuántos documentos aparecieron desde tu verificación anterior.
   - Columnas azules **DECISIÓN FINAL / QUITAR FINAL / OBSERVACIÓN FINAL**: corrígelas tú. La Fase 2 llenará el formulario con eso.
-    Si la propuesta es "Revisar", la decisión final queda vacía para que la pongas tú.
-- **Alertas:** lo que debes mirar (repetidos, nota aclaratoria, mes que no coincide, NO APLICA, tabla incompleta...).
+    Si la propuesta es "Sin calificar", la decisión final queda vacía para que la pongas tú.
+- **Pendientes:** tu lista de trabajo. Solo los apartados **Sin calificar** (no se pudo abrir algo o no había
+  certeza), con el motivo y vínculos a la captura y al portal.
+- **Alertas:** todas las dudas y avisos, uno por renglón.
 - **Documentos:** todos los documentos; "Nuevo = Sí" si no estaban la vez anterior.
 - **Sin regla:** apartados del menú que no están en tu checklist.
 - El Excel **nunca se reemplaza**: si ya existe, se crea otro con la fecha y hora.
@@ -32,7 +36,8 @@ Si respondes **S** a "¿Descargar y revisar los documentos…?":
 - Baja **los nuevos** desde tu verificación anterior y **los del periodo** (en anuales o "cuando existan cambios", el más reciente).
 - Revisa que sea de verdad un PDF o un Excel. Los Excel se leen **sin abrir Microsoft Excel** (no sale "Habilitar edición").
 - **Sin IA (gratis):** páginas, si es escaneado, meses que menciona, palabras clave del checklist
-  (BRUTO/NETO, ALCALDE, DEVENGADO/APROBADO, aguinaldo en junio y diciembre…) y si el **Excel y el PDF van en el mismo orden**.
+  (BRUTO/NETO, ALCALDE, DEVENGADO/APROBADO, aguinaldo en junio y diciembre…; si falta una, queda **Sin calificar**)
+  y, en **Compras y Contrataciones**, que estén el **cuadro Excel y el PDF en el mismo orden** (si no, se quita Adecuada).
 - **Con IA (cuando el IAIP lo autorice):** firma, sello, nombre y puesto, legibilidad, orientación y contenido según checklist.
   La IA dice **en qué página** lo vio. Si no está segura, pide revisión manual.
 - Si un documento **no se puede leer** (dañado, no es PDF/Excel, ilegible), el apartado queda **"Sin calificar"** con la alerta del motivo.
