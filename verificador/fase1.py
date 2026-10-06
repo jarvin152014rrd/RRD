@@ -22,7 +22,7 @@ from playwright.sync_api import sync_playwright
 import analisis
 import documentos
 import ia
-from comun import MESES, aplicar_documentos, evaluar, mes_a_numero, normalizar
+from comun import MESES, aplicar_documentos, es_no_aplica, evaluar, mes_a_numero, normalizar
 from documentos import Bloqueado
 
 PRUEBA = "PORTAL_PRUEBA" in os.environ  # solo para pruebas locales
@@ -417,6 +417,8 @@ def bajar_documentos(page, reglas, cfg, lectura, sector, previa):
         if ap["url"] not in lectura["leido"]:
             continue
         regla = buscar_regla(reglas, sector, ap["nombre"])
+        if es_no_aplica(regla, lectura["leido"][ap["url"]]["datos"]):
+            continue  # "No aplica": no hace falta bajar sus documentos
         perio = regla["periodicidad"] if regla else "cuando_cambie"
         anteriores = set(previa["enlaces"].get(ap["url"], [])) if previa else None
         filas, excedio = documentos.seleccionar(lectura["leido"][ap["url"]]["datos"]["filas"], perio,

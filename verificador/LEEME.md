@@ -29,6 +29,8 @@ Revisa el **portal público**, descarga y revisa los **documentos nuevos** y te 
 - **Alertas:** todas las dudas y avisos, uno por renglón.
 - **Documentos:** todos los documentos; "Nuevo = Sí" si no estaban la vez anterior.
 - **Sin regla:** apartados del menú que no están en tu checklist.
+- **No aplica:** si el texto del apartado dice NO APLICA, la propuesta es **No aplica** (menos en
+  Participación Ciudadana municipal, donde el checklist dice que nunca se marca No aplica).
 - El Excel **nunca se reemplaza**: si ya existe, se crea otro con la fecha y hora.
 
 ## Documentos (PDF y Excel)

@@ -119,6 +119,16 @@ def leer_fecha(texto):
     return None
 
 
+def es_no_aplica(regla, pagina):
+    """El apartado no aplica si el checklist lo dice o si el texto del portal dice NO APLICA
+    (salvo donde el checklist prohíbe marcar No aplica, como Participación Ciudadana)."""
+    if regla and regla.get("siempre_no_aplica"):
+        return True
+    if regla and regla.get("nunca_no_aplica"):
+        return False
+    return "no aplica" in normalizar(pagina.get("texto_area", ""))
+
+
 def evaluar(regla, pagina, anio, mes, desde=None):
     """Propone una decisión para un apartado, con los criterios del verificador:
 
@@ -134,12 +144,10 @@ def evaluar(regla, pagina, anio, mes, desde=None):
     filas = pagina["filas"]
     quitar, obs, alertas, dudas = set(), [], [], []
 
-    if regla and regla.get("siempre_no_aplica"):
+    if es_no_aplica(regla, pagina):  # se marca la casilla "No aplica"
+        if not (regla and regla.get("siempre_no_aplica")):
+            alertas.append("El texto del apartado dice NO APLICA.")
         return _resultado("No aplica", quitar, obs, alertas, perio, [], [])
-    texto_area = normalizar(pagina.get("texto_area", ""))
-    if "no aplica" in texto_area and not (regla and regla.get("nunca_no_aplica")):
-        dudas.append("El texto del apartado dice NO APLICA: confirmar si de verdad no aplica.")
-        return _resultado("Sin calificar", quitar, obs, alertas, perio, [], [], dudas)
 
     # Meses publicados en el año verificado.
     del_anio = [f for f in filas if str(f.get("anio", "")).strip() == str(anio)]
@@ -255,7 +263,7 @@ def aplicar_documentos(res, docs, apartado, sector, comparacion=None):
     comparacion: (resultado, detalle) de Excel contra PDF, si hubo los dos.
     Regla del verificador: si un documento no se puede leer, el apartado no se califica.
     """
-    if not docs:
+    if not docs or res["propuesta"] == "No aplica":
         return res
     quitar, obs, alertas = set(res["quitar"]), [res["observacion"]] if res["observacion"] else [], list(res["alertas"])
     dudas = list(res.get("dudas", []))
