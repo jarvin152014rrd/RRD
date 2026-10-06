@@ -16,8 +16,11 @@ import time
 from datetime import datetime
 from pathlib import Path
 
+from urllib.parse import urlparse
+
 import openpyxl
 from openpyxl.styles import Alignment, Font
+from playwright.sync_api import Error as ErrorNavegador
 from playwright.sync_api import sync_playwright
 
 from comun import MESES, normalizar
@@ -26,7 +29,10 @@ from fase1 import (CARPETA, PRUEBA, RESULTADOS, abrir_archivo, agregar, encabeza
                    guardar_json, leer_json, preguntar, ruta_libre)
 
 GVT = os.environ.get("GVT_PRUEBA", "https://gvt.iaip.gob.hn")
-AUTO_ENVIAR = PRUEBA and "AUTO_ENVIAR_PRUEBA" in os.environ  # solo pruebas: simula al verificador
+GVT_LOCAL = urlparse(GVT).hostname in ("127.0.0.1", "localhost")  # copia falsa de pruebas
+# Solo pruebas y solo contra la copia falsa: simula al verificador (nunca con el sistema real).
+AUTO_ENVIAR = PRUEBA and GVT_LOCAL and "AUTO_ENVIAR_PRUEBA" in os.environ
+LOGIN_PRUEBA = PRUEBA and GVT_LOCAL and "LOGIN_PRUEBA" in os.environ
 PERFIL = CARPETA / ("pruebas/perfil_chrome" if PRUEBA else "perfil_chrome")
 CASILLAS = ["Completa", "Veraz", "Adecuada", "Oportuna"]
 DECISIONES = {"cumple": "Cumple", "no cumple": "No cumple", "no aplica": "No aplica"}
@@ -75,6 +81,7 @@ def leer_excel(ruta):
 
     c_num, c_ap = col("n°"), col("apartado")
     c_dec, c_quit, c_obs, c_cap = col("decision final"), col("quitar final"), col("observacion final"), col("captura")
+    c_prop_quit = col("quitar casillas")
     filas = []
     for i in range(cab_fila + 1, ws.max_row + 1):
         apartado = ws.cell(i, c_ap).value
@@ -85,6 +92,7 @@ def leer_excel(ruta):
         filas.append({"numero": ws.cell(i, c_num).value, "apartado": str(apartado).strip(),
                       "decision": str(ws.cell(i, c_dec).value or "").strip(),
                       "quitar": str(ws.cell(i, c_quit).value or "").strip(),
+                      "propuesta_quitar": str(ws.cell(i, c_prop_quit).value or "").strip() if c_prop_quit else "",
                       "observacion": str(ws.cell(i, c_obs).value or "").strip(),
                       "captura": captura})
     return datos, filas
@@ -98,6 +106,11 @@ def validar(fila):
     if not decision:
         raise ValueError(f"DECISIÓN FINAL no válida: '{fila['decision']}'")
     quitar = []
+    if normalizar(fila["quitar"]) in ("ninguna", "ninguno", "nada"):
+        fila["quitar"] = ""
+    elif decision == "Cumple" and not fila["quitar"] and fila.get("propuesta_quitar"):
+        raise ValueError(f"QUITAR FINAL está vacío pero la propuesta quitaba '{fila['propuesta_quitar']}'. "
+                         "Si de verdad no se quita nada, escribe 'ninguna'")
     for parte in re.split(r"[,;/]", fila["quitar"]):
         if not parte.strip():
             continue
@@ -135,7 +148,7 @@ def abrir_formulario(page, id_inst):
     url = f"{GVT}/verificar.php?id={id_inst}"
     page.goto(url, wait_until="domcontentloaded")
     if en_login(page):
-        if PRUEBA and "LOGIN_PRUEBA" in os.environ:  # solo pruebas
+        if LOGIN_PRUEBA:  # solo pruebas
             page.fill("input[name=usuario]", "prueba")
             page.fill("input[type=password]", "prueba")
             page.keyboard.press("Enter")
@@ -156,10 +169,15 @@ def institucion_en_pagina(page):
     return m.group(1).strip() if m else ""
 
 
-def ya_verificados(pestana, id_inst, anio, mes):
-    """Lee el reporte del sistema: (apartados ya verificados, apartados que aparecen)."""
+def ya_verificados(pestana, id_inst, institucion, anio, mes):
+    """Lee el reporte del sistema: (apartados ya verificados, apartados que aparecen).
+    Antes revisa que el reporte sea de la misma institución, año y mes."""
     pestana.goto(f"{GVT}/reporteCompleto_porcentajePorApartado.php?idPortal={id_inst}"
                  f"&ano={anio}&mes={mes}", wait_until="domcontentloaded")
+    texto = normalizar(pestana.inner_text("body"))
+    if normalizar(institucion) not in texto or str(anio) not in texto or \
+            normalizar(MESES[mes - 1]) not in texto:
+        raise Detener("El reporte de apartados verificados no muestra la misma institución, año y mes.")
     filas = pestana.eval_on_selector_all(
         "tr", "trs => trs.map(t => [...t.querySelectorAll('td,th')].map(c => c.innerText.trim()))")
     hechos, vistos = set(), set()
@@ -186,7 +204,11 @@ def _elegir(page, etiqueta, coincide):
     if not elegida:
         raise ValueError(f"No encontré la opción en '{etiqueta}' del sistema")
     sel.select_option(value=elegida[0])
-    time.sleep(0.5)
+    try:  # el sistema puede recargar datos al cambiar de opción
+        page.wait_for_load_state("networkidle", timeout=5000)
+    except ErrorNavegador:
+        pass
+    time.sleep(1)
     quedo = sel.evaluate("s => s.options[s.selectedIndex] ? s.options[s.selectedIndex].text.trim() : ''")
     if normalizar(quedo) != normalizar(elegida[1]):
         raise ValueError(f"'{etiqueta}' no quedó elegido (quedó '{quedo}')")
@@ -210,7 +232,9 @@ def pegar_captura(page, ruta):
     """Pega la imagen en la caja de capturas sin usar el portapapeles de Windows.
     Si no aparece la miniatura, prueba con el portapapeles real (Ctrl+V)."""
     caja = page.locator("xpath=//textarea[contains(@placeholder,'Impr') or contains(@placeholder,'Pegar')]").first
-    antes = page.locator("img").count()
+    antes = miniaturas(page)
+    if antes:
+        raise ValueError("Ya había una imagen pegada en el formulario")
     datos = base64.b64encode(Path(ruta).read_bytes()).decode()
     caja.evaluate("""(el, b64) => {
         const bin = atob(b64), arr = new Uint8Array(bin.length);
@@ -221,20 +245,25 @@ def pegar_captura(page, ruta):
         el.dispatchEvent(new ClipboardEvent('paste', {clipboardData: dt, bubbles: true, cancelable: true}));
     }""", datos)
     for _ in range(10):
-        if page.locator("img").count() > antes:
-            return
+        if miniaturas(page):
+            break
         time.sleep(0.5)
-    caja.evaluate("""async (el, b64) => {
+    else:
+        caja.evaluate("""async (el, b64) => {
         const r = await fetch('data:image/png;base64,' + b64);
         await navigator.clipboard.write([new ClipboardItem({'image/png': await r.blob()})]);
     }""", datos)
-    caja.click()
-    page.keyboard.press("Control+V")
-    for _ in range(10):
-        if page.locator("img").count() > antes:
-            return
-        time.sleep(0.5)
-    raise ValueError("No se pudo pegar la captura")
+        caja.click()
+        page.keyboard.press("Control+V")
+    time.sleep(2)  # por si el primer pegado llegó tarde
+    n = miniaturas(page)
+    if n != 1:
+        raise ValueError("No se pudo pegar la captura" if not n else f"Se pegaron {n} imágenes en vez de 1")
+
+
+def miniaturas(page):
+    """Imágenes pegadas (no cuenta logos ni otras imágenes de la página)."""
+    return page.locator("img[src^='data:image'], img[src^='blob:']").count()
 
 
 def llenar(page, fila, decision, quitar, anio, mes):
@@ -252,19 +281,57 @@ def llenar(page, fila, decision, quitar, anio, mes):
             casilla.set_checked(c not in quitar)
             if casilla.is_checked() != (c not in quitar):
                 raise ValueError(f"La casilla '{c}' no quedó como debía")
-    if fila["observacion"]:
-        caja = page.locator("xpath=//*[normalize-space(text())='Recomendaciones']/following::textarea[1]").first
-        caja.fill(fila["observacion"])
+    caja = caja_recomendaciones(page)
+    caja.fill(fila["observacion"])  # siempre, aunque sea vacío, para borrar lo que hubiera
+    if " ".join(caja.input_value().split()) != " ".join(fila["observacion"].split()):
+        raise ValueError("La observación no quedó completa en Recomendaciones (¿límite de letras?)")
     pegar_captura(page, fila["captura"])
+
+
+def caja_recomendaciones(page):
+    caja = page.locator("xpath=//textarea[contains(translate(@placeholder,'R','r'),'recomendaciones') "
+                        "or contains(@id,'recomend') or contains(@name,'recomend')]")
+    if caja.count() == 1:
+        return caja
+    caja = page.locator("xpath=//*[normalize-space(text())='Recomendaciones']/following::textarea[1]").first
+    marca = (caja.get_attribute("placeholder") or "").lower()
+    if "impr" in marca or "descripcion" in marca:
+        raise ValueError("No encontré la caja de Recomendaciones")
+    return caja
+
+
+def revisar_formulario(page, fila, decision, quitar, anio, mes):
+    """Relee todo lo llenado justo antes de Enviar (por si el sistema borró algo)."""
+    def elegido(etiqueta):
+        return _select_por_etiqueta(page, etiqueta).evaluate(
+            "s => s.options[s.selectedIndex] ? s.options[s.selectedIndex].text.trim() : ''")
+    if normalizar(elegido("Apartado")) != normalizar(fila["apartado"]):
+        raise ValueError("El apartado elegido cambió")
+    if elegido("Año") != str(anio) or normalizar(elegido("Mes")) != normalizar(MESES[mes - 1]):
+        raise ValueError("El año o el mes cambiaron")
+    if not _control(page, "radio", decision).is_checked():
+        raise ValueError(f"'{decision}' ya no está marcado")
+    if decision == "Cumple":
+        for c in CASILLAS:
+            if _control(page, "checkbox", c).is_checked() != (c not in quitar):
+                raise ValueError(f"La casilla '{c}' cambió")
+    if " ".join(caja_recomendaciones(page).input_value().split()) != " ".join(fila["observacion"].split()):
+        raise ValueError("Las Recomendaciones cambiaron")
+    if miniaturas(page) != 1:
+        raise ValueError("La captura ya no está pegada")
 
 
 def esperar_envio(page):
     """Espera a que el verificador pulse Enviar. Devuelve (estado, mensaje del sistema)."""
-    mensaje = {"texto": ""}
+    mensaje = {"texto": "", "otro": ""}
 
     def al_dialogo(d):
-        mensaje["texto"] = d.message
-        d.accept()
+        if "guardado" in normalizar(d.message):
+            mensaje["texto"] = d.message
+            d.accept()
+        else:  # una pregunta o un aviso distinto: no se acepta; lo decide el verificador
+            mensaje["otro"] = d.message
+            d.dismiss()
     page.on("dialog", al_dialogo)
     teclado = None
     try:
@@ -282,6 +349,8 @@ def esperar_envio(page):
         while time.time() < limite:
             if mensaje["texto"]:
                 return "Enviado", mensaje["texto"]
+            if mensaje["otro"]:
+                return "Dudoso: el sistema mostró un aviso que no se aceptó. Hazlo a mano", mensaje["otro"]
             try:
                 texto = page.inner_text("body")
             except Exception:
@@ -302,15 +371,17 @@ def esperar_envio(page):
 
 
 def revisar_mensaje(mensaje, institucion, apartado, anio, mes):
-    """El sistema dice qué guardó: debe coincidir con lo que se quería guardar."""
+    """El sistema dice qué guardó: debe coincidir EXACTO con lo que se quería guardar."""
     t = normalizar(mensaje)
+    m = re.search(r"portal:\s*(.+?)\s+nombre del secc?ion:\s*(.+?)\s+ano:\s*(\d{4})\s*-\s*mes:\s*(\S+)", t)
+    if not m:
+        return ["no se pudo leer el mensaje de guardado"]
     problemas = []
-    if normalizar(institucion) not in t:
-        problemas.append("institución")
-    if normalizar(apartado) not in t:
-        problemas.append("apartado")
-    m = re.search(r"ano:\s*(\d{4})\s*-\s*mes:\s*(\S+)", t)
-    if m and (m.group(1) != str(anio) or (m.group(2) not in (str(mes), normalizar(MESES[mes - 1])))):
+    if m.group(1).strip() != normalizar(institucion):
+        problemas.append(f"institución ('{m.group(1).strip()}')")
+    if m.group(2).strip() != normalizar(apartado):
+        problemas.append(f"apartado ('{m.group(2).strip()}')")
+    if m.group(3) != str(anio) or m.group(4) not in (str(mes), normalizar(MESES[mes - 1])):
         problemas.append("año o mes")
     return problemas
 
@@ -369,6 +440,13 @@ def main():
     carpeta_fotos.mkdir(parents=True, exist_ok=True)
     ruta_log = RESULTADOS / f"envios_{id_inst}_{anio}_{mes:02d}.json"
     historial = leer_json(ruta_log, [])
+    ya_enviados = {normalizar(h.get("apartado")) for h in historial if h.get("estado") == "Enviado"}
+
+    def anotar(f):
+        print(f"   -> {f['estado']}")
+        historial.append({k: str(v) for k, v in f.items()})
+        guardar_json(ruta_log, historial)
+
     with sync_playwright() as p:
         contexto = iniciar_navegador(p)
         page = contexto.pages[0] if contexto.pages else contexto.new_page()
@@ -377,27 +455,42 @@ def main():
             for i, f in enumerate(listos, 1):
                 print(f"\n[{i}/{len(listos)}] {f['apartado']}: {f['decision']}"
                       + (f" (quitar {', '.join(f['quitar_lista'])})" if f["quitar_lista"] else ""))
-                abrir_formulario(page, id_inst)
-                en_sistema = institucion_en_pagina(page)
-                if normalizar(en_sistema) != normalizar(institucion):
-                    raise Detener(f"El sistema dice '{en_sistema or '¿?'}' y el Excel '{institucion}'.")
-                hechos, vistos = ya_verificados(reporte, id_inst, anio, mes)
                 nombre = normalizar(f["apartado"])
-                if nombre not in vistos:
-                    f["estado"] = "Dudoso: el apartado no aparece en el reporte del sistema"
-                    print(f"   -> {f['estado']}")
+                if nombre in ya_enviados:  # este programa ya lo envió antes
+                    f["estado"] = "Ya enviado antes por este programa (se saltó)"
+                    anotar(f)
                     continue
-                if nombre in hechos:
-                    f["estado"] = "Ya verificado este mes (se saltó)"
-                    print(f"   -> {f['estado']}")
-                    continue
-                page.bring_to_front()
+                avisos = []
+
+                def al_aviso(d, avisos=avisos):  # aviso del sistema mientras se llena: no se acepta
+                    avisos.append(d.message)
+                    d.dismiss()
+                page.on("dialog", al_aviso)
                 try:
+                    abrir_formulario(page, id_inst)
+                    en_sistema = institucion_en_pagina(page)
+                    if normalizar(en_sistema) != normalizar(institucion):
+                        raise Detener(f"El sistema dice '{en_sistema or '¿?'}' y el Excel '{institucion}'.")
+                    hechos, vistos = ya_verificados(reporte, id_inst, institucion, anio, mes)
+                    if nombre not in vistos:
+                        f["estado"] = "Dudoso: el apartado no aparece en el reporte del sistema"
+                        anotar(f)
+                        continue
+                    if nombre in hechos:
+                        f["estado"] = "Ya verificado este mes (se saltó)"
+                        anotar(f)
+                        continue
+                    page.bring_to_front()
                     llenar(page, f, f["decision"], f["quitar_lista"], anio, mes)
-                except ValueError as e:
-                    f["estado"] = f"No se llenó: {e}"
-                    print(f"   -> {f['estado']}")
+                    revisar_formulario(page, f, f["decision"], f["quitar_lista"], anio, mes)
+                    if avisos:
+                        raise ValueError(f"el sistema mostró un aviso: {avisos[0]}")
+                except (ValueError, ErrorNavegador) as e:
+                    f["estado"] = f"No se llenó: {str(e).splitlines()[0]}"
+                    anotar(f)
                     continue
+                finally:
+                    page.remove_listener("dialog", al_aviso)
                 foto = carpeta_fotos / f"{int(f['numero'] or 0):03d}_antes_de_enviar.png"
                 page.screenshot(path=str(foto), full_page=True)
                 f["foto"] = foto.relative_to(RESULTADOS).as_posix()
@@ -407,23 +500,28 @@ def main():
                 if estado == "Enviado":
                     problemas = revisar_mensaje(mensaje, institucion, f["apartado"], anio, mes)
                     if problemas:
-                        f["estado"] = "¡REVISAR! El sistema guardó otro " + ", ".join(problemas)
+                        f["estado"] = "¡REVISAR EN EL SISTEMA! No coincide: " + ", ".join(problemas)
+                        anotar(f)  # se guarda en el registro antes de detenerse
                         sonar()
-                        raise Detener(f["estado"] + f": {mensaje}")
+                        raise Detener(f["estado"] + f". Mensaje: {mensaje}")
+                    ya_enviados.add(nombre)
                     boton_ok = page.get_by_role("button", name="OK")
                     if boton_ok.count():
                         boton_ok.first.click()
                 elif estado.startswith("Sin enviar"):
                     f["estado"] = "Dudoso: no se vio el mensaje de guardado. Revisar en el sistema"
-                print(f"   -> {f['estado']}")
-                historial.append({k: str(v) for k, v in f.items()})
-                guardar_json(ruta_log, historial)
+                anotar(f)
         except Detener as e:
             print(f"\n*** ALTO: {e}\n*** No se siguió llenando para no guardar algo equivocado.")
         except KeyboardInterrupt:
             print("\nTerminado por el verificador.")
+        except Exception as e:  # cualquier otro problema: se para, pero el registro se guarda
+            print(f"\n*** ALTO por un error inesperado: {str(e).splitlines()[0]}")
         finally:
-            contexto.close()
+            try:
+                contexto.close()
+            except Exception:
+                pass
 
     salida = ruta_libre(RESULTADOS / f"envios_{id_inst}_{anio}_{mes:02d}.xlsx")
     guardar_registro(salida, datos, filas)

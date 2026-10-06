@@ -104,7 +104,10 @@ class H(BaseHTTPRequestHandler):
             hechos = VERIFICADOS.get((q.get("idPortal"), q.get("ano"), q.get("mes")), set())
             filas = "".join(f"<tr><td>{a}</td>" + ("<td>✔</td><td>100%</td>" if a in hechos else
                             "<td colspan='2'>No ha verificacion</td>") + "</tr>" for a in APARTADOS)
+            nombre = NOMBRES.get(q.get("idPortal", ""), "Institucion X")
+            mes_txt = MESES[int(q.get("mes", "1")) - 1]
             return self.html(f"<html><body><h3>VERIFICACIÓN DEL PORTAL DE TRANSPARENCIA</h3>"
+                             f"<p>Institución: {nombre}  Año: {q.get('ano')}  Mes: {mes_txt}</p>"
                              f"<table>{filas}</table></body></html>")
         if url.path == "/envios":
             return self.html(json.dumps(ENVIOS, ensure_ascii=False))
