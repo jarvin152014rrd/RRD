@@ -9,11 +9,15 @@ Revisa el **portal público**, descarga y revisa los **documentos nuevos** y te 
 
 ## Usar
 1. Doble clic en **`ejecutar.bat`**.
+   Si Windows lo bloquea ("Control Inteligente de Aplicaciones"): abre la carpeta `verificador`, haz clic en la
+   barra de dirección, escribe `cmd` + Enter y en la ventana negra escribe **`py fase1.py`** (Fase 2: **`py fase2.py`**).
 2. Elige **1** (una institución) o **2** (todas las de `instituciones.txt`, una tras otra).
 3. Responde año, mes y cuántos apartados revisar (**para probar pon `3`**). El programa recuerda tus últimas respuestas: Enter = la misma.
 4. Si es una institución: escribe su número (el de la dirección, ej. `28` en `portalunico.iaip.gob.hn/28/7/`).
    "¿Desde qué mes?" ya viene lleno con el mes siguiente a tu verificación anterior.
-5. Se abre Chrome solo y va despacio (10 a 20 s entre páginas; 1 a 2 minutos entre instituciones).
+5. Se abre un **Chrome normal** (con un perfil solo para el portal) y va despacio (10 a 20 s entre páginas;
+   1 a 2 minutos entre instituciones). Si el portal pide **"Soy humano"**, el programa **suena y te espera**:
+   márcalo tú; el programa nunca lo marca solo.
 6. Al terminar se abre el Excel de la carpeta **`resultados`**.
 
 ## El Excel
@@ -36,7 +40,7 @@ Revisa el **portal público**, descarga y revisa los **documentos nuevos** y te 
 ## Fase 2: llenar el sistema de evaluación
 1. Corrige en el Excel las columnas azules (**DECISIÓN FINAL / QUITAR FINAL / OBSERVACIÓN FINAL**), **guárdalo y ciérralo**.
 2. Doble clic en **`llenar.bat`** y elige el Excel.
-3. Se abre Chrome. La primera vez **inicia sesión tú** (la contraseña no se guarda; Chrome recuerda la sesión).
+3. Se abre Chrome. Cuando el programa lo pida, **inicia sesión tú** (una vez por uso; la contraseña no se guarda).
 4. Por cada apartado el programa:
    - revisa que la **institución** del sistema sea la del Excel (si no, **se detiene**);
    - revisa en el reporte del sistema si **ya está verificado** ese mes (si sí, **lo salta**);
@@ -47,7 +51,8 @@ Revisa el **portal público**, descarga y revisa los **documentos nuevos** y te 
 6. Al final abre **`envios_….xlsx`**: qué se envió, qué se saltó y por qué, con una foto del formulario antes de enviar.
 - Los **Sin calificar** (sin decisión) no se llenan: hazlos tú a mano.
 - Si QUITAR FINAL tiene un error al escribir (ej. "Completo"), ese apartado **no se llena** y te avisa.
-- La carpeta **`perfil_chrome`** guarda la sesión del sistema: **no la compartas**.
+- Las carpetas **`perfil_chrome`** (sistema de evaluación) y **`perfil_portal`** (portal) son de este programa:
+  **no las compartas**.
 
 ## Documentos (PDF y Excel)
 Si respondes **S** a "¿Descargar y revisar los documentos…?":
@@ -83,6 +88,7 @@ Si la institución y el mes ya se leyeron, pregunta si **leer de nuevo** (por si
 - `reglas.json` — tus checklists convertidos en reglas. Si cambias los Excel: `py crear_reglas.py Municipalidades.xlsx Instituciones.xlsx`.
 - `comun.py` — las frases y la lógica de decisión.
 - `fase1.py` — revisión del portal (Fase 1). `fase2.py` — llenado del sistema de evaluación (Fase 2).
+- `navegador.py` — abre un Chrome normal y el programa se conecta a él (el portal rechazaba el Chrome automatizado).
 - `documentos.py` — descarga segura. `analisis.py` — lectura sin IA. `ia.py` — revisión con IA.
 - `config_ia.json` — IA apagada/encendida, modelo, tope de gasto.
 - `resultados/` — Excel, lo leído (`lectura_…json`) y el historial para comparar (`historial_…json`).

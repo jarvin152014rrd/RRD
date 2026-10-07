@@ -5,8 +5,8 @@
 - Se salta los apartados sin decisión ("Sin calificar") y los que ya tienen verificación.
 - Pega la captura del portal y deja la descripción vacía.
 - NUNCA pulsa Enviar: el verificador revisa el formulario y pulsa Enviar en la página.
-- La contraseña no se guarda: el verificador inicia sesión a mano; Chrome recuerda la sesión
-  en la carpeta perfil_chrome (solo de este programa, no se comparte).
+- La contraseña no se guarda: el verificador inicia sesión a mano cuando el programa lo pide.
+  Chrome usa la carpeta perfil_chrome (solo de este programa, no se comparte).
 """
 import base64
 import os
@@ -25,6 +25,7 @@ from playwright.sync_api import sync_playwright
 
 from comun import MESES, normalizar
 from documentos import sonar
+from navegador import Chrome
 from fase1 import (CARPETA, PRUEBA, RESULTADOS, abrir_archivo, agregar, encabezado, enlace_celda,
                    guardar_json, leer_json, preguntar, ruta_libre)
 
@@ -125,28 +126,39 @@ def validar(fila):
 
 # ---------- sistema de evaluación ----------
 
-def iniciar_navegador(p):
-    opciones = dict(headless=PRUEBA, viewport={"width": 1366, "height": 900})
-    try:
-        contexto = p.chromium.launch_persistent_context(str(PERFIL), channel="chrome", **opciones)
-    except Exception:  # si no encuentra Chrome usa el navegador de Playwright
-        contexto = p.chromium.launch_persistent_context(
-            str(PERFIL), executable_path=os.environ.get("CHROME_RUTA") or None, **opciones)
+def permitir_portapapeles(contexto):
+    """Solo se usa si pegar la captura directo no funciona (plan B: Ctrl+V)."""
     try:
         contexto.grant_permissions(["clipboard-read", "clipboard-write"], origin=GVT)
     except Exception:
         pass
-    return contexto
 
 
 def en_login(page):
     return page.locator("input[type=password]").count() > 0
 
 
+def ir_a(page, url):
+    """Abre una página esperando a que termine de cargar; si otra carga estaba en curso
+    (por ejemplo, tras iniciar sesión o pulsar OK), espera y vuelve a intentar."""
+    for intento in range(3):
+        try:
+            page.wait_for_load_state("load", timeout=15000)
+        except ErrorNavegador:
+            pass
+        try:
+            page.goto(url, wait_until="domcontentloaded")
+            return
+        except ErrorNavegador as e:
+            if "interrupted by another navigation" not in str(e) or intento == 2:
+                raise
+            time.sleep(2)
+
+
 def abrir_formulario(page, id_inst):
     """Abre verificar.php; si pide iniciar sesión, espera a que el verificador entre a mano."""
     url = f"{GVT}/verificar.php?id={id_inst}"
-    page.goto(url, wait_until="domcontentloaded")
+    ir_a(page, url)
     if en_login(page):
         if LOGIN_PRUEBA:  # solo pruebas
             page.fill("input[name=usuario]", "prueba")
@@ -156,11 +168,16 @@ def abrir_formulario(page, id_inst):
             print("\n   >>> Inicia sesión en la ventana de Chrome. Te espero... <<<")
             sonar()
         limite = time.time() + (60 if PRUEBA else 900)
-        while en_login(page):
+        while True:
+            time.sleep(2)
+            try:
+                if not en_login(page):
+                    break
+            except ErrorNavegador:  # la página está cambiando tras iniciar sesión
+                pass
             if time.time() > limite:
                 raise Detener("No se inició sesión a tiempo.")
-            time.sleep(2)
-        page.goto(url, wait_until="domcontentloaded")
+        ir_a(page, url)
     page.wait_for_load_state("networkidle")
 
 
@@ -447,10 +464,9 @@ def main():
         historial.append({k: str(v) for k, v in f.items()})
         guardar_json(ruta_log, historial)
 
-    with sync_playwright() as p:
-        contexto = iniciar_navegador(p)
-        page = contexto.pages[0] if contexto.pages else contexto.new_page()
-        reporte = contexto.new_page()
+    with sync_playwright() as p, Chrome(p, PERFIL) as chrome:  # Chrome normal, perfil propio
+        permitir_portapapeles(chrome.contexto)
+        page, reporte = chrome.pagina, chrome.nueva_pagina()
         try:
             for i, f in enumerate(listos, 1):
                 print(f"\n[{i}/{len(listos)}] {f['apartado']}: {f['decision']}"
@@ -517,11 +533,6 @@ def main():
             print("\nTerminado por el verificador.")
         except Exception as e:  # cualquier otro problema: se para, pero el registro se guarda
             print(f"\n*** ALTO por un error inesperado: {str(e).splitlines()[0]}")
-        finally:
-            try:
-                contexto.close()
-            except Exception:
-                pass
 
     salida = ruta_libre(RESULTADOS / f"envios_{id_inst}_{anio}_{mes:02d}.xlsx")
     guardar_registro(salida, datos, filas)

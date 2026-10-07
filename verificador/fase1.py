@@ -24,6 +24,7 @@ import documentos
 import ia
 from comun import MESES, aplicar_documentos, es_no_aplica, evaluar, mes_a_numero, normalizar
 from documentos import Bloqueado
+from navegador import Chrome
 
 PRUEBA = "PORTAL_PRUEBA" in os.environ  # solo para pruebas locales
 PORTAL = os.environ.get("PORTAL_PRUEBA", "https://portalunico.iaip.gob.hn")
@@ -35,6 +36,7 @@ LISTA = CARPETA / "instituciones.txt"
 RESPUESTAS = RESULTADOS / "ultimas_respuestas.json"
 DECISIONES = ["Cumple", "No cumple", "No aplica"]
 DOCUMENTOS = RESULTADOS / "documentos"
+PERFIL_PORTAL = CARPETA / ("pruebas/perfil_portal" if PRUEBA else "perfil_portal")  # solo para el portal
 
 
 # ---------- preguntas ----------
@@ -134,18 +136,31 @@ def guardar_historial(id_inst, anio, mes, lectura):
 # ---------- navegador ----------
 
 def revisar_bloqueo(page):
-    """Para todo si el portal muestra el bloqueo; espera si pide verificar que es humano."""
-    for _ in range(60):
-        titulo = normalizar(page.title())
-        cuerpo = normalizar(page.inner_text("body")[:2000])
+    """Para todo si el portal muestra el bloqueo; espera (hasta 5 min) si pide verificar que
+    es humano. La casilla la marca el verificador: el programa nunca la toca."""
+    avisado = False
+    for _ in range(100):
+        try:
+            titulo = normalizar(page.title())
+            cuerpo = normalizar(page.inner_text("body")[:2000])
+        except Exception:  # la página se está recargando tras pasar el reto
+            time.sleep(3)
+            continue
         if "error 1015" in cuerpo or "rate limited" in cuerpo or "access denied" in titulo:
             raise Bloqueado("El portal está limitando el acceso (Error 1015).")
-        if "just a moment" in titulo or "un momento" in titulo or "verify you are human" in cuerpo:
-            print("   El portal pide verificar que eres humano. Resuélvelo en la ventana de Chrome...")
-            time.sleep(5)
+        if "just a moment" in titulo or "un momento" in titulo or "verify you are human" in cuerpo \
+                or "verifica que tu eres un ser humano" in cuerpo:
+            if not avisado:
+                print("   >>> El portal pide verificar que eres humano. Márcalo tú en la ventana "
+                      "de Chrome; te espero hasta 5 minutos... <<<")
+                documentos.sonar()
+                avisado = True
+            time.sleep(3)
             continue
+        if avisado:
+            print("   Verificación superada. Sigo.")
         return
-    raise Bloqueado("No se pasó la verificación de Cloudflare.")
+    raise Bloqueado("No se pasó la verificación 'Soy humano' en 5 minutos.")
 
 
 def abrir(page, url):
@@ -840,14 +855,6 @@ def procesar(page, reglas, cfg, presupuesto, preguntar_si_existe=True):
     return resumen, bloqueado
 
 
-def iniciar_navegador(p):
-    try:
-        return p.chromium.launch(channel="chrome", headless=PRUEBA)
-    except Exception:  # si no encuentra Chrome usa el navegador de Playwright
-        return p.chromium.launch(headless=PRUEBA,
-                                 executable_path=os.environ.get("CHROME_RUTA") or None)
-
-
 def main():
     RESULTADOS.mkdir(exist_ok=True)
     reglas = json.loads((CARPETA / "reglas.json").read_text(encoding="utf-8"))
@@ -902,26 +909,22 @@ def main():
             "S").upper().startswith("S")
 
     resumen, ruta_excel = [], None
-    with sync_playwright() as p:
-        nav = iniciar_navegador(p)
-        page = nav.new_page(viewport={"width": 1366, "height": 1000})
-        try:
-            for i, cfg in enumerate(trabajos, 1):
-                if i > 1:
-                    esperar(PAUSA_INSTITUCION, "\nPausa antes de la siguiente institución")
-                print(f"\n===== Institución {cfg['id']} ({i}/{len(trabajos)}) =====")
-                fila, bloqueado = procesar(page, reglas, cfg, presupuesto,
-                                           preguntar_si_existe=(modo != "2"))
-                resumen.append(fila)
-                if fila.get("Archivo"):
-                    ruta_excel = RESULTADOS / fila["Archivo"]
-                if bloqueado:
-                    print(f"\n*** ALTO: {bloqueado}")
-                    print("*** Se guardó lo avanzado. Espera al menos 1 hora antes de volver a "
-                          "correrlo: seguirá donde se quedó.")
-                    break
-        finally:
-            nav.close()
+    with sync_playwright() as p, Chrome(p, PERFIL_PORTAL) as chrome:
+        page = chrome.pagina
+        for i, cfg in enumerate(trabajos, 1):
+            if i > 1:
+                esperar(PAUSA_INSTITUCION, "\nPausa antes de la siguiente institución")
+            print(f"\n===== Institución {cfg['id']} ({i}/{len(trabajos)}) =====")
+            fila, bloqueado = procesar(page, reglas, cfg, presupuesto,
+                                       preguntar_si_existe=(modo != "2"))
+            resumen.append(fila)
+            if fila.get("Archivo"):
+                ruta_excel = RESULTADOS / fila["Archivo"]
+            if bloqueado:
+                print(f"\n*** ALTO: {bloqueado}")
+                print("*** Se guardó lo avanzado. Espera al menos 1 hora antes de volver a "
+                      "correrlo: seguirá donde se quedó.")
+                break
 
     if modo == "2" and resumen:
         ruta_excel = guardar_resumen(resumen)

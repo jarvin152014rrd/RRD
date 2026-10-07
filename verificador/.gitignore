@@ -3,5 +3,7 @@ __pycache__/
 pruebas/archivos/
 pruebas/resultados/
 pruebas/perfil_chrome/
+pruebas/perfil_portal/
 perfil_chrome/
+perfil_portal/
 *.tmp

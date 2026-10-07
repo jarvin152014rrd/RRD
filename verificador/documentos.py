@@ -6,6 +6,7 @@
 - Error 1015: espera 10 y 30 minutos; si sigue, se detiene.
 - Casilla "Soy humano": NO se marca sola. Suena, pausa y espera a que la marques tú.
 """
+import base64
 import hashlib
 import io
 import os
@@ -92,7 +93,30 @@ def seleccionar(filas, periodicidad, anio, desde, mes, enlaces_anteriores):
     return unicos[:MAX_POR_APARTADO], len(unicos) > MAX_POR_APARTADO
 
 
+BAJAR_EN_CHROME = """async ([url, maximo]) => {
+  const r = await fetch(url, {credentials: 'include'});
+  const largo = parseInt(r.headers.get('content-length') || '0');
+  if (largo > maximo) return {grande: largo};
+  const datos = new Uint8Array(await r.arrayBuffer());
+  if (datos.length > maximo) return {grande: datos.length};
+  let texto = '';
+  for (let i = 0; i < datos.length; i += 32768)
+    texto += String.fromCharCode.apply(null, datos.subarray(i, i + 32768));
+  return {b64: btoa(texto)};
+}"""
+
+
 def _bajar(page, url):
+    """Descarga desde DENTRO de Chrome (misma conexión que pasó el 'Soy humano').
+    Si no se puede (por ejemplo, la pestaña muestra un PDF), usa la descarga del programa."""
+    try:
+        if page.url.split("/")[2:3] == url.split("/")[2:3]:  # mismo sitio que la página abierta
+            r = page.evaluate(BAJAR_EN_CHROME, [url, MAX_BYTES])
+            if r.get("grande"):
+                return None, f"Archivo muy grande ({r['grande'] // 1048576} MB)"
+            return base64.b64decode(r["b64"]), ""
+    except Exception:
+        pass
     r = page.request.get(url, timeout=90000)
     largo = int(r.headers.get("content-length", "0") or 0)
     if largo > MAX_BYTES:
