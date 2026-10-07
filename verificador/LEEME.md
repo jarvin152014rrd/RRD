@@ -45,6 +45,8 @@ Revisa el portal y llena el GVT, sin Excel. En la ventana negra (barra de direcc
 - **Sin regla:** apartados del menú que no están en tu checklist.
 - **No aplica:** si el texto del apartado dice NO APLICA, la propuesta es **No aplica** (menos en
   Participación Ciudadana municipal, donde el checklist dice que nunca se marca No aplica).
+- **Solo notas aclaratorias:** en apartados **mensuales** (menos Remuneración), si los **3 últimos meses**
+  (hasta el mes verificado) solo tienen nota aclaratoria, la propuesta es **No aplica**.
 - El Excel **nunca se reemplaza**: si ya existe, se crea otro con la fecha y hora.
 
 ## Fase 2: llenar el sistema de evaluación

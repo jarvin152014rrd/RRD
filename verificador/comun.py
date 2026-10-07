@@ -129,6 +129,29 @@ def es_no_aplica(regla, pagina):
     return "no aplica" in normalizar(pagina.get("texto_area", ""))
 
 
+def es_nota(fila):
+    """'Nota aclaratoria' como palabra completa (no 'Notas a los estados financieros')."""
+    return bool(re.search(r"\bnota aclaratoria\b|\bnota\b(?! a los)",
+                          normalizar(fila.get("nombre")) + " " + normalizar(fila.get("descripcion"))))
+
+
+MESES_SOLO_NOTA = 3
+
+
+def solo_notas_recientes(regla, filas, anio, mes):
+    """Mensuales: si los últimos 3 meses (hasta el verificado) tienen solo nota aclaratoria."""
+    if not regla or regla["periodicidad"] != "mensual" or regla.get("nota_no_valida") \
+            or regla.get("nunca_no_aplica"):
+        return False
+    for i in range(MESES_SOLO_NOTA):
+        a, m = (anio, mes - i) if mes - i >= 1 else (anio - 1, mes - i + 12)
+        del_mes = [f for f in filas if str(f.get("anio", "")).strip() == str(a)
+                   and mes_a_numero(f.get("mes", "")) == m]
+        if not del_mes or not all(es_nota(f) for f in del_mes):
+            return False
+    return True
+
+
 def evaluar(regla, pagina, anio, mes, desde=None):
     """Propone una decisión para un apartado, con los criterios del verificador:
 
@@ -147,6 +170,9 @@ def evaluar(regla, pagina, anio, mes, desde=None):
     if es_no_aplica(regla, pagina):  # se marca la casilla "No aplica"
         if not (regla and regla.get("siempre_no_aplica")):
             alertas.append("El texto del apartado dice NO APLICA.")
+        return _resultado("No aplica", quitar, obs, alertas, perio, [], [])
+    if solo_notas_recientes(regla, filas, anio, mes):
+        alertas.append(f"Los últimos {MESES_SOLO_NOTA} meses solo tienen nota aclaratoria.")
         return _resultado("No aplica", quitar, obs, alertas, perio, [], [])
 
     # Meses publicados en el año verificado.
@@ -216,9 +242,7 @@ def evaluar(regla, pagina, anio, mes, desde=None):
                            f"'{f.get('descripcion')}'")
 
     # "Nota aclaratoria" como palabra completa (no "Notas a los estados financieros").
-    notas = [f for f in del_anio if re.search(
-        r"\bnota aclaratoria\b|\bnota\b(?! a los)",
-        normalizar(f.get("nombre")) + " " + normalizar(f.get("descripcion")))]
+    notas = [f for f in del_anio if es_nota(f)]
     if notas and regla and regla.get("nota_no_valida"):  # en los demás la nota sí es válida
         obs.append(FRASES["planillas"])
         alertas.append("Tiene nota aclaratoria en un apartado donde no es válida.")
