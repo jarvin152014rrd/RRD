@@ -69,6 +69,18 @@ def es_casilla_humano(texto):
         or "challenge-platform" in t or "cf-turnstile" in t
 
 
+def fecha_orden(fila):
+    """Fecha de 'Subido' para ordenar: acepta 31/01/2026 y 2026-01-31. Sin fecha: al final."""
+    t = str(fila.get("subido") or "")
+    m = re.search(r"(\d{1,2})[/-](\d{1,2})[/-](\d{4})", t)
+    if m:
+        return int(m.group(3)), int(m.group(2)), int(m.group(1))
+    m = re.search(r"(\d{4})[/-](\d{1,2})[/-](\d{1,2})", t)
+    if m:
+        return int(m.group(1)), int(m.group(2)), int(m.group(3))
+    return 0, 0, 0
+
+
 def seleccionar(filas, periodicidad, anio, desde, mes, enlaces_anteriores):
     """Documentos a revisar: los nuevos y los del periodo; en anuales o
     'cuando existan cambios', el más reciente."""
@@ -84,7 +96,7 @@ def seleccionar(filas, periodicidad, anio, desde, mes, enlaces_anteriores):
     if periodicidad in ("anual", "cuando_cambie") and not elegidos and filas:
         con_enlace = [f for f in filas if f.get("enlace")]
         if con_enlace:
-            elegidos.append(max(con_enlace, key=lambda f: f.get("subido", "")))
+            elegidos.append(max(con_enlace, key=fecha_orden))
     vistos, unicos = set(), []
     for f in elegidos:
         if f["enlace"] not in vistos:

@@ -7,7 +7,17 @@ Revisa el **portal público**, descarga y revisa los **documentos nuevos** y te 
 1. Instala Python desde https://www.python.org/downloads/ — marca **"Add python.exe to PATH"**.
 2. Doble clic en **`instalar.bat`**.
 
-## Usar
+## Un solo paso (recomendado): `py verificar.py`
+Revisa el portal y llena el GVT, sin Excel. En la ventana negra (barra de dirección → `cmd`): **`py verificar.py`**.
+1. **Parte 1 (sola):** lee todo el portal y baja documentos:
+   - Estructura Orgánica, Regulación y Participación Ciudadana: solo el **más reciente**.
+   - Finanzas y Planeación y Rendición de Cuentas: **todos los del periodo** (anuales: el más reciente).
+   - **Compras y Contrataciones se saltan siempre** (se hacen a mano).
+2. Al terminar suena: pulsa **Enter**. **Parte 2 (contigo):** se abre el GVT, inicias sesión tú, y por cada apartado
+   llena el formulario y espera a que **tú pulses Enviar** (S = saltar, Q = terminar). Los "Sin calificar" se saltan.
+3. Al final sale la lista de **apartados que quedan para ti**, con el motivo.
+
+## Usar (en dos pasos, como antes)
 1. Doble clic en **`ejecutar.bat`**.
    Si Windows lo bloquea ("Control Inteligente de Aplicaciones"): abre la carpeta `verificador`, haz clic en la
    barra de dirección, escribe `cmd` + Enter y en la ventana negra escribe **`py fase1.py`** (Fase 2: **`py fase2.py`**).
