@@ -58,7 +58,8 @@ def _esperar_puerto(puerto, segundos=30):
                 return json.load(r)
         except Exception:
             time.sleep(0.5)
-    raise RuntimeError("Chrome no respondió al abrirse.")
+    raise RuntimeError("Chrome no respondió al abrirse. Cierra las ventanas de Chrome que hayan quedado "
+                       "abiertas de este programa y vuelve a intentar.")
 
 
 class Chrome:
@@ -79,20 +80,25 @@ class Chrome:
         try:
             _esperar_puerto(puerto)
             self.navegador = self.playwright.chromium.connect_over_cdp(f"http://127.0.0.1:{puerto}")
+            # La ventana que ya existe (con sus cookies); una nueva no tendría el permiso del portal.
+            self.contexto = self.navegador.contexts[0]
+            self.pagina = self.contexto.pages[0] if self.contexto.pages else self.contexto.new_page()
         except Exception:
             self.proceso.terminate()
             raise
-        # La ventana que ya existe (con sus cookies); una nueva no tendría el permiso del portal.
-        self.contexto = self.navegador.contexts[0]
-        self.pagina = self.contexto.pages[0] if self.contexto.pages else self.contexto.new_page()
         return self
 
     def nueva_pagina(self):
         return self.contexto.new_page()
 
     def __exit__(self, *_):
+        try:  # cierre ordenado: Chrome guarda cookies y sesión antes de cerrarse
+            self.navegador.new_browser_cdp_session().send("Browser.close")
+            self.proceso.wait(timeout=10)
+        except Exception:
+            pass
         try:
-            self.navegador.close()  # solo desconecta
+            self.navegador.close()  # desconecta
         except Exception:
             pass
         try:
