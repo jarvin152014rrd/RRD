@@ -21,7 +21,9 @@
 // comillas $etiqueta$ aleatorias (nunca pegados al SQL sin comillas).
 //
 // Variables: PUERTO (8080), BASE (demo_app), DEMO_CLAVE (clave de todos los
-// usuarios de la demo), REVISAR_SESION_SEGUNDOS (60), PGHOST/PGPORT/PGUSER.
+// usuarios de la demo), REVISAR_SESION_SEGUNDOS (60), PGHOST/PGPORT/PGUSER,
+// CONFIG_CLIENTE (opcional: clientes/<cliente>/app.json que arma el Armador; de ahí
+// salen las "palabras" del rubro y el rubro para /config.js, como en la app publicada).
 // Sin dependencias: solo Node 22 y psql.
 // =====================================================================
 'use strict';
@@ -40,6 +42,19 @@ const REVISAR_SESION = Number(process.env.REVISAR_SESION_SEGUNDOS || 60);
 const DURACION_TOKEN = 3600; // segundos
 const SECRETO = crypto.randomBytes(32); // cambia en cada arranque: tokens viejos dejan de valer
 const refrescos = new Map(); // refresh_token -> { uid, sid, email }
+
+// Palabras del rubro del cliente (solo títulos del menú). Nada secreto viaja en este archivo.
+function configCliente() {
+  if (!process.env.CONFIG_CLIENTE) return {};
+  try {
+    const c = JSON.parse(fs.readFileSync(process.env.CONFIG_CLIENTE, 'utf8'));
+    return { palabras: c.palabras && typeof c.palabras === 'object' ? c.palabras : {}, rubro: String(c.rubro || '') };
+  } catch (e) {
+    console.error('AVISO: no se pudo leer CONFIG_CLIENTE:', e.message);
+    return {};
+  }
+}
+const CONFIG_EXTRA = configCliente();
 
 const TIPOS = {
   '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8',
@@ -251,7 +266,9 @@ function servirArchivo(req, res, url) {
 export default {
   supabaseUrl: location.origin,
   supabaseAnonKey: ${JSON.stringify(ANON_KEY)},
-  revisarSesionSegundos: ${REVISAR_SESION},
+  revisarSesionSegundos: ${REVISAR_SESION},${CONFIG_EXTRA.palabras ? `
+  rubro: ${JSON.stringify(CONFIG_EXTRA.rubro)},
+  palabras: ${JSON.stringify(CONFIG_EXTRA.palabras)},` : ''}
 };
 `, TIPOS['.js']);
   }

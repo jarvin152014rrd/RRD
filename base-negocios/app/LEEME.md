@@ -50,7 +50,8 @@ llave service_role. Suba la carpeta `app/` a cualquier hosting estático con HTT
 | `js/app.js` | Arranque, entrar/salir, menú y rutas `#/pestana/subpestana`, aviso "Sin conexión". |
 | `js/api.js` | Cliente de datos: `entrar`, `salir`, `rpc`, `escribir` (con id_operacion), `leer`. |
 | `js/sesion.js` | Perfil (`mi_perfil`) en memoria, `puede()`, `tieneModulo()`, revisión periódica de `mi_estado_sesion`. |
-| `js/menu.js` | Lista de pestañas y subpestañas con módulo y permiso de cada una. |
+| `js/menu.js` | Menú del usuario (módulos + permisos) con las palabras del rubro (`config.palabras`). |
+| `js/menu_datos.js` | Lista de pestañas y subpestañas (datos puros, sin importar nada): la usa también la vista previa del Armador. |
 | `js/errores.js` | Traduce errores con `error_catalogo` (mensaje sencillo + qué hacer). |
 | `js/formato.js` | `dinero(centavos)` → "L 1,234.56", fechas locales. |
 | `js/ui.js` | `h()` para armar pantallas sin innerHTML, avisos, diálogo de motivo, íconos. |
@@ -65,7 +66,7 @@ llave service_role. Suba la carpeta `app/` a cualquier hosting estático con HTT
 
 1. Cree `js/pantallas/mi_pantalla.js` con `export async function mostrar(vista, ctx) { ... }`
    (arme con `h()`; lea con `rpc()`; escriba con `escribir()`; muestre errores con `cajaError(err)`).
-2. En `js/menu.js`, en la subpestaña que corresponda, ponga `pantalla: 'mi_pantalla'`
+2. En `js/menu_datos.js`, en la subpestaña que corresponda, ponga `pantalla: 'mi_pantalla'`
    (y `modulos` / `permisos` si hace falta: basta uno de cada lista).
 3. Agregue el archivo a `CASCARON` en `sw.js` y suba `VERSION`.
 4. Agregue su prueba en `app-pruebas/probar_app.cjs`.

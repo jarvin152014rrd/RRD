@@ -1,0 +1,191 @@
+{
+  "id": "restaurante",
+  "nombre": "Restaurante / comedor",
+  "descripcion": "Comandas por mesa, platillos (servicio) e insumos; meseros con propina o comisión.",
+  "respuestas": {
+    "credito": "no",
+    "bancos": "si",
+    "personas": 5,
+    "cajas": 1,
+    "sucursales": 1,
+    "bodegas": 1,
+    "cai": "si",
+    "comisiones": "no",
+    "cotizaciones": "no",
+    "apartados": "no",
+    "inventario": "si",
+    "compras": "si",
+    "socios": "no",
+    "conciliar": "no",
+    "vende": "ambos"
+  },
+  "modulos_sugeridos": [
+    "contabilidad",
+    "ventas",
+    "inventario",
+    "dinero",
+    "compras"
+  ],
+  "perfil": "pequeno",
+  "paquete": "completo",
+  "regimen_fiscal": "fiscal_hn",
+  "limites": {
+    "usuarios": 6,
+    "cajas": 1,
+    "sucursales": 1,
+    "bodegas": 1
+  },
+  "categorias": [
+    "Desayunos",
+    "Almuerzos",
+    "Bebidas",
+    "Postres",
+    "Insumos de cocina"
+  ],
+  "unidades": [
+    {
+      "codigo": "PLATO",
+      "nombre": "Plato"
+    },
+    {
+      "codigo": "PORC",
+      "nombre": "Porción"
+    }
+  ],
+  "campos_extra": [
+    {
+      "donde": "orden",
+      "clave": "mesa",
+      "etiqueta": "Mesa",
+      "tipo": "lista",
+      "opciones": [
+        "Mesa 1",
+        "Mesa 2",
+        "Mesa 3",
+        "Mesa 4",
+        "Para llevar"
+      ]
+    },
+    {
+      "donde": "orden",
+      "clave": "mesero",
+      "etiqueta": "Mesero",
+      "tipo": "texto"
+    }
+  ],
+  "palabras": {
+    "vender": "Comandas",
+    "vender/nueva": "Nueva comanda",
+    "vender/ventas": "Comandas del día",
+    "inventario": "Menú e insumos",
+    "inventario/productos": "Platillos e insumos",
+    "barra/vender": "Comanda"
+  },
+  "reportes": [
+    "Platillos más vendidos",
+    "Ventas por mesero",
+    "Insumos por reponer"
+  ],
+  "colores": {
+    "principal": "#3d1f14",
+    "acento": "#d98a2a"
+  },
+  "demo": {
+    "negocio": "Comedor Doña Lupe (demo)",
+    "usuarios": [
+      {
+        "rol": "cajero",
+        "nombre": "Lupe Andino"
+      },
+      {
+        "rol": "vendedor",
+        "nombre": "Óscar Pineda (mesero)"
+      }
+    ],
+    "productos": [
+      {
+        "codigo": "DES-TIP",
+        "nombre": "Desayuno típico",
+        "tipo": "servicio",
+        "precio": 12000,
+        "costo": 5500,
+        "categoria": "Desayunos"
+      },
+      {
+        "codigo": "ALM-POL",
+        "nombre": "Almuerzo de pollo",
+        "tipo": "servicio",
+        "precio": 15000,
+        "costo": 7000,
+        "categoria": "Almuerzos"
+      },
+      {
+        "codigo": "BEB-NAT",
+        "nombre": "Refresco natural",
+        "tipo": "servicio",
+        "precio": 3500,
+        "costo": 1000,
+        "categoria": "Bebidas"
+      },
+      {
+        "codigo": "GAS-355",
+        "nombre": "Gaseosa en lata",
+        "precio": 3000,
+        "costo": 1800,
+        "existencia": 48,
+        "categoria": "Bebidas"
+      }
+    ],
+    "clientes": [
+      {
+        "nombre": "Oficina Contable Ramos",
+        "credito": 300000,
+        "plazo": 15
+      }
+    ],
+    "ventas": [
+      {
+        "dias": 5,
+        "lineas": [
+          [
+            "DES-TIP",
+            4
+          ],
+          [
+            "BEB-NAT",
+            4
+          ]
+        ],
+        "pago": "efectivo"
+      },
+      {
+        "dias": 2,
+        "lineas": [
+          [
+            "ALM-POL",
+            6
+          ],
+          [
+            "GAS-355",
+            6
+          ]
+        ],
+        "pago": "tarjeta"
+      },
+      {
+        "dias": 0,
+        "lineas": [
+          [
+            "ALM-POL",
+            3
+          ],
+          [
+            "BEB-NAT",
+            3
+          ]
+        ],
+        "pago": "efectivo"
+      }
+    ]
+  }
+}

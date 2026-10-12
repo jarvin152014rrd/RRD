@@ -1,5 +1,13 @@
 # Cambios de la app
 
+## app 0.3.1 (núcleo 0.14.0, sin migraciones nuevas)
+
+- **Palabras del rubro:** el menú se lee de `js/menu_datos.js` (datos puros que también usa la vista previa del
+  Armador) y toma los títulos de `config.palabras` del cliente (ej. taller: "Órdenes de trabajo", "Nueva orden de
+  trabajo"; también el título de la página y el botón del celular). Solo cambian títulos, nunca qué se ve; sin
+  palabras queda igual que antes. `servidor_app.js` las lee de `CONFIG_CLIENTE` (app.json del Armador).
+  Prueba nueva en `probar_app.cjs` (31). Cascarón `cascaron-0.3.1`.
+
 ## app 0.3.0 (núcleo 0.14.0: migración nueva 050)
 
 - **Arreglos:** el resumen de la venta muestra todo con ISV como lo ve el cliente: Subtotal − Descuento = Total y

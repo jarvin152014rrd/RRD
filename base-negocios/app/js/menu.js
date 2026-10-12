@@ -1,73 +1,13 @@
 // Menú por pestañas y subpestañas. Se arma SOLO con lo que el usuario puede usar:
 // módulos activos + permisos de mi_perfil. Nada gris ni bloqueado: lo que no puede, no sale.
-// Ajustes siempre al final. Para agregar una pantalla: una línea aquí (ver app/LEEME.md).
-//   modulos: basta UNO activo   permisos: basta UNO   todos: hacen falta TODOS   pantalla: archivo en js/pantallas/
+// La lista vive en js/menu_datos.js (datos puros que también usa el Armador del proveedor).
+// Los títulos usan las palabras del rubro del cliente (config.palabras), si las hay.
 import { puede, tieneModulo } from './sesion.js';
+import { config } from './api.js';
+import { MENU, conPalabras, tituloBarra } from './menu_datos.js';
 
-export const MENU = [
-  { id: 'inicio', titulo: 'Inicio', subs: [
-    { id: 'hoy', titulo: 'Mi negocio hoy', pantalla: 'inicio' },
-    { id: 'alertas', titulo: 'Alertas', pantalla: 'alertas' },
-    { id: 'aprobaciones', titulo: 'Aprobaciones', pantalla: 'aprobaciones', permisos: ['aprobaciones.ver'] },
-  ] },
-  { id: 'vender', titulo: 'Vender', subs: [
-    { id: 'nueva', titulo: 'Nueva venta', modulos: ['ventas'], permisos: ['ventas.vender'], pantalla: 'vender' },
-    { id: 'ventas', titulo: 'Ventas del día', modulos: ['ventas'], permisos: ['ventas.ver', 'ventas.vender'], pantalla: 'ventas_dia' },
-    { id: 'cotizaciones', titulo: 'Cotizaciones', modulos: ['ventas'], permisos: ['ventas.cotizar'], pantalla: 'cotizaciones' },
-    { id: 'apartados', titulo: 'Apartados', modulos: ['apartados'], permisos: ['apartados.registrar'] },
-    { id: 'devoluciones', titulo: 'Devoluciones', modulos: ['ventas'], permisos: ['ventas.devolver'], pantalla: 'devoluciones' },
-  ] },
-  { id: 'caja', titulo: 'Caja', subs: [
-    { id: 'turno', titulo: 'Mi turno', modulos: ['dinero'], permisos: ['caja.turno'], pantalla: 'caja_turno' },
-    { id: 'depositos', titulo: 'Depósito o retiro', modulos: ['dinero'], permisos: ['dinero.trasladar'], pantalla: 'caja_dinero' },
-    { id: 'gasto', titulo: 'Gasto de caja chica', modulos: ['dinero'], permisos: ['gastos.registrar'], pantalla: 'caja_gasto' },
-    // Cobrar necesita ver lo que deben (cobros.ver_saldos, núcleo 0.14.0; el cajero lo tiene) además de cobrar.
-    { id: 'cobros', titulo: 'Cobrar a clientes', modulos: ['ventas'], permisos: ['ventas.cobrar'], todos: ['cobros.ver_saldos'], pantalla: 'me_deben' },
-    { id: 'cajas', titulo: 'Cajas abiertas', modulos: ['dinero'], permisos: ['caja.supervisar'] },
-  ] },
-  { id: 'clientes', titulo: 'Clientes', subs: [
-    { id: 'lista', titulo: 'Clientes', permisos: ['terceros.ver'], pantalla: 'clientes' },
-    { id: 'me-deben', titulo: 'Quién me debe', modulos: ['ventas'], permisos: ['ventas.ver', 'cobros.ver_saldos'], pantalla: 'me_deben' },
-  ] },
-  { id: 'inventario', titulo: 'Inventario', subs: [
-    { id: 'productos', titulo: 'Productos', modulos: ['inventario', 'ventas'], permisos: ['inventario.ver', 'productos.editar'], pantalla: 'inv_productos' },
-    { id: 'existencias', titulo: 'Existencias', modulos: ['inventario'], permisos: ['inventario.ver'], pantalla: 'inv_existencias' },
-    // El conteo en pantalla usa la hoja "conteo_fisico" del Excel (crea ajustes pendientes de aprobación).
-    { id: 'conteo', titulo: 'Conteo físico', modulos: ['inventario'], permisos: ['inventario.ajustar'], todos: ['excel.importar'], pantalla: 'inv_conteo' },
-    { id: 'movimientos', titulo: 'Movimientos', modulos: ['inventario'], permisos: ['inventario.costos'], pantalla: 'inv_movimientos' },
-    { id: 'traslados', titulo: 'Traslados', modulos: ['inventario'], permisos: ['inventario.trasladar'], pantalla: 'inv_traslados' },
-    { id: 'excel', titulo: 'Excel', modulos: ['inventario', 'ventas'], permisos: ['excel.importar'], pantalla: 'inv_excel' },
-  ] },
-  { id: 'compras', titulo: 'Compras', subs: [
-    { id: 'compras', titulo: 'Compras', modulos: ['compras'], permisos: ['compras.ver'] },
-    { id: 'proveedores', titulo: 'Proveedores', modulos: ['compras'], permisos: ['compras.ver'] },
-    { id: 'pagos', titulo: 'Pagar a proveedores', modulos: ['compras'], permisos: ['compras.pagar'] },
-  ] },
-  { id: 'dinero', titulo: 'Dinero', subs: [
-    { id: 'donde', titulo: '¿Dónde está mi dinero?', modulos: ['dinero'], permisos: ['dinero.ver'] },
-    { id: 'gastos', titulo: 'Gastos', modulos: ['dinero'], permisos: ['gastos.registrar'] },
-    { id: 'depositos', titulo: 'Depósitos y traslados', modulos: ['dinero'], permisos: ['dinero.trasladar'] },
-    { id: 'pagos-fijos', titulo: 'Pagos fijos', modulos: ['dinero'], permisos: ['dinero.administrar'] },
-    { id: 'banco', titulo: 'Cuadrar con el banco', modulos: ['conciliacion'], permisos: ['conciliacion.ver'] },
-    { id: 'fondos', titulo: 'Fondos y socios', modulos: ['fondos'], permisos: ['fondos.ver'] },
-  ] },
-  { id: 'reportes', titulo: 'Reportes', subs: [
-    { id: 'gane', titulo: '¿Gané o perdí?', permisos: ['contabilidad.ver'] },
-    { id: 'cierre', titulo: 'Cierre de mes', permisos: ['periodos.cerrar'] },
-    { id: 'empleados', titulo: 'Empleados', permisos: ['bitacora.ver'] },
-    { id: 'bitacora', titulo: 'Quién hizo qué', permisos: ['bitacora.ver'] },
-  ] },
-  // Siempre la última.
-  { id: 'ajustes', titulo: 'Ajustes', final: true, subs: [
-    { id: 'negocio', titulo: 'Mi negocio', permisos: ['empresa.marca', 'empresa.configurar'], pantalla: 'aj_negocio' },
-    { id: 'usuarios', titulo: 'Usuarios y permisos', permisos: ['usuarios.administrar'], pantalla: 'aj_usuarios' },
-    { id: 'cajas', titulo: 'Cajas y bancos', modulos: ['dinero'], permisos: ['dinero.administrar'], pantalla: 'aj_cajas' },
-    { id: 'impuestos', titulo: 'Impuestos', permisos: ['impuestos.configurar', 'productos.editar'], pantalla: 'aj_impuestos' },
-    { id: 'reglas', titulo: 'Reglas y topes', permisos: ['empresa.configurar'], pantalla: 'aj_reglas' },
-    { id: 'mi-cuenta', titulo: 'Mis datos', pantalla: 'aj_datos' },
-    { id: 'mis-alertas', titulo: 'Alertas que recibo' },
-  ] },
-];
+export { MENU };
+const PALABRAS = (config && typeof config.palabras === 'object' && config.palabras) || {};
 
 function visible(item) {
   return (!item.modulos || tieneModulo(...item.modulos)) && (!item.permisos || puede(...item.permisos))
@@ -76,15 +16,15 @@ function visible(item) {
 
 // Menú del usuario actual: solo pestañas con al menos una subpestaña permitida.
 export function menuDelUsuario() {
-  return MENU.map((p) => ({ ...p, subs: p.subs.filter(visible) })).filter((p) => p.subs.length > 0);
+  return conPalabras(MENU, PALABRAS).map((p) => ({ ...p, subs: p.subs.filter(visible) })).filter((p) => p.subs.length > 0);
 }
 
 // Botones de la barra inferior del celular (solo los permitidos; "Más" siempre).
 export function botonesCelular(menu) {
   const hay = (pid, sid) => menu.some((p) => p.id === pid && p.subs.some((s) => s.id === sid));
-  const lista = [{ id: 'resumen', titulo: 'Resumen', ruta: '#/inicio/hoy', icono: 'resumen', pestana: 'inicio' }];
-  if (hay('vender', 'nueva')) lista.push({ id: 'vender', titulo: 'Vender', ruta: '#/vender/nueva', icono: 'vender', pestana: 'vender' });
-  if (hay('inventario', 'productos')) lista.push({ id: 'buscar', titulo: 'Buscar', ruta: '#/buscar', icono: 'buscar', pestana: 'buscar' });
+  const lista = [{ id: 'resumen', titulo: tituloBarra(PALABRAS, 'resumen', 'Resumen'), ruta: '#/inicio/hoy', icono: 'resumen', pestana: 'inicio' }];
+  if (hay('vender', 'nueva')) lista.push({ id: 'vender', titulo: tituloBarra(PALABRAS, 'vender', 'Vender'), ruta: '#/vender/nueva', icono: 'vender', pestana: 'vender' });
+  if (hay('inventario', 'productos')) lista.push({ id: 'buscar', titulo: tituloBarra(PALABRAS, 'buscar', 'Buscar'), ruta: '#/buscar', icono: 'buscar', pestana: 'buscar' });
   lista.push({ id: 'mas', titulo: 'Más', ruta: '#/mas', icono: 'mas', pestana: 'mas' });
   return lista;
 }

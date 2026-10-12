@@ -12,8 +12,9 @@
 #       cambios (lo que reciben vista_previa_ficha / aplicar_ficha)
 #   python3 ficha.py vista_previa         lee el JSON de vista_previa_ficha (entrada
 #                                         estándar) y lo muestra en palabras sencillas
-#   python3 ficha.py tabla                lee las filas de lista_clientes.sh y
-#                                         dibuja la tabla
+#   python3 ficha.py tabla [json]         lee las filas de lista_clientes.sh y
+#                                         dibuja la tabla (con "json": una lista JSON,
+#                                         para el Armador)
 #
 # Formatos de ficha:
 #   2 (actual, clientes/<cliente>/ficha.json): "cliente", "paquete", "negocio",
@@ -165,8 +166,9 @@ def vista_previa():
         print("No hay cambios: la base ya está como dice la ficha.")
 
 
-def tabla():
+def tabla(como_json=False):
     filas = []
+    datos = []
     for linea in sys.stdin.read().splitlines():
         if not linea.strip():
             continue
@@ -200,6 +202,20 @@ def tabla():
             uso = ", ".join("%s ?/%s" % (k[:3], "-" if lims.get(k) is None else lims[k]) for k in LIMITES if k in lims) or "-"
             fuente = "ficha (sin acceso a la base)"
         filas.append([("(!) " if cerca else "") + (n.get("cliente") or "?"), n.get("paquete") or "-", mods, vence, nucleo, uso, fuente])
+        limites = {}
+        for k in LIMITES:
+            if b and (b.get("limites") or {}).get(k) is not None:
+                limites[k] = {"uso": b["limites"][k].get("uso"), "limite": b["limites"][k].get("limite")}
+            elif not b and k in (n.get("limites") or {}):
+                limites[k] = {"uso": None, "limite": n["limites"][k]}
+        datos.append({"cliente": n.get("cliente"), "nombre": n.get("nombre"), "paquete": n.get("paquete"),
+                      "rubro": (n.get("crear") or {}).get("rubro"), "modulos": [x for x in mods.split(",") if x and x != "-"],
+                      "vence": None if vence in ("-", "(sin licencia)") else vence, "nucleo": None if nucleo == "?" else nucleo,
+                      "limites": limites, "cerca_del_limite": cerca, "solicitudes": (b or {}).get("solicitudes") or 0,
+                      "desde_la_base": bool(b)})
+    if como_json:
+        print(json.dumps(datos, ensure_ascii=False))
+        return
     enc = ["CLIENTE", "PAQUETE", "MÓDULOS", "VENCE", "NÚCLEO", "USO/LÍMITE", "FUENTE"]
     anchos = [max(len(str(x[i])) for x in filas + [enc]) for i in range(len(enc))]
     print("  ".join(enc[i].ljust(anchos[i]) for i in range(len(enc))))
@@ -221,6 +237,6 @@ if __name__ == "__main__":
     elif accion == "vista_previa":
         vista_previa()
     elif accion == "tabla":
-        tabla()
+        tabla(len(sys.argv) > 2 and sys.argv[2] == "json")
     else:
         error("uso: ficha.py validar|normalizar ARCHIVO  |  ficha.py vista_previa|tabla")

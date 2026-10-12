@@ -1,4 +1,4 @@
-# Pendientes de la app (0.3.0)
+# Pendientes de la app (0.3.1)
 
 - Pantallas en construcción: apartados, cajas abiertas, compras, dinero, reportes, buscar, "Alertas que recibo".
 - Fotos de comprobantes: se suben a Supabase Storage solo con `bucketComprobantes` en config.js (no probado
@@ -35,3 +35,9 @@
 - Reglas y topes: guardar varios topes a la vez son llamadas separadas; si una falla, las anteriores quedan guardadas.
 - La tabla de permisos deja marcar al contador permisos que mueven libros; el servidor lo rechaza con mensaje.
 - Fotos de logo: se guardan dentro de la base (hasta 200 KB); con Storage convendría guardarlas allá.
+- **Armador / rubros:** los "datos de cada orden" del rubro (taller: placa, marca y modelo, kilometraje; salón:
+  estilista; restaurante: mesa y mesero) se guardan en `app.json` (`campos_orden`) pero la app todavía no los pide
+  en Vender: falta un lugar en el núcleo para guardarlos en la venta (módulo futuro "órdenes de trabajo").
+  Las palabras solo cambian títulos del menú; los encabezados dentro de las pantallas (ej. "Ventas del día")
+  siguen con la palabra de siempre. Reportes típicos por rubro: solo anotados en la plantilla.
+- Armador contra Supabase real (crear y aplicar): no probado; solo contra la base local.

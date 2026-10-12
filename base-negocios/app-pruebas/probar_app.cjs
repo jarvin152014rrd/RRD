@@ -731,6 +731,24 @@ const textoDe = (pagina, sel) => pagina.locator(sel).first().innerText();
     await ctx.close();
   });
 
+  await prueba('palabras del rubro: sin palabras queda "Vender"; con palabras cambian solo los títulos', async () => {
+    const { ctx, p } = await nueva();
+    await entrar(p, 'dueno@demo.hn');
+    afirmar((await p.locator('nav.pestanas').innerText()).includes('Vender'), 'sin palabras debe decir Vender');
+    const r = await p.evaluate(async () => {
+      const m = await import('/js/menu_datos.js');
+      const con = m.conPalabras(m.MENU, { vender: 'Órdenes de trabajo', 'vender/nueva': 'Nueva orden', caja: '', clientes: 'x'.repeat(41) });
+      const ven = con.find((x) => x.id === 'vender');
+      return { pest: ven.titulo, sub: ven.subs.find((s) => s.id === 'nueva').titulo, caja: con.find((x) => x.id === 'caja').titulo,
+        cli: con.find((x) => x.id === 'clientes').titulo, mismas: con.length === m.MENU.length && con.every((x, i) => x.subs.length === m.MENU[i].subs.length),
+        intacto: m.MENU.find((x) => x.id === 'vender').titulo, barra: m.tituloBarra({ 'barra/vender': 'Orden' }, 'vender', 'Vender') };
+    });
+    afirmar(r.pest === 'Órdenes de trabajo' && r.sub === 'Nueva orden' && r.barra === 'Orden', 'no aplica las palabras');
+    afirmar(r.caja === 'Caja' && r.cli === 'Clientes', 'acepta palabras vacías o muy largas');
+    afirmar(r.mismas && r.intacto === 'Vender', 'las palabras cambiaron qué se ve o el menú original');
+    await ctx.close();
+  });
+
   await prueba('sin errores de JavaScript en las páginas', async () => {
     afirmar(erroresJs.length === 0, erroresJs.join(' | '));
   });

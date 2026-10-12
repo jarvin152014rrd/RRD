@@ -1,0 +1,180 @@
+{
+  "id": "tienda",
+  "nombre": "Tienda / abarrotería",
+  "descripcion": "Muchos productos de consumo diario, ventas rápidas de contado y algo de fiado.",
+  "respuestas": {
+    "credito": "si",
+    "bancos": "si",
+    "personas": 2,
+    "cajas": 1,
+    "sucursales": 1,
+    "bodegas": 1,
+    "cai": "no",
+    "comisiones": "no",
+    "cotizaciones": "no",
+    "apartados": "no",
+    "inventario": "si",
+    "compras": "no",
+    "socios": "no",
+    "conciliar": "no",
+    "vende": "productos"
+  },
+  "modulos_sugeridos": [
+    "contabilidad",
+    "ventas",
+    "inventario",
+    "dinero"
+  ],
+  "perfil": "pequeno",
+  "paquete": "esencial",
+  "regimen_fiscal": "ninguno",
+  "limites": {
+    "usuarios": 3,
+    "cajas": 1,
+    "sucursales": 1,
+    "bodegas": 1
+  },
+  "categorias": [
+    "Granos básicos",
+    "Bebidas",
+    "Lácteos",
+    "Limpieza",
+    "Snacks"
+  ],
+  "unidades": [
+    {
+      "codigo": "FARDO",
+      "nombre": "Fardo"
+    }
+  ],
+  "campos_extra": [
+    {
+      "donde": "producto",
+      "clave": "fecha_vence",
+      "etiqueta": "Fecha de vencimiento",
+      "tipo": "fecha"
+    }
+  ],
+  "palabras": {
+    "clientes/me-deben": "Fiado (quién me debe)"
+  },
+  "reportes": [
+    "Lo más vendido",
+    "Productos por vencer",
+    "Fiado pendiente"
+  ],
+  "colores": {
+    "principal": "#14402b",
+    "acento": "#e0b12a"
+  },
+  "demo": {
+    "negocio": "Abarrotería La Esquina (demo)",
+    "usuarios": [
+      {
+        "rol": "cajero",
+        "nombre": "Marta Reyes"
+      }
+    ],
+    "productos": [
+      {
+        "codigo": "ARR-1LB",
+        "nombre": "Arroz 1 libra",
+        "precio": 1800,
+        "costo": 1200,
+        "existencia": 200,
+        "categoria": "Granos básicos"
+      },
+      {
+        "codigo": "FRI-1LB",
+        "nombre": "Frijol rojo 1 libra",
+        "precio": 2400,
+        "costo": 1700,
+        "existencia": 150,
+        "categoria": "Granos básicos"
+      },
+      {
+        "codigo": "GAS-600",
+        "nombre": "Gaseosa 600 ml",
+        "precio": 2500,
+        "costo": 1600,
+        "existencia": 120,
+        "categoria": "Bebidas"
+      },
+      {
+        "codigo": "LEC-1L",
+        "nombre": "Leche entera 1 litro",
+        "precio": 3200,
+        "costo": 2500,
+        "existencia": 40,
+        "categoria": "Lácteos"
+      },
+      {
+        "codigo": "JAB-200",
+        "nombre": "Jabón de lavar 200 g",
+        "precio": 1500,
+        "costo": 900,
+        "existencia": 80,
+        "categoria": "Limpieza"
+      }
+    ],
+    "clientes": [
+      {
+        "nombre": "Doña Teresa (vecina)",
+        "credito": 100000,
+        "plazo": 15
+      },
+      {
+        "nombre": "Mario Gómez"
+      }
+    ],
+    "ventas": [
+      {
+        "dias": 7,
+        "lineas": [
+          [
+            "ARR-1LB",
+            10
+          ],
+          [
+            "FRI-1LB",
+            8
+          ],
+          [
+            "GAS-600",
+            6
+          ]
+        ],
+        "pago": "efectivo"
+      },
+      {
+        "dias": 3,
+        "cliente": 0,
+        "lineas": [
+          [
+            "LEC-1L",
+            4
+          ],
+          [
+            "JAB-200",
+            3
+          ]
+        ],
+        "pago": "credito"
+      },
+      {
+        "dias": 0,
+        "lineas": [
+          [
+            "GAS-600",
+            12
+          ],
+          [
+            "ARR-1LB",
+            5
+          ]
+        ],
+        "pago": "efectivo"
+      }
+    ]
+  }
+}

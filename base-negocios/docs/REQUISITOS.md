@@ -416,6 +416,11 @@ cliente solo ve lo suyo (resuelve el riesgo "esto es muy grande para mí").
   Nada de código a la medida de un solo cliente: lo nuevo se agrega como
   módulo para todos.
 
+- Hecho en armador 0.1.0 (app 0.3.1): `armador/` + `herramientas/servidor_armador.js` (127.0.0.1, clave del
+  proveedor), 5 plantillas por rubro como datos, cuestionario que sugiere y explica, vista previa del menú por
+  puesto, Crear / Aplicar con las herramientas de siempre, demo por rubro y lista de clientes. Pendiente: pedir
+  los datos de cada orden (placa, mesa...) en Vender y probar contra Supabase real (ver armador/LEEME.md).
+
 Mejoras de la vista previa aprobadas por el dueño (asesor-negocio):
 "¿Cuánto gané hoy/este mes?" en grande; palabras sencillas en vez de
 contables; modo sencillo con pocas pestañas; letra 14-15 px y grises más

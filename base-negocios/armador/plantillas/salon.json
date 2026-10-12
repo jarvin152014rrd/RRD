@@ -1,0 +1,178 @@
+{
+  "id": "salon",
+  "nombre": "Salón de belleza",
+  "descripcion": "Servicios (corte, tinte, uñas) por estilista y algo de productos.",
+  "respuestas": {
+    "credito": "no",
+    "bancos": "si",
+    "personas": 4,
+    "cajas": 1,
+    "sucursales": 1,
+    "bodegas": 1,
+    "cai": "no",
+    "comisiones": "si",
+    "cotizaciones": "no",
+    "apartados": "no",
+    "inventario": "si",
+    "compras": "no",
+    "socios": "no",
+    "conciliar": "no",
+    "vende": "ambos"
+  },
+  "modulos_sugeridos": [
+    "contabilidad",
+    "ventas",
+    "inventario",
+    "dinero",
+    "comisiones"
+  ],
+  "perfil": "pequeno",
+  "paquete": "completo",
+  "regimen_fiscal": "ninguno",
+  "limites": {
+    "usuarios": 5,
+    "cajas": 1,
+    "sucursales": 1,
+    "bodegas": 1
+  },
+  "categorias": [
+    "Cortes",
+    "Color y tinte",
+    "Uñas",
+    "Tratamientos",
+    "Productos para el cabello"
+  ],
+  "unidades": [
+    {
+      "codigo": "SES",
+      "nombre": "Sesión"
+    }
+  ],
+  "campos_extra": [
+    {
+      "donde": "orden",
+      "clave": "estilista",
+      "etiqueta": "Estilista que atendió",
+      "tipo": "texto"
+    },
+    {
+      "donde": "producto",
+      "clave": "duracion_min",
+      "etiqueta": "Duración (minutos)",
+      "tipo": "entero"
+    }
+  ],
+  "palabras": {
+    "vender": "Cobrar servicios",
+    "vender/nueva": "Nuevo servicio",
+    "vender/ventas": "Servicios del día",
+    "inventario": "Servicios y productos",
+    "inventario/productos": "Servicios y productos",
+    "barra/vender": "Cobrar"
+  },
+  "reportes": [
+    "Servicios por estilista",
+    "Comisiones por pagar",
+    "Clientas frecuentes"
+  ],
+  "colores": {
+    "principal": "#4a1f3d",
+    "acento": "#d9a0b5"
+  },
+  "demo": {
+    "negocio": "Salón Bella Vista (demo)",
+    "usuarios": [
+      {
+        "rol": "cajero",
+        "nombre": "Karla Mejía"
+      },
+      {
+        "rol": "vendedor",
+        "nombre": "Daniela Cruz (estilista)"
+      }
+    ],
+    "productos": [
+      {
+        "codigo": "S-CORTE",
+        "nombre": "Corte de cabello",
+        "tipo": "servicio",
+        "precio": 25000,
+        "costo": 5000,
+        "categoria": "Cortes"
+      },
+      {
+        "codigo": "S-TINTE",
+        "nombre": "Tinte completo",
+        "tipo": "servicio",
+        "precio": 90000,
+        "costo": 30000,
+        "categoria": "Color y tinte"
+      },
+      {
+        "codigo": "S-MANI",
+        "nombre": "Manicure",
+        "tipo": "servicio",
+        "precio": 20000,
+        "costo": 4000,
+        "categoria": "Uñas"
+      },
+      {
+        "codigo": "P-SHAMP",
+        "nombre": "Shampoo profesional 500 ml",
+        "precio": 32000,
+        "costo": 19000,
+        "existencia": 18,
+        "categoria": "Productos para el cabello"
+      }
+    ],
+    "clientes": [
+      {
+        "nombre": "Lucía Fernández",
+        "telefono": "9876-5544"
+      },
+      {
+        "nombre": "María José Paz"
+      }
+    ],
+    "ventas": [
+      {
+        "dias": 6,
+        "lineas": [
+          [
+            "S-CORTE",
+            1
+          ],
+          [
+            "S-MANI",
+            1
+          ]
+        ],
+        "pago": "efectivo"
+      },
+      {
+        "dias": 3,
+        "lineas": [
+          [
+            "S-TINTE",
+            1
+          ],
+          [
+            "P-SHAMP",
+            1
+          ]
+        ],
+        "pago": "tarjeta"
+      },
+      {
+        "dias": 0,
+        "lineas": [
+          [
+            "S-CORTE",
+            2
+          ]
+        ],
+        "pago": "efectivo"
+      }
+    ]
+  }
+}

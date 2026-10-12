@@ -2,7 +2,7 @@
 # =====================================================================
 # lista_clientes.sh  -  Tabla de todos los clientes del proveedor.
 #
-#   bash herramientas/lista_clientes.sh [--sin-conectar]
+#   bash herramientas/lista_clientes.sh [--sin-conectar] [--json]
 #
 # Recorre clientes/*/ficha.json. Si la ficha trae "conexion" y hay acceso
 # SIN preguntar nada (clave en ~/.pgpass o PGPASSFILE, o la base local de
@@ -11,6 +11,7 @@
 # Sin acceso (o con --sin-conectar) muestra lo que dice la ficha.
 # (!) = el cliente usa el 80 % o más de algún límite.
 #
+# --json: la misma información como lista JSON (la usa el Armador).
 # Nunca cambia nada. Variable opcional: DIR_CLIENTES (defecto base-negocios/clientes).
 # =====================================================================
 set -uo pipefail
@@ -18,10 +19,12 @@ set -uo pipefail
 RAIZ="$(cd "$(dirname "$0")/.." && pwd)"
 DIR_CLIENTES="${DIR_CLIENTES:-$RAIZ/clientes}"
 SIN_CONECTAR=0
+COMO_JSON=""
 for arg in "$@"; do
   case "$arg" in
     --sin-conectar) SIN_CONECTAR=1 ;;
-    -h|--ayuda)     sed -n '2,15p' "$0"; exit 0 ;;
+    --json)         COMO_JSON=json ;;
+    -h|--ayuda)     sed -n '2,16p' "$0"; exit 0 ;;
     *)              echo "ERROR: opción desconocida: $arg" >&2; exit 2 ;;
   esac
 done
@@ -77,6 +80,7 @@ for f in "$DIR_CLIENTES"/*/ficha.json; do
   n=$((n + 1))
 done
 if [ "$n" = "0" ]; then
+  [ -n "$COMO_JSON" ] && { echo "[]"; exit 0; }
   echo "No hay fichas en $DIR_CLIENTES/*/ficha.json"; exit 0
 fi
-python3 "$RAIZ/herramientas/ficha.py" tabla < "$TMP/filas"
+python3 "$RAIZ/herramientas/ficha.py" tabla $COMO_JSON < "$TMP/filas"

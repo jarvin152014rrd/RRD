@@ -1,0 +1,201 @@
+{
+  "id": "ferreteria",
+  "nombre": "Ferretería",
+  "descripcion": "Venta de materiales y herramientas; mucho producto, crédito a constructores.",
+  "respuestas": {
+    "credito": "si",
+    "bancos": "si",
+    "personas": 4,
+    "cajas": 1,
+    "sucursales": 1,
+    "bodegas": 2,
+    "cai": "si",
+    "comisiones": "no",
+    "cotizaciones": "si",
+    "apartados": "si",
+    "inventario": "si",
+    "compras": "si",
+    "socios": "no",
+    "conciliar": "no",
+    "vende": "productos"
+  },
+  "modulos_sugeridos": [
+    "contabilidad",
+    "ventas",
+    "inventario",
+    "dinero",
+    "compras",
+    "apartados"
+  ],
+  "perfil": "pequeno",
+  "paquete": "completo",
+  "regimen_fiscal": "fiscal_hn",
+  "limites": {
+    "usuarios": 5,
+    "cajas": 1,
+    "sucursales": 1,
+    "bodegas": 2
+  },
+  "categorias": [
+    "Construcción",
+    "Plomería",
+    "Electricidad",
+    "Pinturas",
+    "Herramientas"
+  ],
+  "unidades": [
+    {
+      "codigo": "QQ",
+      "nombre": "Quintal"
+    },
+    {
+      "codigo": "VAR",
+      "nombre": "Vara"
+    }
+  ],
+  "campos_extra": [
+    {
+      "donde": "producto",
+      "clave": "marca",
+      "etiqueta": "Marca",
+      "tipo": "texto"
+    },
+    {
+      "donde": "producto",
+      "clave": "medida",
+      "etiqueta": "Medida",
+      "tipo": "texto"
+    }
+  ],
+  "palabras": {},
+  "reportes": [
+    "Productos con poca existencia",
+    "Quién me debe (constructores)",
+    "Lo que debo a proveedores"
+  ],
+  "colores": {
+    "principal": "#0f1f3d",
+    "acento": "#c8972a"
+  },
+  "demo": {
+    "negocio": "Ferretería El Roble (demo)",
+    "usuarios": [
+      {
+        "rol": "cajero",
+        "nombre": "Ana Sosa"
+      },
+      {
+        "rol": "vendedor",
+        "nombre": "Juan Ramos"
+      }
+    ],
+    "productos": [
+      {
+        "codigo": "CEM-425",
+        "nombre": "Cemento gris 42.5 kg",
+        "precio": 27500,
+        "costo": 19000,
+        "existencia": 60,
+        "categoria": "Construcción"
+      },
+      {
+        "codigo": "VAR-038",
+        "nombre": "Varilla corrugada 3/8",
+        "precio": 18500,
+        "costo": 12000,
+        "existencia": 150,
+        "categoria": "Construcción"
+      },
+      {
+        "codigo": "PVC-012",
+        "nombre": "Tubo PVC 1/2 pulgada",
+        "precio": 11500,
+        "costo": 6000,
+        "existencia": 90,
+        "categoria": "Plomería"
+      },
+      {
+        "codigo": "PIN-BLA",
+        "nombre": "Pintura blanca galón",
+        "precio": 52000,
+        "costo": 36000,
+        "existencia": 30,
+        "categoria": "Pinturas"
+      },
+      {
+        "codigo": "MAR-16",
+        "nombre": "Martillo 16 oz",
+        "precio": 24000,
+        "costo": 15000,
+        "existencia": 12,
+        "categoria": "Herramientas"
+      }
+    ],
+    "clientes": [
+      {
+        "nombre": "Constructora Ríos",
+        "credito": 5000000,
+        "plazo": 30,
+        "telefono": "9988-7766"
+      },
+      {
+        "nombre": "Pedro Castillo"
+      }
+    ],
+    "ventas": [
+      {
+        "dias": 9,
+        "lineas": [
+          [
+            "CEM-425",
+            15
+          ],
+          [
+            "VAR-038",
+            40
+          ]
+        ],
+        "pago": "efectivo"
+      },
+      {
+        "dias": 5,
+        "cliente": 0,
+        "lineas": [
+          [
+            "CEM-425",
+            20
+          ],
+          [
+            "PVC-012",
+            10
+          ]
+        ],
+        "pago": "credito"
+      },
+      {
+        "dias": 2,
+        "lineas": [
+          [
+            "PIN-BLA",
+            3
+          ]
+        ],
+        "pago": "tarjeta"
+      },
+      {
+        "dias": 0,
+        "lineas": [
+          [
+            "MAR-16",
+            1
+          ],
+          [
+            "PVC-012",
+            6
+          ]
+        ],
+        "pago": "efectivo"
+      }
+    ]
+  }
+}

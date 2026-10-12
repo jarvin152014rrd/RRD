@@ -82,10 +82,26 @@ Todo lo esencial, más:
 - Citas y agenda (salones, clínicas).
 - Cobros recurrentes (gimnasios, academias, membresías).
 
+## Plantillas por rubro (Armador)
+
+`armador/plantillas/*.json` sugiere módulos, perfil, límites, categorías, palabras y demo de cada rubro
+(el proveedor decide al final; el cuestionario de la visita ajusta la sugerencia):
+
+| Rubro | Módulos sugeridos (además de contabilidad) | CAI | Paquete | Usuarios / cajas / sucursales / bodegas | Palabras |
+|---|---|---|---|---|---|
+| Ferretería | ventas, inventario, dinero, compras, apartados | sí | completo | 5 / 1 / 1 / 2 | (las de siempre) |
+| Salón de belleza | ventas, inventario, dinero, comisiones | no | completo | 5 / 1 / 1 / 1 | "Cobrar servicios" |
+| Taller mecánico | ventas, inventario, dinero, comisiones | sí | completo | 4 / 1 / 1 / 1 | "Órdenes de trabajo", "Repuestos" |
+| Tienda / abarrotería | ventas, inventario, dinero | no | esencial | 3 / 1 / 1 / 1 | "Fiado (quién me debe)" |
+| Restaurante / comedor | ventas, inventario, dinero, compras | sí | completo | 6 / 1 / 1 / 1 | "Comandas", "Menú e insumos" |
+
+Las palabras solo cambian títulos del menú; nunca qué se ve. Mostrar la demo del rubro en la visita:
+Armador > Demostración.
+
 ## Al cerrar una venta
 
-1. Llenar la ficha del cliente (`clientes/<cliente>/ficha.json`, copia de
-   `clientes/ejemplo/`) con los módulos, perfil, licencia y límites del paquete.
+1. Armar el cliente con el Armador (armador/LEEME.md), o llenar a mano la ficha
+   (`clientes/<cliente>/ficha.json`, copia de `clientes/ejemplo/`) con los módulos, perfil, licencia y límites.
 2. Instalar con herramientas/nuevo_cliente.sh (ver docs/PROCEDIMIENTOS.md P-01).
    Cambios después (agregar un módulo, ampliar límites, renovar licencia):
    herramientas/aplicar_ficha.sh (P-09, P-10).

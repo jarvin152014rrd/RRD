@@ -61,6 +61,16 @@ gpg o age instalado (para el respaldo cifrado, ver P-03).
 **Registro:** id de empresa, versión del núcleo (`SELECT * FROM version_esquema`),
 fecha, quién instaló. La bitácora guarda la creación (rol `service_role`).
 
+**Con el Armador (recomendado, armador/LEEME.md):** los pasos 4 a 7 se hacen con clics.
+`node herramientas/servidor_armador.js` → http://127.0.0.1:8095 → clave del proveedor →
+Rubro → Cuestionario → **Usar esta sugerencia** → datos, módulos, límites, licencia y palabras
+(mire la vista previa del menú) → **Base real del cliente** (cadena SIN clave; la clave en
+`~/.pgpass`) y la referencia del proyecto → **Crear**. Por dentro usa `ficha.py` y
+`nuevo_cliente.sh`; deja `clientes/<cliente>/ficha.json` con `empresa_id`, `app.json` y
+`config.js` (para publicar la app con las palabras del rubro). Para practicar o para la visita,
+deje "Base local de demostración". Cambios después: Clientes > Cambiar > Ver cambios > escribir
+el identificador > Aplicar (igual que P-09). No probado aún contra Supabase real.
+
 ---
 
 ## P-02 Actualizar el núcleo de un cliente
