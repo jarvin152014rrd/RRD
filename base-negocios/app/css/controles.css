@@ -1,0 +1,48 @@
+/* Controles (botones, campos, diálogos, avisos). Se carga DESPUÉS del tema:
+   tamaños, letra mínima y foco son fijos aquí; del tema solo se toman colores. */
+.boton {
+  font: inherit; font-size: 15px; font-weight: 600; line-height: 1.2; border-radius: 8px;
+  padding: 10px 18px; min-height: 44px; min-width: 44px; cursor: pointer;
+  border: 1px solid var(--color-principal, #0f1f3d); background: #ffffff; color: var(--color-principal, #0f1f3d);
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px; text-decoration: none; text-align: center;
+}
+.boton-principal { background: var(--color-principal, #0f1f3d); color: #ffffff; }
+.boton-peligro { border-color: var(--color-peligro, #a12a1e); color: var(--color-peligro, #a12a1e); background: #ffffff; }
+.boton-claro { border-color: rgba(255,255,255,.5); color: #ffffff; background: transparent; min-height: 40px; padding: 6px 14px; }
+.boton-ancho { width: 100%; }
+.boton[disabled] { opacity: .6; cursor: progress; }
+.botones { display: flex; gap: 8px; flex-wrap: wrap; }
+.botones .boton { flex: 1 1 auto; }
+
+:where(a, button, input, textarea, select, [tabindex]):focus-visible {
+  outline: 3px solid var(--color-acento, #c8972a); outline-offset: 2px;
+}
+
+.campo { display: flex; flex-direction: column; gap: 6px; }
+.campo label { font-size: 15px; font-weight: 600; color: var(--color-texto, #1a1a1a); }
+.campo input, .campo textarea, .campo select {
+  font: inherit; font-size: 16px; /* 16 px evita que el celular haga zoom */
+  min-height: 44px; padding: 10px 12px; border: 1px solid #8a8780; border-radius: 8px;
+  background: #ffffff; color: #1a1a1a; width: 100%;
+}
+.campo textarea { min-height: 88px; resize: vertical; }
+.ayuda { font-size: 14px; color: var(--color-suave, #4a4a4a); margin: 0; }
+
+.mensaje { border-radius: 8px; padding: 12px 14px; font-size: 15px; margin: 0; }
+.mensaje p { margin: 0; }
+.mensaje p + p { margin-top: 4px; }
+.mensaje-error { background: var(--color-peligro-fondo, #fbeae7); color: var(--color-peligro, #a12a1e); border: 1px solid #e7b9b2; }
+.mensaje-info { background: var(--color-aviso-fondo, #fdf1dc); color: var(--color-aviso, #7a5410); border: 1px solid #e8d3a8; }
+.mensaje-ok { background: var(--color-ok-fondo, #e6f2ea); color: var(--color-ok, #1e6b3a); border: 1px solid #b7d8c2; }
+
+dialog.dialogo {
+  border: none; border-radius: 12px; padding: 0; width: min(440px, calc(100vw - 32px));
+  box-shadow: 0 10px 40px rgba(15,31,61,.3); color: var(--color-texto, #1a1a1a); font-family: var(--letra, sans-serif);
+}
+dialog.dialogo::backdrop { background: rgba(15,31,61,.45); }
+.dialogo form { display: flex; flex-direction: column; gap: 14px; padding: 22px; }
+.dialogo h2 { margin: 0; }
+
+.avisos { position: fixed; left: 50%; transform: translateX(-50%); bottom: 24px; z-index: 60; display: flex; flex-direction: column; gap: 8px; width: min(420px, calc(100vw - 32px)); pointer-events: none; }
+.avisos .mensaje { box-shadow: 0 4px 16px rgba(15,31,61,.18); }
+@media (max-width: 699px) { .avisos { bottom: 88px; } }

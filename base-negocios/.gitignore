@@ -12,3 +12,7 @@ clientes/*
 !clientes/ejemplo/
 clientes/ejemplo/*
 !clientes/ejemplo/ficha.json
+# App: configuración real de cada cliente (sale de personal/), pruebas del navegador
+app/config.js
+app-pruebas/node_modules/
+app-pruebas/capturas/

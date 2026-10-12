@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Mi Negocio</title>
+<meta name="theme-color" content="#0f1f3d">
+<meta name="description" content="Ventas, caja, inventario y dinero del negocio.">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="iconos/icono.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="iconos/icono-192.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap">
+<!-- Orden: tema (solo colores y letras) -> base (acomodo) -> controles (al final: el tema no los rompe) -->
+<link rel="stylesheet" href="css/tema.css">
+<link rel="stylesheet" href="css/base.css">
+<link rel="stylesheet" href="css/controles.css">
+<script type="module" src="js/app.js"></script>
+</head>
+<body>
+<div id="sin-conexion" class="sin-conexion" role="status" hidden>Sin conexión. Lo que ve puede no estar al día; para guardar necesita internet.</div>
+<div id="app" class="app">
+  <p class="cargando" role="status">Cargando…</p>
+</div>
+<div id="avisos" class="avisos" role="status" aria-live="polite"></div>
+<noscript>Para usar el programa active JavaScript en su navegador.</noscript>
+</body>
+</html>

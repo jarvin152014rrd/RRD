@@ -1,0 +1,37 @@
+// Service worker: guarda SOLO el "cascarón" (HTML, CSS, JS, íconos) para instalar
+// y abrir rápido. Los datos (/rest/, /auth/) SIEMPRE van al servidor, nunca se guardan.
+// Al cambiar cualquier archivo del cascarón, suba VERSION.
+const VERSION = 'cascaron-0.1.0';
+const CASCARON = [
+  './', 'index.html', 'manifest.webmanifest', 'config.js',
+  'css/tema.css', 'css/base.css', 'css/controles.css',
+  'js/app.js', 'js/api.js', 'js/sesion.js', 'js/menu.js', 'js/formato.js', 'js/errores.js', 'js/ui.js',
+  'js/pantallas/entrar.js', 'js/pantallas/inicio.js', 'js/pantallas/alertas.js',
+  'js/pantallas/aprobaciones.js', 'js/pantallas/en_construccion.js', 'js/pantallas/mas.js',
+  'iconos/icono.svg', 'iconos/icono-192.png', 'iconos/icono-512.png',
+];
+
+self.addEventListener('install', (e) => {
+  e.waitUntil(caches.open(VERSION).then((c) => c.addAll(CASCARON)).then(() => self.skipWaiting()));
+});
+
+self.addEventListener('activate', (e) => {
+  e.waitUntil(caches.keys()
+    .then((ks) => Promise.all(ks.filter((k) => k !== VERSION).map((k) => caches.delete(k))))
+    .then(() => self.clients.claim()));
+});
+
+self.addEventListener('fetch', (e) => {
+  const url = new URL(e.request.url);
+  if (e.request.method !== 'GET' || url.origin !== location.origin) return;     // POST y otros sitios: directo
+  if (url.pathname.includes('/rest/') || url.pathname.includes('/auth/')) return; // datos: nunca en caché
+  // Cascarón: responde de la caché al instante y la actualiza por detrás.
+  e.respondWith(caches.open(VERSION).then(async (cache) => {
+    const guardado = await cache.match(e.request, { ignoreSearch: true });
+    const deRed = fetch(e.request).then((r) => {
+      if (r.ok) cache.put(e.request, r.clone());
+      return r;
+    }).catch(() => guardado);
+    return guardado || deRed;
+  }));
+});
