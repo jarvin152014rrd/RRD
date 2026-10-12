@@ -197,3 +197,16 @@ BEGIN
     'monto_centavos', 620000, 'descripcion', 'Pintura del rótulo del frente', 'fecha', hoy), gen_random_uuid());
   PERFORM demo.como(NULL);
 END $$;
+
+-- 7) (app 0.3.0) Segunda bodega para traslados y límite de 5 usuarios en el contrato (hay 4:
+--    se puede agregar uno más y al siguiente sale el mensaje del límite).
+DO $$
+DECLARE e uuid := demo.id('EMPRESA');
+BEGIN
+  PERFORM demo.como('dueno@demo.hn');
+  PERFORM demo.g('B2', (public.crear_bodega(e, (SELECT id FROM public.sucursal WHERE empresa_id = e AND codigo = '001'),
+    'B2', 'Bodega trasera')->>'bodega_id')::uuid);
+  PERFORM demo.como(NULL);
+  INSERT INTO public.limite_contrato (empresa_id, usuarios) VALUES (e, 5)
+  ON CONFLICT (empresa_id) DO UPDATE SET usuarios = 5;
+END $$;

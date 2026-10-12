@@ -3,7 +3,8 @@ import * as api from './api.js';
 import { cargarPerfil, olvidarPerfil, perfilActual, vigilarSesion } from './sesion.js';
 import { menuDelUsuario, botonesCelular } from './menu.js';
 import { olvidarCatalogo } from './errores.js';
-import { h, icono, cajaError } from './ui.js';
+import { cargarMarca, aplicarMarca } from './marca.js';
+import { h, icono, cajaError, limpiarAvisos } from './ui.js';
 
 const raiz = document.getElementById('app');
 const bandaSinConexion = document.getElementById('sin-conexion');
@@ -51,6 +52,7 @@ async function mostrarEntrar(mensaje = null) {
 }
 
 async function salir(texto = 'Cerró su sesión.', tipo = 'ok') {
+  aplicarMarca({});
   olvidarPerfil();
   olvidarCatalogo();
   await api.salir();
@@ -89,14 +91,15 @@ function mostrarApp() {
     h('header', { class: 'encabezado' },
       h('div', { class: 'encabezado-fila' },
         h('div', { class: 'marca' },
-          h('div', { class: 'marca-logo', 'aria-hidden': 'true' }, iniciales(perfil.empresa.nombre)),
-          h('span', { class: 'marca-nombre' }, perfil.empresa.nombre)),
+          h('div', { class: 'marca-logo', id: 'marca-logo', 'aria-hidden': 'true', dataset: { iniciales: iniciales(perfil.empresa.nombre) } }, iniciales(perfil.empresa.nombre)),
+          h('span', { class: 'marca-nombre', id: 'marca-nombre' }, perfil.empresa.nombre)),
         h('div', { class: 'quien' },
           h('span', {}, nombre, h('span', { class: 'rol-texto' }, ' · ', perfil.rol.nombre || perfil.rol.codigo)),
           h('button', { type: 'button', class: 'boton boton-claro', onclick: () => salir() }, 'Salir'))),
       pestanas),
     contenido, barra);
   zonas = { pestanas, subpestanas, contenido, barra };
+  cargarMarca(); // nombre comercial, logo y colores (si no hay, quedan los del tema)
   vigilarSesion((motivo) => forzarSalida(motivo));
   window.addEventListener('hashchange', alCambiarRuta);
   alCambiarRuta();
@@ -110,6 +113,7 @@ document.addEventListener('click', (ev) => {
 });
 
 // ---------------- Rutas ----------------
+let rutaAnterior = null;
 function alCambiarRuta() {
   if (!zonas) return;
   const [pid, sid] = location.hash.replace(/^#\/?/, '').split('/');
@@ -136,6 +140,9 @@ function alCambiarRuta() {
   zonas.subpestanas.replaceChildren(...(pestana && pestana.subs.length > 1 ? pestana.subs.map((s) =>
     h('a', { class: 'subpestana', href: `#/${pestana.id}/${s.id}`, 'aria-current': s.id === sub.id ? 'page' : null }, s.titulo)) : []));
 
+  // Avisos viejos fuera al cambiar de pantalla (no al refrescar la misma, p. ej. tras aprobar en Inicio).
+  if (location.hash !== rutaAnterior) limpiarAvisos();
+  rutaAnterior = location.hash;
   document.title = `${titulo} · ${perfilActual().empresa.nombre}`;
   mostrarPantalla(pantalla, { pestana, sub, titulo, menu });
 }

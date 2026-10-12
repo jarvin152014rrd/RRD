@@ -9,10 +9,14 @@ import { clientes, filtrar, olvidarDatos } from '../datos.js';
 import { nombreForma } from '../comprobante.js';
 
 const verCxc = () => tieneModulo('ventas') && puede('ventas.ver');
+// Saldos para cobrar (cxc_para_cobrar, núcleo 0.14.0): también el cajero, sin ventas.ver.
+const verSaldos = () => tieneModulo('ventas') && puede('ventas.ver', 'cobros.ver_saldos');
+const saldosParaCobrar = (clienteId = null) => rpc('cxc_para_cobrar', { p_empresa_id: empresaId(), p_cliente_id: clienteId });
 
 export async function mostrar(vista, ctx) {
   const [lista, saldos] = await Promise.all([clientes(true),
-    verCxc() ? leer('v_cxc_cliente', { empresa_id: empresaId() }, { limite: 1000 }) : []]);
+    verCxc() ? leer('v_cxc_cliente', { empresa_id: empresaId() }, { limite: 1000 })
+      : verSaldos() ? saldosParaCobrar().then((r) => r.clientes) : []]);
   if (!ctx.sigueVigente()) return;
   const porId = new Map(saldos.map((s) => [s.cliente_id, s]));
   const buscar = h('input', { id: 'buscar-cliente', type: 'search', placeholder: 'Nombre, RTN o teléfono', autocomplete: 'off' });
@@ -44,8 +48,10 @@ export async function abrirFicha(vista, ctx, clienteId, opciones = {}) {
     const [cli] = await leer('tercero', { id: clienteId });
     const [s] = verCxc() ? await leer('v_cxc_cliente', { empresa_id: empresaId(), cliente_id: clienteId }) : [];
     const ec = verCxc() ? await rpc('estado_cuenta_cliente', { p_empresa_id: empresaId(), p_cliente_id: clienteId }) : null;
+    const cxc = verSaldos() && puede('ventas.cobrar') ? await saldosParaCobrar(clienteId) : null;
+    const pendiente = cxc && cxc.clientes[0] ? cxc.clientes[0] : null; // lo que este usuario puede cobrar
     if (!ctx.sigueVigente()) return;
-    if (opciones.cobrar) return formularioCobro(vista, ctx, cli, ec);
+    if (opciones.cobrar) return formularioCobro(vista, ctx, cli, cxc);
     const volver = h('button', { type: 'button', class: 'boton', onclick: () => { vista.replaceChildren(); mostrar(vista, ctx); } }, 'Volver a la lista');
     const dato = (t, v) => (v || v === 0 ? h('div', { class: 'fila' }, h('span', {}, t), h('span', {}, v)) : null);
     const saldo = ec ? ec.saldo_actual_centavos : 0;
@@ -56,9 +62,17 @@ export async function abrirFicha(vista, ctx, clienteId, opciones = {}) {
         dato('Límite de crédito', dinero(cli.limite_credito_centavos)), dato('Plazo', `${cli.plazo_dias || 0} días`),
         h('div', { class: 'botones' },
           puede('terceros.editar') ? h('button', { type: 'button', class: 'boton', onclick: () => formularioCliente(vista, ctx, cli) }, 'Editar') : null,
-          ec && saldo > 0 && puede('ventas.cobrar') ? h('button', { type: 'button', class: 'boton boton-principal', id: 'cobrar-abono',
-            onclick: () => formularioCobro(vista, ctx, cli, ec) }, 'Cobrar abono') : null,
+          pendiente ? h('button', { type: 'button', class: 'boton boton-principal', id: 'cobrar-abono',
+            onclick: () => formularioCobro(vista, ctx, cli, cxc) }, 'Cobrar abono') : null,
           volver)),
+      // Sin ventas.ver (cajero): solo lo que debe, factura por factura, para cobrar.
+      !ec && cxc ? h('section', { class: 'tarjeta', 'aria-labelledby': 't-pend' },
+        h('h2', { id: 't-pend' }, 'Lo que debe'),
+        h('div', { class: 'fila fila-total' }, h('span', {}, 'Debe'), h('span', { class: 'monto', dataset: { dato: 'saldo-cliente' } }, dinero(pendiente ? pendiente.saldo_centavos : 0))),
+        pendiente ? pendiente.facturas.map((p) => h('div', { class: 'fila' },
+          h('span', {}, p.numero_documento, h('span', { class: 'detalle' }, `${fecha(p.fecha_documento)} · vence ${fecha(p.vence_el)}${p.dias_vencido > 0 ? ` · ${p.dias_vencido} días vencida` : ''}`)),
+          h('span', { class: 'monto' + (p.dias_vencido > 0 ? ' peligro' : '') }, dinero(p.saldo_centavos)))) : h('p', { class: 'vacio' }, 'No debe nada.'),
+        cxc.todas_las_sucursales ? null : h('p', { class: 'ayuda' }, 'Solo se ven las facturas de su sucursal.')) : null,
       ec ? h('section', { class: 'tarjeta', 'aria-labelledby': 't-ec' },
         h('h2', { id: 't-ec' }, 'Estado de cuenta'),
         h('div', { class: 'cifras' },
@@ -81,8 +95,11 @@ export async function abrirFicha(vista, ctx, clienteId, opciones = {}) {
   }
 }
 
-function formularioCobro(vista, ctx, cli, ec) {
-  const deuda = ec.saldo_actual_centavos;
+function formularioCobro(vista, ctx, cli, cxc) {
+  const pend = (cxc && cxc.clientes[0]) || { saldo_centavos: 0, facturas: [] };
+  const deuda = pend.saldo_centavos;
+  // Restringido por sucursal: el cobro se aplica solo a las facturas que ve (la más vieja primero).
+  const soloLasMias = cxc && !cxc.todas_las_sucursales;
   const formas = ['efectivo', 'tarjeta', 'transferencia'];
   const monto = h('input', { id: 'abono-monto', type: 'text', inputmode: 'decimal', autocomplete: 'off', value: paraCampo(deuda) });
   const selForma = h('select', { id: 'abono-forma' }, formas.map((f) => h('option', { value: f }, nombreForma(f))));
@@ -95,13 +112,10 @@ function formularioCobro(vista, ctx, cli, ec) {
   const boton = h('button', { type: 'submit', class: 'boton boton-principal boton-ancho' }, 'Cobrar');
   const id = nuevoId();
   // Facturas pendientes (la más vieja primero) con el monto a aplicar.
-  let docs = [];
-  leer('v_cxc_documento', { empresa_id: empresaId(), cliente_id: cli.id }, { orden: 'fecha_documento.asc', limite: 500 }).then((filas) => {
-    docs = filas.filter((d) => d.saldo_centavos > 0).map((d) => ({ d, si: h('input', { type: 'checkbox' }),
-      x: h('input', { type: 'text', inputmode: 'decimal', value: paraCampo(d.saldo_centavos), 'aria-label': `Monto para ${d.numero_documento}` }) }));
-    zonaFacturas.replaceChildren(...docs.map(({ d, si, x }) => h('div', { class: 'linea-devolver' },
-      h('label', {}, si, ` ${d.numero_documento} · ${fecha(d.fecha_documento)}`, h('span', { class: 'detalle' }, `Saldo ${dinero(d.saldo_centavos)}`)), x)));
-  }).catch(async (err) => zonaFacturas.append(await cajaError(err)));
+  const docs = pend.facturas.map((d) => ({ d, si: h('input', { type: 'checkbox' }),
+    x: h('input', { type: 'text', inputmode: 'decimal', value: paraCampo(d.saldo_centavos), 'aria-label': `Monto para ${d.numero_documento}` }) }));
+  zonaFacturas.replaceChildren(...docs.map(({ d, si, x }) => h('div', { class: 'linea-devolver' },
+    h('label', {}, si, ` ${d.numero_documento} · ${fecha(d.fecha_documento)}`, h('span', { class: 'detalle' }, `Saldo ${dinero(d.saldo_centavos)}`)), x)));
   elegir.addEventListener('change', () => { zonaFacturas.hidden = !elegir.checked; revisar(); });
   monto.addEventListener('input', revisar);
   // ¿Sobra? Se pide confirmar que lo que sobra quede a favor del cliente.
@@ -136,6 +150,16 @@ function formularioCobro(vista, ctx, cli, ec) {
         monto_centavos: aCentavos(x.x.value) }));
       if (!ap.length || ap.some((a) => !a.monto_centavos)) { zonaError.append(errorSimple('Marque las facturas y escriba cuánto va a cada una.')); return; }
       datos.aplicar = ap;
+    } else if (soloLasMias) {
+      // A la más vieja primero, pero solo entre las facturas de su sucursal.
+      let resta = Math.min(m, deuda);
+      datos.aplicar = [];
+      for (const { d } of docs) {
+        if (resta <= 0) break;
+        const va = Math.min(resta, d.saldo_centavos);
+        datos.aplicar.push({ ...(d.origen === 'saldo_inicial' ? { saldo_inicial_id: d.documento_id } : { venta_id: d.venta_id }), monto_centavos: va });
+        resta -= va;
+      }
     }
     if (!zonaExcedente.hidden) {
       if (!excedente.checked) { zonaError.append(errorSimple('Lo que paga es más de lo que debe.', 'Marque la casilla si lo que sobra queda a su favor, o baje el monto.')); return; }

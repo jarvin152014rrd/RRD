@@ -22,7 +22,8 @@ Pruebas en el navegador: `bash herramientas/probar_app.sh` (capturas en
 ## Cómo funciona la demo local
 
 `herramientas/servidor_app.js` (Node 22, sin dependencias) sirve esta carpeta e
-imita lo mínimo de Supabase contra la base local: entrar (`/auth/v1/token`, emite
+imita lo mínimo de Supabase contra la base local (y la Edge Function `crear-usuario`, pendiente en Supabase
+real: ver PENDIENTES): entrar (`/auth/v1/token`, emite
 un JWT con `sub`, `role=authenticated` y `session_id`), salir, `POST /rest/v1/rpc/<fn>`
 y lecturas simples `GET /rest/v1/<vista>?col=eq.valor`. Cada llamada corre con
 `SET LOCAL ROLE authenticated` y `request.jwt.claims`, como el simulador de las
@@ -55,7 +56,10 @@ llave service_role. Suba la carpeta `app/` a cualquier hosting estático con HTT
 | `js/ui.js` | `h()` para armar pantallas sin innerHTML, avisos, diálogo de motivo, íconos. |
 | `js/datos.js` | Listas compartidas en memoria un minuto: productos, clientes, cajas, cuentas de dinero, mi turno; `filtrar()` sin tildes. |
 | `js/comprobante.js` | Comprobante de venta (`documento_venta`), impresión de 80 mm y texto para WhatsApp. |
-| `js/pantallas/*.js` | Una pantalla por archivo: `inicio`, `alertas`, `aprobaciones`, `mas`, `entrar`, `en_construccion`, `vender` (carrito; también lo usa `cotizaciones`), `ventas_dia`, `cotizaciones`, `devoluciones`, `caja_turno`, `caja_dinero`, `caja_gasto`, `clientes`, `me_deben`. |
+| `js/marca.js` | Nombre comercial, logo y colores del negocio (`marca_empresa`); cambia solo variables de color. |
+| `js/excel.js` | Arma y lee el `.xlsx` (columnas azules/grises, hoja Instrucciones) para `exportar_plantilla` / `importar_*`. |
+| `vendor/xlsx.bundle.js` | SheetJS (`xlsx-js-style` 1.2.0, licencia Apache 2.0 en `vendor/`), copia local: funciona sin internet. Se carga solo al usar Excel. |
+| `js/pantallas/*.js` | Una pantalla por archivo: `inicio`, `alertas`, `aprobaciones`, `mas`, `entrar`, `en_construccion`, `vender` (carrito; también lo usa `cotizaciones`), `ventas_dia`, `cotizaciones`, `devoluciones`, `caja_turno`, `caja_dinero`, `caja_gasto`, `clientes`, `me_deben`; Inventario: `inv_productos`, `inv_existencias`, `inv_conteo`, `inv_movimientos`, `inv_traslados`, `inv_excel`; Ajustes: `aj_negocio`, `aj_usuarios`, `aj_cajas`, `aj_impuestos`, `aj_reglas`, `aj_datos`. |
 
 ## Agregar una pantalla
 
@@ -66,7 +70,23 @@ llave service_role. Suba la carpeta `app/` a cualquier hosting estático con HTT
 3. Agregue el archivo a `CASCARON` en `sw.js` y suba `VERSION`.
 4. Agregue su prueba en `app-pruebas/probar_app.cjs`.
 
-## Cómo se usa (0.2.0)
+## Cómo se usa (0.3.0)
+
+- **Inventario > Productos:** busque, toque **Ver**. **Nuevo producto** pide código, nombre, precio y si incluye
+  ISV. **Cambiar precio** pide el precio nuevo y el motivo (queda en el historial). **Desactivar** no borra nada.
+- **Inventario > Conteo físico:** elija la bodega, escriba lo que contó (no se ve lo del sistema), toque **Enviar
+  conteo a aprobación**. La existencia cambia cuando el admin o el dueño aprueba en Inicio > Aprobaciones.
+- **Inventario > Excel:** 1) **Descargar Excel**, 2) cambie las columnas azules y súbalo: verá qué pasará fila por
+  fila, 3) **Guardar cambios** (solo se habilita sin errores; pide motivo; se guarda todo o nada).
+- **Inventario > Traslados:** elija de qué bodega a cuál, agregue productos y cantidades, **Trasladar**. Lo que
+  llega de otra sucursal se confirma con **Confirmar recepción**.
+- **Ajustes > Usuarios y permisos:** **Agregar usuario** (correo, nombre, puesto, clave temporal). Si llegó al
+  límite del plan, toque **Solicitar ampliación**. El dueño marca qué puede hacer cada puesto (pide motivo).
+- **Ajustes > Mi negocio:** nombre comercial, logo y colores; vea la vista previa, **Guardar**; si no le gustó,
+  **Volver al anterior**.
+- **Caja > Cobrar a clientes** (también el cajero): **Cobrar**, escriba el monto y la forma de pago.
+
+### 0.2.0
 
 - **Vender:** escriba o escanee el código (lector USB o botón Cámara) y Enter. Cambie cantidad o descuento; si
   hay varias promociones, viene marcada la que más descuenta y puede elegir otra. Elija cliente si es al
@@ -78,7 +98,7 @@ llave service_role. Suba la carpeta `app/` a cualquier hosting estático con HTT
   "Cobrar por WhatsApp".
 
 El total, el ISV y si el descuento pide aprobación los calcula el servidor (`calcular_venta_previa`, núcleo
-0.13.2) con la misma regla de la venta; la app solo muestra. El vuelto mientras se escribe es solo una ayuda: el
+0.13.2; desde 0.14.0 también el subtotal y el descuento con ISV: Subtotal − Descuento = Total) con la misma regla de la venta; la app solo muestra. El vuelto mientras se escribe es solo una ayuda: el
 que vale es el que devuelve el servidor.
 
 Reglas: palabras sencillas; nada gris ni bloqueado (lo que no se puede, no sale);

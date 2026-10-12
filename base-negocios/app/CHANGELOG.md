@@ -1,5 +1,27 @@
 # Cambios de la app
 
+## app 0.3.0 (núcleo 0.14.0: migración nueva 050)
+
+- **Arreglos:** el resumen de la venta muestra todo con ISV como lo ve el cliente: Subtotal − Descuento = Total y
+  debajo "ISV 15 % incluido" (promo de L 60 se ve L 60.00, no L 52.17; lo calcula el servidor). Los avisos de abajo
+  duran unos segundos y se limpian al cambiar de pantalla o de estado (el "Turno abierto…" ya no queda tras cerrar).
+- **El cajero cobra abonos** (decisión del dueño): Caja > Cobrar a clientes y la ficha del cliente usan
+  `cxc_para_cobrar` (permiso nuevo `cobros.ver_saldos`): ve lo que debe cada cliente factura por factura, sin
+  ventas de toda la empresa, costos ni ganancias. Restringido por sucursal: solo sus facturas y el cobro se aplica
+  solo a ellas.
+- **Inventario** con subpestañas: Productos (buscar, crear/editar producto o servicio con categoría, unidad,
+  impuesto, ¿incluye ISV?, mínimo y campos extra; cambiar precio con motivo e historial; activar/desactivar),
+  Existencias por bodega (alerta bajo mínimo; costos solo con permiso), Conteo físico a ciegas (también celular con
+  Cámara; crea ajustes pendientes de aprobación), Movimientos (kardex), Traslados (con confirmar recepción entre
+  sucursales) y Excel (descargar con columnas azules/grises y hoja Instrucciones; subir con vista previa por fila;
+  Guardar deshabilitado mientras haya errores). Excel con SheetJS (`xlsx-js-style` 1.2.0, Apache 2.0) en `vendor/`.
+- **Ajustes** con subpestañas según permisos: Mi negocio (nombre comercial, logo, colores con vista previa y
+  "Volver al anterior"; datos fiscales solo el dueño), Usuarios y permisos ("X de Y usados", agregar con clave
+  temporal, desactivar, sucursales, cerrar sesión a distancia, "Solicitar ampliación", tabla de permisos solo del
+  dueño), Cajas y bancos, Impuestos, Reglas y topes (solo dueño) y Mis datos (licencia, versión, descargar todo).
+- Demo: segunda bodega (B2) y límite de 5 usuarios. `servidor_app.js` imita la Edge Function `crear-usuario`.
+- 11 pruebas nuevas en el navegador (30 en total).
+
 ## app 0.2.0 (núcleo 0.13.2: migración nueva 049)
 
 - **Vender** (computadora y celular): buscar por nombre, código o código de barras (lector USB = código + Enter;

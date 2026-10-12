@@ -27,3 +27,8 @@ permisos que él no tiene. Desactivar funciona en solo lectura.
 `configurar_empresa(empresa, datos, motivo)` con
 `{"tope_credito_centavos": 500000, "permite_existencia_negativa": false,
 "precio_incluye_isv_defecto": true}` (0.4.0: si los precios nuevos traen ISV).
+
+**Marca del negocio (0.14.0, `empresa.marca`: dueño y admin):** `marca_empresa(empresa)` (cualquiera de la
+empresa) y `configurar_marca(empresa, {"nombre_comercial","logo","color_principal","color_acento"} |
+{"volver_anterior": true}, motivo)`. Logo PNG/JPG/WEBP en data URL de hasta 200 KB; colores `#rrggbb`. Guarda la
+anterior en `empresa.marca_anterior`. No cambia nombre legal ni RTN (ficha del proveedor).

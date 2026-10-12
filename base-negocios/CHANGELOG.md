@@ -4,6 +4,22 @@ Formato: versión (fecha) y lista de cambios. La versión vive en `VERSION_NUCLE
 y queda guardada en cada base al migrar (vista `version_esquema`).
 Números: MAYOR.MENOR.ARREGLO (ver `docs/CONVENCIONES.md`).
 
+## 0.14.0 (2026-10-12) — El cajero cobra abonos; descuento con ISV; marca del negocio (para la app 0.3.0)
+
+Migración nueva 050 (las 001-049 no se tocaron). 131 pruebas (nueva 131, cifras a mano en sus comentarios).
+Se ajustaron las pruebas 19, 31 y 69: las listas exactas de permisos ahora incluyen los permisos nuevos.
+
+- **Permiso nuevo `cobros.ver_saldos`** (dueño, admin y cajero; plantilla y empresas existentes) y
+  `cxc_para_cobrar(empresa, cliente?)`: lo que debe cada cliente (y sus facturas pendientes si se indica el
+  cliente) para cobrar sin `ventas.ver`. Sin costos ni ganancias. Usuario restringido por sucursal: solo ventas
+  al crédito de sus sucursales y ningún saldo inicial (como `resumen_hoy`). El cobro sigue con `registrar_cobro`.
+- `calcular_venta_previa` agrega `bruto_con_isv_centavos` y `descuento_con_isv_centavos` por línea y
+  `subtotal_con_isv_centavos` / `descuento_con_isv_centavos` en total (subtotal − descuento = total). La de 049
+  queda como `interno.calcular_venta_previa_049`, sin cambios.
+- **Marca del negocio:** `empresa.marca` / `marca_anterior`, `marca_empresa(empresa)` (cualquiera de la empresa) y
+  `configurar_marca(empresa, datos, motivo)` (permiso nuevo `empresa.marca`: dueño y admin): nombre comercial, logo
+  (PNG/JPG/WEBP hasta 200 KB) y colores; `{"volver_anterior": true}`. No toca nombre legal ni RTN.
+
 ## 0.13.2 (2026-10-12) — Cálculo previo de la venta (para la app 0.2.0)
 
 Migración nueva 049 (las 001-048 no se tocaron). 130 pruebas (nueva 130, cifras a mano en sus comentarios).

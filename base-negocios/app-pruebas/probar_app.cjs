@@ -476,6 +476,261 @@ const textoDe = (pagina, sel) => pagina.locator(sel).first().innerText();
     await ctx.close();
   });
 
+  // ===================== Etapa 4, parte 3a: Inventario, Ajustes y arreglos =====================
+  const dialogoMotivo = async (p, motivo) => {
+    await p.waitForSelector('dialog.dialogo[open] textarea');
+    await p.fill('dialog.dialogo[open] textarea', motivo);
+    await p.click('dialog.dialogo[open] button[type=submit]');
+    await p.waitForSelector('dialog.dialogo', { state: 'detached', timeout: 15000 });
+  };
+  const sigueAbierto = (p) => p.locator('dialog.dialogo[open]').count();
+
+  const caj3 = await nueva();
+  await entrar(caj3.p, 'cajero@demo.hn');
+
+  await prueba('descuento con ISV: Subtotal - Descuento = Total y "ISV incluido"', async () => {
+    const p = caj3.p;
+    await venderCon(p, ['PIN-BLA']);
+    // A mano: galón L 520.00 con ISV, promoción L 60 -> 520.00 - 60.00 = 460.00; ISV incluido 460 - round(460/1.15) = 60.00.
+    afirmar((await textoDe(p, '[data-dato=subtotal]')).trim() === 'L 520.00', 'subtotal: ' + await textoDe(p, '[data-dato=subtotal]'));
+    afirmar((await textoDe(p, '[data-dato=descuento]')).trim() === '−L 60.00', 'descuento: ' + await textoDe(p, '[data-dato=descuento]'));
+    afirmar((await textoDe(p, '[data-dato=total]')).trim() === 'L 460.00', 'total');
+    afirmar((await textoDe(p, '[data-dato=isv-ISV15]')).trim() === 'L 60.00', 'ISV incluido');
+    afirmar((await p.locator('.vender').innerText()).includes('incluido'), 'no dice "ISV incluido"');
+  });
+
+  await prueba('cajero cobra un abono (ve lo que debe por factura, sin costos)', async () => {
+    const p = caj3.p;
+    const debe = Number(sql('dueno@demo.hn', `(SELECT saldo_centavos FROM public.v_cxc_cliente WHERE cliente_id = '${id('CLI1')}')`));
+    await p.goto(URL_APP + '/#/caja/cobros');
+    await p.click(`[data-cliente="${id('CLI1')}"] >> text=Cobrar`);
+    await p.waitForSelector('#abono-monto');
+    await p.fill('#abono-monto', '100.00');
+    await p.click('form.formulario button[type=submit]');
+    await p.waitForSelector('[data-dato=saldo-restante]', { timeout: 15000 });
+    afirmar((await textoDe(p, '[data-dato=aplicado]')).trim() === 'L 100.00', 'aplicado');
+    afirmar((await textoDe(p, '[data-dato=saldo-restante]')).trim() === lempiras(debe - 10000), 'saldo restante');
+    const quien = sql(null, `(SELECT u.email FROM public.cobro c JOIN auth.users u ON u.id = c.creado_por WHERE c.empresa_id = '${EM}' ORDER BY c.numero DESC LIMIT 1)`);
+    afirmar(quien === 'cajero@demo.hn', 'el cobro no quedó a nombre del cajero: ' + quien);
+    await p.click('text=Ver la ficha');
+    await p.waitForSelector('#t-pend');
+    const texto = await p.locator('body').innerText();
+    for (const palabra of ['Costo', 'Ganancia', 'gané']) afirmar(!texto.includes(palabra), 'el cajero ve ' + palabra);
+    await p.goto(URL_APP + '/#/inventario/movimientos');
+    await p.waitForURL(/#\/inventario\/productos/);
+  });
+
+  await prueba('Caja: el aviso "Turno abierto" se limpia al cerrar el turno', async () => {
+    const p = caj3.p;
+    await p.goto(URL_APP + '/#/caja/turno');
+    await p.waitForSelector('#fondo-total');
+    const saldoCaja = Number(sql('dueno@demo.hn', `(SELECT saldo_centavos FROM public.v_cuenta_dinero WHERE cuenta_dinero_id = '${id('CAJA1')}')`));
+    await p.fill('#fondo-total', (saldoCaja / 100).toFixed(2));
+    await p.click('form.formulario button[type=submit]');
+    await p.waitForSelector('#cerrar-turno', { timeout: 15000 });
+    afirmar((await p.locator('#avisos').innerText()).includes('abierto'), 'no avisó que abrió');
+    await p.click('#cerrar-turno');
+    await p.fill('#cierre-total', '100.00');
+    await p.click('form.formulario button[type=submit]');
+    await p.waitForSelector('[data-dato=diferencia]', { timeout: 15000 });
+    const avisos = await p.locator('#avisos').innerText();
+    afirmar(!avisos.includes('abierto'), 'quedó el aviso viejo: ' + avisos);
+  });
+  await caj3.ctx.close();
+
+  const adm3 = await nueva();
+  await entrar(adm3.p, 'admin@demo.hn');
+
+  await prueba('crear producto y cambiar precio con motivo (queda en el historial)', async () => {
+    const p = adm3.p;
+    await p.goto(URL_APP + '/#/inventario/productos');
+    await p.click('#nuevo-producto');
+    await p.fill('#prod-codigo', 'brocha-3');
+    await p.fill('#prod-nombre', 'Brocha 3 pulgadas');
+    await p.fill('#prod-precio', '85.00');
+    await p.click('form.formulario button[type=submit]');
+    await p.click('#confirmar-si');
+    await p.waitForSelector('#t-pficha', { timeout: 15000 });
+    afirmar((await textoDe(p, '[data-dato=precio]')).includes('L 85.00'), 'precio inicial');
+    await p.click('#cambiar-precio');
+    await p.fill('#precio-nuevo', '92.50');
+    await p.click('form.formulario button[type=submit]');
+    await dialogoMotivo(p, 'Subió el costo del proveedor');
+    await p.waitForSelector('#historial-precios');
+    afirmar((await textoDe(p, '#historial-precios')).includes('L 85.00 → L 92.50'), 'historial: ' + await textoDe(p, '#historial-precios'));
+    const r = sql('dueno@demo.hn', `(SELECT p.precio_venta_centavos || '|' || pp.motivo FROM public.producto p JOIN public.producto_precio pp ON pp.producto_id = p.id
+      WHERE p.codigo = 'BROCHA-3' AND pp.precio_anterior_centavos = 8500)`);
+    afirmar(r === '9250|Subió el costo del proveedor', 'base: ' + r);
+    await p.goto(URL_APP + '/#/inventario/existencias');
+    await p.waitForSelector('#t-exist');
+    await p.goto(URL_APP + '/#/inventario/productos');
+    await p.waitForSelector('[data-producto]');
+    await p.screenshot({ path: path.join(CAPTURAS, 'p3_inventario.png'), fullPage: true });
+  });
+
+  await prueba('admin no ve la tabla de permisos editable', async () => {
+    const p = adm3.p;
+    await p.goto(URL_APP + '/#/ajustes/usuarios');
+    await p.waitForSelector('#lista-usuarios');
+    afirmar(await p.locator('#tabla-permisos').count() === 0, 'el admin ve la tabla de permisos');
+    // Solo agrega cajero y vendedor.
+    await p.click('#agregar-usuario');
+    const puestos = await p.locator('#nuevo-rol option').allInnerTexts();
+    afirmar(puestos.join(',') === 'Cajero,Vendedor', 'puestos del admin: ' + puestos);
+  });
+
+  const due3 = await nueva();
+  await entrar(due3.p, 'dueno@demo.hn');
+
+  await prueba('conteo físico crea un ajuste pendiente y el admin lo aprueba', async () => {
+    const p = due3.p;
+    const hay = Number(sql('dueno@demo.hn', `(SELECT cantidad FROM public.v_existencia WHERE producto_id = '${id('PVC')}' AND bodega_id = '${id('B1')}')`));
+    await p.goto(URL_APP + '/#/inventario/conteo');
+    await p.waitForSelector('#conteo-lista');
+    afirmar(!(await p.locator('#contenido').innerText()).includes(String(hay) + ' '), '¿muestra la existencia? (debe ser a ciegas)');
+    await p.selectOption('#conteo-bodega', 'B1');
+    await p.fill('#conteo-buscar', 'PVC-012');
+    await p.fill('input[data-codigo="PVC-012"]', String(hay - 2));
+    await p.click('#conteo-guardar');
+    await dialogoMotivo(p, 'Conteo de fin de mes');
+    await p.waitForSelector('[data-dato=conteo-enviado]');
+    afirmar(Number(sql('dueno@demo.hn', `(SELECT cantidad FROM public.v_existencia WHERE producto_id = '${id('PVC')}' AND bodega_id = '${id('B1')}')`)) === hay, 'cambió la existencia antes de aprobar');
+    const apr = sql('dueno@demo.hn', `(SELECT id FROM public.aprobacion WHERE empresa_id = '${EM}' AND tipo = 'conteo_fisico' AND estado = 'pendiente' ORDER BY numero DESC LIMIT 1)`);
+    afirmar(apr, 'no quedó la solicitud de aprobación');
+    const a = adm3.p;
+    await a.goto(URL_APP + '/#/inicio/hoy');
+    await a.goto(URL_APP + '/#/inicio/aprobaciones');
+    await a.locator(`[data-aprobacion="${apr}"]`).getByRole('button', { name: 'Aprobar' }).click();
+    await dialogoMotivo(a, 'Revisado en bodega');
+    const despues = Number(sql('dueno@demo.hn', `(SELECT cantidad FROM public.v_existencia WHERE producto_id = '${id('PVC')}' AND bodega_id = '${id('B1')}')`));
+    afirmar(despues === hay - 2, `existencia ${hay} -> ${despues} (debía ${hay - 2})`);
+  });
+
+  await prueba('Excel: descargar, subir con un error (Guardar deshabilitado), corregir y guardar', async () => {
+    const p = due3.p;
+    await p.goto(URL_APP + '/#/inventario/excel');
+    await p.waitForSelector('#excel-descargar');
+    const [descarga] = await Promise.all([p.waitForEvent('download'), p.click('#excel-descargar')]);
+    const archivo = path.join(CAPTURAS, 'productos_prueba.xlsx');
+    await descarga.saveAs(archivo);
+    const fs = require('node:fs');
+    // Cambia el precio de la varilla en el archivo (con SheetJS de la misma página).
+    const cambiar = (precio) => p.evaluate(([b64, precio]) => {
+      const X = window.XLSX;
+      const wb = X.read(b64, { type: 'base64' });
+      const ws = wb.Sheets[wb.SheetNames[0]];
+      const filas = X.utils.sheet_to_json(ws, { header: 1 });
+      const col = filas[0].findIndex((t) => String(t).startsWith('Precio de venta'));
+      const fila = filas.findIndex((f) => f[0] === 'VAR-038');
+      ws[X.utils.encode_cell({ r: fila, c: col })] = { t: 'n', v: precio };
+      return X.write(wb, { type: 'base64', bookType: 'xlsx' });
+    }, [fs.readFileSync(archivo).toString('base64'), precio]);
+    const malo = path.join(CAPTURAS, 'productos_error.xlsx');
+    fs.writeFileSync(malo, Buffer.from(await cambiar(189.999), 'base64'));
+    await p.setInputFiles('#excel-archivo', malo);
+    await p.waitForSelector('#excel-resumen', { timeout: 15000 });
+    afirmar((await textoDe(p, '[data-dato=errores]')).startsWith('1 error'), 'resumen: ' + await textoDe(p, '#excel-resumen'));
+    afirmar(await p.isDisabled('#excel-guardar'), 'Guardar habilitado con errores');
+    afirmar((await textoDe(p, 'tr.fila-error')).includes('decimales'), 'no dice el error de la fila');
+    await p.screenshot({ path: path.join(CAPTURAS, 'p3_excel_vista_previa.png'), fullPage: true });
+    const bueno = path.join(CAPTURAS, 'productos_bien.xlsx');
+    fs.writeFileSync(bueno, Buffer.from(await cambiar(189.5), 'base64'));
+    await p.setInputFiles('#excel-archivo', bueno);
+    await p.waitForFunction(() => !document.querySelector('#excel-guardar').disabled, null, { timeout: 15000 });
+    await p.click('#excel-guardar');
+    await dialogoMotivo(p, 'Lista de precios nueva');
+    await p.waitForSelector('[data-dato=excel-guardado]');
+    const precio = sql('dueno@demo.hn', `(SELECT precio_venta_centavos FROM public.producto WHERE id = '${id('VAR')}')`);
+    afirmar(precio === '18950', 'precio en la base: ' + precio);
+  });
+
+  await prueba('Ajustes: el dueño agrega un vendedor dentro del límite; al pasarse ve el límite y "Solicitar ampliación"', async () => {
+    const p = due3.p;
+    await p.goto(URL_APP + '/#/ajustes/usuarios');
+    await p.waitForSelector('[data-dato=uso-usuarios]');
+    afirmar((await textoDe(p, '[data-dato=uso-usuarios]')).includes('4 de 5'), 'uso: ' + await textoDe(p, '[data-dato=uso-usuarios]'));
+    const alta = async (correo, nombre) => {
+      await p.click('#agregar-usuario');
+      await p.fill('#nuevo-correo', correo); await p.fill('#nuevo-nombre', nombre);
+      await p.selectOption('#nuevo-rol', 'vendedor'); await p.fill('#nuevo-clave', 'temporal123');
+      await p.click('form.formulario button[type=submit]');
+    };
+    await alta('vendedor2@demo.hn', 'Rosa Díaz');
+    await p.waitForSelector('[data-dato=uso-usuarios]', { timeout: 15000 });
+    await p.waitForFunction(() => document.querySelector('[data-dato=uso-usuarios]').textContent.includes('5 de 5'));
+    await p.screenshot({ path: path.join(CAPTURAS, 'p3_ajustes_usuarios.png'), fullPage: false });
+    await alta('vendedor3@demo.hn', 'Luis Paz');
+    await p.waitForSelector('#agregar-error .mensaje-error', { timeout: 15000 });
+    const msj = await textoDe(p, '#agregar-error .mensaje-error');
+    afirmar(/máximo|plan|ampliaci/i.test(msj) && !codigoCrudo.test(msj), 'mensaje del límite: ' + msj);
+    afirmar(await p.locator('#solicitar-desde-error').count() === 1, 'no ofrece "Solicitar ampliación"');
+    afirmar(sql(null, "(SELECT count(*) FROM auth.users WHERE email = 'vendedor3@demo.hn')") === '0', 'quedó un usuario a medias');
+    await p.click('#solicitar-desde-error');
+    await p.click('#ampliacion-enviar');
+    await p.waitForSelector('dialog.dialogo', { state: 'detached' });
+    afirmar(sql('dueno@demo.hn', `(SELECT count(*) FROM public.solicitud_proveedor WHERE empresa_id = '${EM}' AND tipo = 'ampliacion')`) === '1', 'no llegó la solicitud');
+    // La vendedora nueva entra.
+    const { ctx, p: p2 } = await nueva();
+    await entrar(p2, 'vendedor2@demo.hn');
+    await ctx.close();
+  });
+
+  await prueba('cambiar el color del tema y volver al anterior', async () => {
+    const p = due3.p;
+    const color = () => p.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue('--color-principal').trim().toLowerCase());
+    const antes = await color();
+    await p.goto(URL_APP + '/#/ajustes/negocio');
+    await p.waitForSelector('#marca-principal');
+    await p.fill('#marca-principal', '#2b4a1e');
+    await p.fill('#marca-nombre-com', 'El Roble Ferretería');
+    await p.click('#marca-guardar');
+    await dialogoMotivo(p, 'Colores de la marca nueva');
+    await p.waitForSelector('#marca-volver');
+    afirmar(await color() === '#2b4a1e', 'no cambió el color: ' + await color());
+    afirmar((await textoDe(p, '#marca-nombre')).trim() === 'El Roble Ferretería', 'no cambió el nombre del encabezado');
+    await p.click('#marca-volver');
+    await dialogoMotivo(p, 'Mejor como estaba');
+    await p.waitForFunction((a) => getComputedStyle(document.documentElement).getPropertyValue('--color-principal').trim().toLowerCase() === a, antes);
+    afirmar((await textoDe(p, '#marca-nombre')).trim() === 'Ferretería El Roble', 'no volvió el nombre');
+  });
+
+  await prueba('Cajas y bancos: banco nuevo guarda solo los 4 últimos números', async () => {
+    const p = due3.p;
+    await p.goto(URL_APP + '/#/ajustes/cajas');
+    await p.click('#nueva-cuenta');
+    await p.selectOption('#cuenta-tipo', 'banco');
+    await p.fill('#cuenta-nombre', 'Ficohsa planilla');
+    await p.fill('#cuenta-banco', 'Ficohsa');
+    await p.fill('#cuenta-numero', '2001-4455-9876');
+    await p.selectOption('#cuenta-inicio', 'saldo');
+    await p.fill('#cuenta-saldo', '1,500.00');
+    await p.click('form.formulario button[type=submit]');
+    await p.click('#confirmar-si');
+    await p.waitForSelector('#nueva-cuenta', { timeout: 15000 });
+    const c = JSON.parse(sql('dueno@demo.hn', `(SELECT row_to_json(x) FROM (SELECT numero_enmascarado, saldo_centavos FROM public.v_cuenta_dinero WHERE nombre = 'Ficohsa planilla') x)`));
+    afirmar(c.numero_enmascarado === '****9876' && c.saldo_centavos === 150000, 'cuenta: ' + JSON.stringify(c));
+    afirmar(!(await p.locator('body').innerText()).includes('2001-4455'), 'se ve el número completo');
+    await p.screenshot({ path: path.join(CAPTURAS, 'p3_ajustes_cajas.png'), fullPage: true });
+  });
+  await due3.ctx.close();
+  await adm3.ctx.close();
+
+  await prueba('celular: Inventario (conteo) se usa sin salirse a lo ancho', async () => {
+    const { ctx, p } = await nueva({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
+    await entrar(p, 'dueno@demo.hn');
+    for (const r of ['inventario/productos', 'inventario/existencias', 'inventario/conteo']) {
+      await p.goto(URL_APP + '/#/' + r);
+      await p.waitForSelector('#contenido h1');
+      const ancho = await p.evaluate(() => document.documentElement.scrollWidth);
+      afirmar(ancho <= 390, `${r} se sale a lo ancho: ${ancho}`);
+    }
+    await p.waitForSelector('#conteo-lista input');
+    const alto = await p.locator('#conteo-lista input').first().boundingBox();
+    afirmar(alto && alto.height >= 44, 'campo de conteo chico');
+    await p.screenshot({ path: path.join(CAPTURAS, 'p3_celular_conteo.png'), fullPage: false });
+    await ctx.close();
+  });
+
   await prueba('sin errores de JavaScript en las páginas', async () => {
     afirmar(erroresJs.length === 0, erroresJs.join(' | '));
   });

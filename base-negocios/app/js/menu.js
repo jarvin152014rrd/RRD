@@ -21,19 +21,22 @@ export const MENU = [
     { id: 'turno', titulo: 'Mi turno', modulos: ['dinero'], permisos: ['caja.turno'], pantalla: 'caja_turno' },
     { id: 'depositos', titulo: 'Depósito o retiro', modulos: ['dinero'], permisos: ['dinero.trasladar'], pantalla: 'caja_dinero' },
     { id: 'gasto', titulo: 'Gasto de caja chica', modulos: ['dinero'], permisos: ['gastos.registrar'], pantalla: 'caja_gasto' },
-    // Cobrar necesita ver lo que deben (ventas.ver) además de cobrar: "todos" = hacen falta todos.
-    { id: 'cobros', titulo: 'Cobrar a clientes', modulos: ['ventas'], permisos: ['ventas.cobrar'], todos: ['ventas.ver'], pantalla: 'me_deben' },
+    // Cobrar necesita ver lo que deben (cobros.ver_saldos, núcleo 0.14.0; el cajero lo tiene) además de cobrar.
+    { id: 'cobros', titulo: 'Cobrar a clientes', modulos: ['ventas'], permisos: ['ventas.cobrar'], todos: ['cobros.ver_saldos'], pantalla: 'me_deben' },
     { id: 'cajas', titulo: 'Cajas abiertas', modulos: ['dinero'], permisos: ['caja.supervisar'] },
   ] },
   { id: 'clientes', titulo: 'Clientes', subs: [
     { id: 'lista', titulo: 'Clientes', permisos: ['terceros.ver'], pantalla: 'clientes' },
-    { id: 'me-deben', titulo: 'Quién me debe', modulos: ['ventas'], permisos: ['ventas.ver'], pantalla: 'me_deben' },
+    { id: 'me-deben', titulo: 'Quién me debe', modulos: ['ventas'], permisos: ['ventas.ver', 'cobros.ver_saldos'], pantalla: 'me_deben' },
   ] },
   { id: 'inventario', titulo: 'Inventario', subs: [
-    { id: 'productos', titulo: 'Productos y precios', modulos: ['inventario', 'ventas'], permisos: ['inventario.ver', 'productos.editar'] },
-    { id: 'existencias', titulo: 'Existencias', modulos: ['inventario'], permisos: ['inventario.ver'] },
-    { id: 'conteo', titulo: 'Conteo de mercadería', modulos: ['inventario'], permisos: ['inventario.ajustar'] },
-    { id: 'traslados', titulo: 'Traslados', modulos: ['inventario'], permisos: ['inventario.trasladar'] },
+    { id: 'productos', titulo: 'Productos', modulos: ['inventario', 'ventas'], permisos: ['inventario.ver', 'productos.editar'], pantalla: 'inv_productos' },
+    { id: 'existencias', titulo: 'Existencias', modulos: ['inventario'], permisos: ['inventario.ver'], pantalla: 'inv_existencias' },
+    // El conteo en pantalla usa la hoja "conteo_fisico" del Excel (crea ajustes pendientes de aprobación).
+    { id: 'conteo', titulo: 'Conteo físico', modulos: ['inventario'], permisos: ['inventario.ajustar'], todos: ['excel.importar'], pantalla: 'inv_conteo' },
+    { id: 'movimientos', titulo: 'Movimientos', modulos: ['inventario'], permisos: ['inventario.costos'], pantalla: 'inv_movimientos' },
+    { id: 'traslados', titulo: 'Traslados', modulos: ['inventario'], permisos: ['inventario.trasladar'], pantalla: 'inv_traslados' },
+    { id: 'excel', titulo: 'Excel', modulos: ['inventario', 'ventas'], permisos: ['excel.importar'], pantalla: 'inv_excel' },
   ] },
   { id: 'compras', titulo: 'Compras', subs: [
     { id: 'compras', titulo: 'Compras', modulos: ['compras'], permisos: ['compras.ver'] },
@@ -56,11 +59,13 @@ export const MENU = [
   ] },
   // Siempre la última.
   { id: 'ajustes', titulo: 'Ajustes', final: true, subs: [
-    { id: 'mi-cuenta', titulo: 'Mi cuenta' },
-    { id: 'usuarios', titulo: 'Usuarios', permisos: ['usuarios.administrar'] },
-    { id: 'negocio', titulo: 'Mi negocio', permisos: ['empresa.configurar'] },
+    { id: 'negocio', titulo: 'Mi negocio', permisos: ['empresa.marca', 'empresa.configurar'], pantalla: 'aj_negocio' },
+    { id: 'usuarios', titulo: 'Usuarios y permisos', permisos: ['usuarios.administrar'], pantalla: 'aj_usuarios' },
+    { id: 'cajas', titulo: 'Cajas y bancos', modulos: ['dinero'], permisos: ['dinero.administrar'], pantalla: 'aj_cajas' },
+    { id: 'impuestos', titulo: 'Impuestos', permisos: ['impuestos.configurar', 'productos.editar'], pantalla: 'aj_impuestos' },
+    { id: 'reglas', titulo: 'Reglas y topes', permisos: ['empresa.configurar'], pantalla: 'aj_reglas' },
+    { id: 'mi-cuenta', titulo: 'Mis datos', pantalla: 'aj_datos' },
     { id: 'mis-alertas', titulo: 'Alertas que recibo' },
-    { id: 'plan', titulo: 'Plan y límites', permisos: ['proveedor.solicitar'] },
   ] },
 ];
 

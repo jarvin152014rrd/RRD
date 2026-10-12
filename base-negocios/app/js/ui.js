@@ -18,13 +18,32 @@ export function h(etiqueta, props = {}, ...hijos) {
   return el;
 }
 
-// Aviso corto abajo de la pantalla (se quita solo).
-export function aviso(texto, tipo = 'ok') {
+// Aviso corto abajo de la pantalla. Se quita solo (dura ms) y también al cambiar de
+// pantalla o de estado (limpiarAvisos), para que no quede un aviso viejo como
+// "Turno abierto…" después de cerrar el turno.
+export function aviso(texto, tipo = 'ok', dura = 4500) {
   const caja = document.getElementById('avisos');
   if (!caja) return;
   const el = h('p', { class: `mensaje mensaje-${tipo}` }, texto);
   caja.append(el);
-  setTimeout(() => el.remove(), 4500);
+  setTimeout(() => el.remove(), dura);
+}
+export function limpiarAvisos() {
+  const caja = document.getElementById('avisos');
+  if (caja) caja.replaceChildren();
+}
+
+// Confirmación simple (sí / no) antes de guardar un cambio. Devuelve true si confirmó.
+export function confirmar({ titulo, texto, textoBoton = 'Sí, guardar', peligro = false }) {
+  return new Promise((resolve) => {
+    let ok = false;
+    const si = h('button', { type: 'button', class: `boton ${peligro ? 'boton-peligro' : 'boton-principal'}`, id: 'confirmar-si',
+      onclick: () => { ok = true; cerrar(); } }, textoBoton);
+    const { dlg, cerrar } = dialogo(titulo, texto ? h('p', {}, texto) : null,
+      h('div', { class: 'botones' }, h('button', { type: 'button', class: 'boton', onclick: () => cerrar() }, 'Cancelar'), si));
+    dlg.addEventListener('close', () => resolve(ok));
+    si.focus();
+  });
 }
 
 // Caja de error con el mensaje sencillo y qué hacer.

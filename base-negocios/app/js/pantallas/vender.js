@@ -193,12 +193,14 @@ export async function armarCarrito(vista, ctx, { modo, alTerminar = null }) {
     else if (!pv) { totales.replaceChildren(h('p', { class: 'vacio' }, 'Total L 0.00')); }
     else {
       totales.replaceChildren(...[
-        h('div', { class: 'suma' }, h('span', {}, 'Subtotal sin ISV'), h('span', { class: 'monto' }, dinero(pv.subtotal_centavos))),
-        h('div', { class: 'suma' }, h('span', {}, 'Descuento'), h('span', { class: 'monto', dataset: { dato: 'descuento' } }, dinero(pv.descuento_centavos))),
-        (pv.desglose_impuestos || []).filter((d) => d.clase === 'gravado').map((d) =>
-          h('div', { class: 'suma' }, h('span', {}, d.nombre), h('span', { class: 'monto', dataset: { dato: 'isv-' + d.codigo } }, dinero(d.impuesto_centavos)))),
-        pv.exento_centavos ? h('div', { class: 'suma' }, h('span', {}, 'Exento'), h('span', { class: 'monto' }, dinero(pv.exento_centavos))) : null,
+        // Todo con ISV, como lo ve el cliente: Subtotal - Descuento = Total (lo calcula el servidor).
+        h('div', { class: 'suma' }, h('span', {}, 'Subtotal'), h('span', { class: 'monto', dataset: { dato: 'subtotal' } }, dinero(pv.subtotal_con_isv_centavos))),
+        pv.descuento_con_isv_centavos ? h('div', { class: 'suma' }, h('span', {}, 'Descuento'),
+          h('span', { class: 'monto', dataset: { dato: 'descuento' } }, '−' + dinero(pv.descuento_con_isv_centavos))) : null,
         h('div', { class: 'suma suma-total' }, h('span', {}, 'Total'), h('span', { class: 'monto', dataset: { dato: 'total' } }, dinero(pv.total_centavos))),
+        (pv.desglose_impuestos || []).filter((d) => d.clase === 'gravado').map((d) =>
+          h('div', { class: 'suma suma-nota' }, h('span', {}, `${d.nombre} incluido`), h('span', { class: 'monto', dataset: { dato: 'isv-' + d.codigo } }, dinero(d.impuesto_centavos)))),
+        pv.exento_centavos ? h('div', { class: 'suma suma-nota' }, h('span', {}, 'Exento'), h('span', { class: 'monto' }, dinero(pv.exento_centavos))) : null,
         pv.descuento_pide_aprobacion ? h('p', { class: 'mensaje mensaje-info aviso-tope', role: 'status' },
           `El descuento pasa su tope (${pv.tope_descuento_porcentaje} %). Puede seguir: la venta quedará esperando la aprobación del administrador o del dueño.`) : null].flat().filter(Boolean));
     }

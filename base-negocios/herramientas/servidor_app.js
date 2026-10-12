@@ -9,6 +9,11 @@
 //   POST /auth/v1/logout
 //   POST /rest/v1/rpc/<funcion>        llama public.<funcion> (emulador.rpc)
 //   GET  /rest/v1/<vista>?col=eq.valor&order=col.desc&limit=N  (emulador.leer)
+//   POST /functions/v1/crear-usuario   imita la Edge Function (PENDIENTE en Supabase real):
+//        crea el usuario de Auth (si no existe) y llama agregar_usuario_empresa COMO quien
+//        llama, en la MISMA transacción: si el núcleo lo rechaza (permiso, límite del contrato)
+//        no queda nada creado. En la demo la clave de todos es DEMO_CLAVE (la que se escriba
+//        en la pantalla no se guarda: Auth real la guardaría).
 //
 // Cada llamada corre en su propia transacción con "SET LOCAL ROLE
 // authenticated" y request.jwt.claims = el JWT de la sesión, igual que el
@@ -213,6 +218,33 @@ async function manejarRest(req, res, url) {
   }
 }
 
+// Imita la Edge Function "crear-usuario" (ver arriba). La real usará la llave service_role
+// SOLO dentro de la función y nunca en la app (nucleo/docs/usuarios.md).
+async function manejarFuncion(req, res, url) {
+  if (req.headers.apikey !== ANON_KEY) return enviar(res, 401, { message: 'Falta la clave anónima (apikey).' });
+  const claims = claimsDe(req);
+  if (!claims || claims.role !== 'authenticated') return enviar(res, 401, { code: 'PGRST301', message: 'SIN_SESION: debe iniciar sesión.' });
+  if (url.pathname !== '/functions/v1/crear-usuario' || req.method !== 'POST') return enviar(res, 404, { message: 'Función no emulada' });
+  const d = await leerCuerpo(req);
+  const correo = String(d.correo || '').trim().toLowerCase();
+  if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(correo)) return enviar(res, 400, { message: 'DATO_INVALIDO: escriba un correo válido.' });
+  if (String(d.clave || '').length < 8) return enviar(res, 400, { message: 'DATO_INVALIDO: la clave temporal lleva 8 letras o más.' });
+  if (!/^[0-9a-f-]{36}$/.test(String(d.empresa_id || ''))) return enviar(res, 400, { message: 'DATO_INVALIDO: falta la empresa.' });
+  try {
+    const r = await psql(`BEGIN;
+INSERT INTO auth.users (email) SELECT ${lit(correo)} WHERE NOT EXISTS (SELECT 1 FROM auth.users WHERE lower(email) = ${lit(correo)});
+SELECT set_config('request.jwt.claims', ${lit(JSON.stringify(claims))}, true) \\g /dev/null
+SET LOCAL ROLE authenticated;
+SELECT '@@R@@' || coalesce(to_jsonb(public.agregar_usuario_empresa(${lit(d.empresa_id)}::uuid, ${lit(correo)}, ${lit(String(d.rol || ''))},
+  ${d.nombre ? lit(String(d.nombre).slice(0, 120)) : 'NULL'}))::text, 'null');
+COMMIT;
+`);
+    return enviar(res, 200, r === null ? 'null' : r);
+  } catch (e) {
+    errorPg(res, e);
+  }
+}
+
 function servirArchivo(req, res, url) {
   if (url.pathname === '/config.js') {
     return enviar(res, 200, `// Configuración de la DEMO local (generada por servidor_app.js)
@@ -240,6 +272,7 @@ const servidor = http.createServer(async (req, res) => {
   try {
     if (url.pathname.startsWith('/auth/v1/')) return await manejarAuth(req, res, url);
     if (url.pathname.startsWith('/rest/v1/')) return await manejarRest(req, res, url);
+    if (url.pathname.startsWith('/functions/v1/')) return await manejarFuncion(req, res, url);
     if (req.method !== 'GET' && req.method !== 'HEAD') return enviar(res, 405, { message: 'Método no permitido' });
     servirArchivo(req, res, url);
   } catch (e) {

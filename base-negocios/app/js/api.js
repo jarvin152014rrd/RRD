@@ -150,6 +150,15 @@ export async function escribir(funcion, args = {}) {
   }
 }
 
+// Llama una Edge Function de Supabase (POST /functions/v1/<nombre>) con el token del usuario.
+// Hoy: "crear-usuario" (alta con clave temporal). En la demo la imita servidor_app.js; en
+// Supabase real está PENDIENTE de publicar (ver nucleo/docs/usuarios.md).
+export function funcion(nombre, datos = {}) {
+  return conToken('/functions/v1/' + encodeURIComponent(nombre), {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(datos),
+  });
+}
+
 // Lee una vista o tabla permitida (RLS decide qué filas). Solo filtros "igual a".
 export function leer(vista, filtros = {}, { orden = null, limite = null } = {}) {
   const q = new URLSearchParams({ select: '*' });

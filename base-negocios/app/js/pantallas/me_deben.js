@@ -1,21 +1,22 @@
 // Clientes · "Quién me debe" (y Caja · "Cobrar a clientes"): clientes con saldo, primero los
 // que tienen más vencido. Botones: Cobrar (abre el cobro) y Cobrar por WhatsApp (mensaje amable).
-import { leer } from '../api.js';
+// Lee cxc_para_cobrar (núcleo 0.14.0): el cajero la usa sin ventas.ver y, si está restringido,
+// solo ve las facturas de su sucursal.
+import { rpc } from '../api.js';
 import { empresaId, puede } from '../sesion.js';
 import { dinero } from '../formato.js';
 import { h } from '../ui.js';
-import { clientes } from '../datos.js';
 import { abrirFicha, mensajeCobro, enlaceWhatsApp } from './clientes.js';
 
 export async function mostrar(vista, ctx) {
-  const [saldos, lista] = await Promise.all([leer('v_cxc_cliente', { empresa_id: empresaId() }, { limite: 1000 }), clientes()]);
+  const r = await rpc('cxc_para_cobrar', { p_empresa_id: empresaId() });
   if (!ctx.sigueVigente()) return;
-  const tel = new Map(lista.map((c) => [c.id, c.telefono]));
-  const deben = saldos.filter((s) => s.saldo_centavos > 0)
-    .sort((a, b) => (b.vencido_centavos - a.vencido_centavos) || (b.saldo_centavos - a.saldo_centavos));
+  const deben = r.clientes; // ya vienen con más vencido primero
+  const tel = new Map(deben.map((c) => [c.cliente_id, c.telefono]));
   vista.append(h('section', { class: 'tarjeta', 'aria-labelledby': 't-deben' },
     h('h1', { id: 't-deben' }, 'Quién me debe'),
-    h('p', { class: 'ayuda' }, 'Primero los que tienen más vencido.'),
+    h('p', { class: 'ayuda' }, 'Primero los que tienen más vencido.',
+      r.todas_las_sucursales ? '' : ' Solo ve lo vendido al crédito en su sucursal.'),
     deben.length ? h('div', { class: 'lista' }, deben.map((s) => h('article', { class: 'venta-fila', dataset: { cliente: s.cliente_id } },
       h('div', {}, h('strong', {}, s.cliente),
         h('span', { class: 'detalle' }, `${s.documentos} factura(s) · 0-30: ${dinero(s.de_0_a_30)} · 31-60: ${dinero(s.de_31_a_60)} · 61-90: ${dinero(s.de_61_a_90)} · +90: ${dinero(s.mas_de_90)}`),

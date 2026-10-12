@@ -127,6 +127,10 @@ Un vale vencido sigue sin poder usarse (`VALE_VENCIDO`), dado de baja o no.
 
 ## Lecturas
 
+- `cxc_para_cobrar(empresa, cliente?)` (0.14.0, `ventas.ver` o `cobros.ver_saldos`): clientes con saldo (más
+  vencido primero, antigüedad) y, con cliente, sus facturas pendientes. Para que el cajero cobre sin ver ventas de
+  toda la empresa, costos ni ganancias. Restringido por sucursal: solo ventas de sus sucursales, sin saldos iniciales.
+
 - `v_cxc_documento` (ventas y saldos iniciales: cobrado, condonado, devuelto, saldo, días, vencido)
   y `v_cxc_cliente` (antigüedad 0-30 / 31-60 / 61-90 / +90, vencido, crédito disponible).
 - `estado_cuenta_cliente(empresa, cliente, desde?, hasta?)` (`ventas.ver`): saldo anterior,
@@ -139,6 +143,7 @@ Un vale vencido sigue sin poder usarse (`VALE_VENCIDO`), dado de baja o no.
 | | dueño | admin | cajero | vendedor | contador |
 |---|---|---|---|---|---|
 | ventas.cobrar (cobros) | ✓ | ✓ | ✓ | si vendedor_cobra | |
+| cobros.ver_saldos (0.14.0) | ✓ | ✓ | ✓ | | |
 | cobros.anular | ✓ | ✓ | | | |
 | cobros.condonar | ✓ | ✓ | | | |
 | ventas.saldo_inicial | ✓ | | | | |

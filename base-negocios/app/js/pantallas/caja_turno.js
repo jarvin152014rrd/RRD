@@ -4,7 +4,7 @@
 import { rpc, escribir, leer } from '../api.js';
 import { empresaId, perfilActual, puede } from '../sesion.js';
 import { dinero, fechaHora, aCentavos } from '../formato.js';
-import { h, aviso, cajaError, errorSimple, campo, dialogo, conBoton } from '../ui.js';
+import { h, aviso, limpiarAvisos, cajaError, errorSimple, campo, dialogo, conBoton } from '../ui.js';
 import { cajas, cuentasDinero, miTurno, olvidarDatos } from '../datos.js';
 
 // Billetes y monedas de Honduras (centavos).
@@ -87,7 +87,7 @@ function formularioAbrir(alAbrir) {
     if (selOrigen.value) datos.cuenta_origen_id = selOrigen.value;
     const r = await conBoton(boton, zonaError, () => escribir('abrir_turno', { p_empresa_id: empresaId(), p_caja_id: selCaja.value,
       p_fondo_centavos: v.contado, p_datos: datos }), 'Abriendo…');
-    if (r) { olvidarDatos('cuentas'); aviso(`Turno ${r.numero} abierto con ${dinero(r.fondo_inicial_centavos)}.`); alAbrir(r); }
+    if (r) { olvidarDatos('cuentas'); limpiarAvisos(); aviso(`Turno ${r.numero} abierto con ${dinero(r.fondo_inicial_centavos)}.`); alAbrir(r); }
   });
   return form;
 }
@@ -167,7 +167,7 @@ export async function mostrar(vista, ctx) {
       if (nota.value.trim()) datos.nota = nota.value.trim();
       const r = await conBoton(boton, zonaError, () => escribir('cerrar_turno', { p_turno_id: turno.turno_id,
         p_contado_centavos: v.contado, p_datos: datos }), 'Cerrando…');
-      if (r) resultado(r);
+      if (r) { olvidarDatos('cuentas'); limpiarAvisos(); aviso(`Turno #${r.numero} cerrado.`, 'ok'); resultado(r); }
     });
     vista.replaceChildren(h('section', { class: 'tarjeta tarjeta-angosta', 'aria-labelledby': 't-cierre' },
       h('h1', { id: 't-cierre' }, `Cerrar turno #${turno.numero}`), form));
