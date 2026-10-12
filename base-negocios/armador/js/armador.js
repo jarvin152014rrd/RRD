@@ -465,12 +465,41 @@ async function pantallaClientes(vista) {
       detalle.replaceChildren(h('div', { class: 'tarjeta' }, h('h2', {}, `Solicitudes pendientes · ${c.nombre}`),
         s.map((x) => h('div', { class: 'solicitud' }, h('p', {}, h('strong', {}, `#${x.numero} ${x.tipo}`), ` · ${x.fecha}`), h('p', {}, x.detalle)))));
     } }, `${c.solicitudes} pendiente(s)`) : 'ninguna'),
-    h('td', { 'data-titulo': '' }, h('a', { class: 'boton', href: `#/editar/${encodeURIComponent(c.cliente)}` }, 'Cambiar'))));
+    h('td', { 'data-titulo': '' }, h('div', { class: 'botones' },
+      h('a', { class: 'boton', href: `#/editar/${encodeURIComponent(c.cliente)}` }, 'Cambiar'),
+      h('button', { type: 'button', class: 'boton', dataset: { exportar: c.cliente }, onclick: () => exportarSupabase(c, detalle) }, 'Exportar para Supabase')))));
   vista.replaceChildren(h('div', { class: 'titulo-con-boton' }, h('h1', {}, 'Clientes'), h('a', { class: 'boton boton-principal', href: '#/armar' }, 'Cliente nuevo')),
     h('div', { class: 'tarjeta' }, lista.length === 0 ? h('p', { class: 'vacio' }, 'Todavía no hay clientes.') : h('div', { class: 'tabla-envoltura' },
       h('table', { class: 'tabla', id: 'tabla-clientes' }, h('thead', {}, h('tr', {}, ['Cliente', 'Rubro', 'Paquete', 'Módulos', 'Uso / límite', 'Licencia vence', 'Núcleo', 'Solicitudes', ''].map((t) => h('th', {}, t)))),
         h('tbody', {}, filas))),
     h('p', { class: 'ayuda' }, '(!) = usa el 80 % o más de algún límite: ofrézcale una ampliación.')), detalle);
+}
+
+// "Exportar para Supabase": descarga el SQL que crea la empresa del cliente en su proyecto real.
+function exportarSupabase(c, detalle) {
+  const dueno = h('input', { id: 'exp-id-dueno', autocomplete: 'off', placeholder: '00000000-0000-0000-0000-000000000000' });
+  const prov = h('input', { id: 'exp-id-proveedor', autocomplete: 'off' });
+  const zona = h('div', { 'aria-live': 'polite', id: 'exp-resultado' });
+  const boton = h('button', { type: 'button', class: 'boton boton-principal', id: 'btn-exportar-sql' }, 'Descargar SQL');
+  boton.addEventListener('click', async () => {
+    zona.replaceChildren();
+    const listo = ocupar(boton, 'Armando…');
+    try {
+      const r = await api('/api/exportar_supabase', { cliente: c.cliente, id_dueno: dueno.value.trim(), id_proveedor: prov.value.trim() });
+      const enlace = h('a', { href: URL.createObjectURL(new Blob([r.sql], { type: 'application/sql' })), download: r.nombre, id: 'exp-descargar' }, r.nombre);
+      zona.replaceChildren(h('div', { class: 'mensaje mensaje-ok resultado', role: 'status' },
+        h('p', {}, h('strong', {}, 'Listo. '), 'Descargue: ', enlace, ` (también quedó en ${r.archivo}).`),
+        r.falta_id ? h('p', {}, 'Falta el id del dueño: ábralo y cambie PEGUE-AQUI-EL-ID-DEL-DUENO por su User UID.') : null,
+        h('p', {}, 'Péguelo en Supabase > SQL Editor después de instalar todas las partes (docs/SUPABASE.md, paso 8).')));
+      enlace.click();
+    } catch (err) { zona.replaceChildren(msg('error', err.message)); } finally { listo(); }
+  });
+  detalle.replaceChildren(h('div', { class: 'tarjeta', id: 'exportar-supabase' }, h('h2', {}, `Exportar para Supabase · ${c.nombre || c.cliente}`),
+    h('p', { class: 'ayuda' }, 'Arma el SQL que crea esta empresa en el proyecto real de Supabase. Primero cree al dueño en Authentication > Users > Add user y copie su User UID.'),
+    h('div', { class: 'campo' }, h('label', { for: 'exp-id-dueno' }, 'User UID del dueño (puede dejarlo vacío y pegarlo después en el archivo)'), dueno),
+    h('div', { class: 'campo' }, h('label', { for: 'exp-id-proveedor' }, 'User UID de su usuario de soporte en ese proyecto (opcional)'), prov),
+    h('div', { class: 'botones' }, boton), zona));
+  dueno.focus();
 }
 
 // ---------------- Demostración ----------------

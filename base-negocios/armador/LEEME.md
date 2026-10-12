@@ -57,7 +57,10 @@ ampliación), vencimiento de la licencia, versión del núcleo y solicitudes pen
    referencia del proyecto para confirmar.
 4. Para **aplicar cambios** a una base real hace falta el respaldo cifrado sin preguntar: arranque
    el Armador con `RESPALDO_AGE_DESTINATARIO` o `RESPALDO_CLAVE_ARCHIVO` (ver P-03). Sin eso, no aplica nada.
-5. Publique la app con `clientes/<cliente>/config.js` (ponga URL y clave anónima; ver app/LEEME.md).
+5. Publique la app con `bash herramientas/armar_app.sh <cliente> <URL> <anon key>` (ver app/LEEME.md).
+
+**Sin terminal hacia la base** (lo normal con el plan gratis): **Clientes > Exportar para Supabase** → pegue el
+User UID del dueño → **Descargar SQL** y péguelo en el SQL Editor del proyecto (guía: `docs/SUPABASE.md`, paso 8).
 
 Esto último **no está probado contra Supabase real** (solo contra la base local).
 

@@ -1,5 +1,12 @@
 # Cambios del Armador
 
+## armador 0.2.0 (2026-10-12) — núcleo 0.15.0, app 0.4.0
+
+- **Clientes > Exportar para Supabase:** pide el User UID del dueño (y opcional el del soporte), valida el formato
+  y descarga `instalar_supabase_primer_cliente_<cliente>.sql` (también queda en `dist/`) para pegar en el SQL
+  Editor del proyecto real. Usa `herramientas/exportar_supabase.sh`. Sin claves dentro.
+- El `config.js` del cliente lleva `modo: 'supabase'`. Prueba nueva en `probar_armador.cjs` (13).
+
 ## armador 0.1.0 (2026-10-12) — núcleo 0.14.0 (sin migraciones nuevas), app 0.3.1
 
 - Pantalla del proveedor (`armador/`) y `herramientas/servidor_armador.js`: solo 127.0.0.1, clave del

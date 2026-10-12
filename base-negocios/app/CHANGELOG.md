@@ -1,5 +1,17 @@
 # Cambios de la app
 
+## app 0.4.0 (núcleo 0.15.0: migración nueva 051)
+
+- **Supabase real:** `config.js` con `modo: 'supabase'` usa la Edge Function `cerrar-sesion-remota` para "Cerrar
+  sesión" de un usuario (además de cerrarla en la base, borra sus sesiones de Supabase Auth). "Agregar usuario"
+  avisa si el correo ya tenía cuenta ("entra con la clave que ya usaba"). En la demo, todo igual.
+- `herramientas/armar_app.sh <cliente> <URL> <anon key>` → `dist/app-<cliente>/` para Netlify, con `config.js`
+  y `_headers` (CSP, nosniff, sin marcos, `sw.js`/`config.js` sin caché). Rechaza llaves secretas.
+- El emulador (`servidor_app.js`) imita además `/auth/v1/user` y `/auth/v1/admin/users` SOLO con `SERVICE_KEY`
+  (pruebas de las Edge Functions); sin esa variable, la demo no cambia.
+- Pruebas nuevas: `app-pruebas/probar_funciones.mjs` (10: Edge Functions reales y app para Netlify sin errores
+  de CSP). Cascarón `cascaron-0.4.0`.
+
 ## app 0.3.1 (núcleo 0.14.0, sin migraciones nuevas)
 
 - **Palabras del rubro:** el menú se lee de `js/menu_datos.js` (datos puros que también usa la vista previa del

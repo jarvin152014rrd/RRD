@@ -15,7 +15,7 @@
 -- =====================================================================
 
 CREATE SCHEMA IF NOT EXISTS emulador;
-GRANT USAGE ON SCHEMA emulador TO anon, authenticated;
+GRANT USAGE ON SCHEMA emulador TO anon, authenticated, service_role;   -- service_role: pruebas de las Edge Functions
 
 CREATE OR REPLACE FUNCTION emulador.rpc(p_fn text, p_args jsonb) RETURNS jsonb
 LANGUAGE plpgsql SECURITY INVOKER SET search_path = '' AS $$
@@ -112,4 +112,4 @@ BEGIN
 END $$;
 
 REVOKE ALL ON FUNCTION emulador.rpc(text, jsonb), emulador.leer(text, jsonb, text, int) FROM PUBLIC;
-GRANT EXECUTE ON FUNCTION emulador.rpc(text, jsonb), emulador.leer(text, jsonb, text, int) TO anon, authenticated;
+GRANT EXECUTE ON FUNCTION emulador.rpc(text, jsonb), emulador.leer(text, jsonb, text, int) TO anon, authenticated, service_role;

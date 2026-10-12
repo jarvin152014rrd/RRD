@@ -4,6 +4,31 @@ Formato: versión (fecha) y lista de cambios. La versión vive en `VERSION_NUCLE
 y queda guardada en cada base al migrar (vista `version_esquema`).
 Números: MAYOR.MENOR.ARREGLO (ver `docs/CONVENCIONES.md`).
 
+## 0.15.0 (2026-10-12) — Listo para Supabase real (etapa 6)
+
+Migración nueva 051 (las 001-050 no se tocaron). 132 pruebas (nueva 132). Todas pasan también con
+`probar.sh --paquete` (instalación como en Supabase real, sin simulador).
+
+- **Revisión de compatibilidad con Supabase real** (detalle en `docs/SUPABASE.md`, "Para el técnico"): las
+  migraciones no crean roles ni el esquema auth, no usan pgcrypto, todo queda de `postgres` (probado con un dueño
+  sin superusuario), `interno` no se expone, RLS en todas las tablas de public y anon sin ningún permiso. Única
+  diferencia que pedía código: revocar sesiones de otro usuario.
+- `revocar_sesiones_auth(usuario)` (solo service_role): borra sus sesiones de Supabase Auth (y en cascada sus
+  refresh tokens). Doble candado: solo si alguien con permiso hizo `cerrar_sesion_usuario` en los últimos 10
+  minutos. Si la base no deja borrar, devuelve -1 (el cierre de 0.13.1 sigue valiendo). La usa la Edge Function
+  `cerrar-sesion-remota`.
+- **Paquete para el SQL Editor:** `herramientas/armar_instalacion.sh` → `dist/instalar_supabase_parteNN.sql`
+  (≤ 200 KB, `MAX_KB`), cada parte todo-o-nada, salta lo instalado por su huella (misma que `migrar.sh`), rechaza
+  partes fuera de orden, bases sin Supabase, rol equivocado y bases con un núcleo más nuevo;
+  `verificar_instalacion.sql` ("TODO BIEN", versión, migraciones).
+- **Primer cliente:** `herramientas/exportar_supabase.sh` (y `ficha.py primer_cliente`; también el Armador) →
+  SQL que crea la empresa con la ficha, licencia y límites y el User UID del dueño; no se repite (`YA_CREADA`).
+- **Edge Functions** `supabase/functions/crear-usuario` y `cerrar-sesion-remota` (TypeScript sin librerías).
+- **Pruebas:** `probar.sh --paquete` (mini Supabase: `nucleo/pruebas/mini_supabase.sql`, cada parte en UNA
+  petición con `herramientas/sql_una_peticion.py`, repetir no cambia nada, fuera de orden se rechaza, primer
+  cliente una sola vez, `migrar.sh` reconoce la base). `probar_app.sh` prueba además las Edge Functions reales
+  contra el emulador y la app de `armar_app.sh` con sus cabeceras.
+
 ## 0.14.0 (2026-10-12) — El cajero cobra abonos; descuento con ISV; marca del negocio (para la app 0.3.0)
 
 Migración nueva 050 (las 001-049 no se tocaron). 131 pruebas (nueva 131, cifras a mano en sus comentarios).

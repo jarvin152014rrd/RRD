@@ -9,7 +9,12 @@
 //   POST /auth/v1/logout
 //   POST /rest/v1/rpc/<funcion>        llama public.<funcion> (emulador.rpc)
 //   GET  /rest/v1/<vista>?col=eq.valor&order=col.desc&limit=N  (emulador.leer)
-//   POST /functions/v1/crear-usuario   imita la Edge Function (PENDIENTE en Supabase real):
+//   GET  /auth/v1/user                 quién es el dueño del token (lo usan las Edge Functions)
+//   POST /auth/v1/admin/users          crear cuenta  } SOLO con SERVICE_KEY (variable; sin ella
+//   DELETE /auth/v1/admin/users/<id>   borrar cuenta } no existen): para probar las Edge Functions
+//        reales de supabase/functions/ (app-pruebas/probar_funciones.mjs). Con SERVICE_KEY,
+//        /rest/v1 también acepta esa llave como service_role.
+//   POST /functions/v1/crear-usuario   imita la Edge Function (la real: supabase/functions/):
 //        crea el usuario de Auth (si no existe) y llama agregar_usuario_empresa COMO quien
 //        llama, en la MISMA transacción: si el núcleo lo rechaza (permiso, límite del contrato)
 //        no queda nada creado. En la demo la clave de todos es DEMO_CLAVE (la que se escriba
@@ -20,7 +25,7 @@
 // simulador de las pruebas. Los datos viajan a psql dentro de cadenas con
 // comillas $etiqueta$ aleatorias (nunca pegados al SQL sin comillas).
 //
-// Variables: PUERTO (8080), BASE (demo_app), DEMO_CLAVE (clave de todos los
+// Variables: SERVICE_KEY (solo pruebas; ver arriba), PUERTO (8080), BASE (demo_app), DEMO_CLAVE (clave de todos los
 // usuarios de la demo), REVISAR_SESION_SEGUNDOS (60), PGHOST/PGPORT/PGUSER,
 // CONFIG_CLIENTE (opcional: clientes/<cliente>/app.json que arma el Armador; de ahí
 // salen las "palabras" del rubro y el rubro para /config.js, como en la app publicada).
@@ -38,6 +43,8 @@ const PUERTO = Number(process.env.PUERTO || 8080);
 const BASE = process.env.BASE || 'demo_app';
 const DEMO_CLAVE = process.env.DEMO_CLAVE || 'demo1234';
 const ANON_KEY = 'demo-anon-key';
+const SERVICE_KEY = process.env.SERVICE_KEY || ''; // vacío = no hay llave de servicio (la demo normal)
+const esServicio = (req) => SERVICE_KEY !== '' && req.headers.apikey === SERVICE_KEY;
 const REVISAR_SESION = Number(process.env.REVISAR_SESION_SEGUNDOS || 60);
 const DURACION_TOKEN = 3600; // segundos
 const SECRETO = crypto.randomBytes(32); // cambia en cada arranque: tokens viejos dejan de valer
@@ -98,7 +105,7 @@ function psql(guion) {
 }
 
 function guionComo(claims, consulta) {
-  const rol = claims.role === 'authenticated' ? 'authenticated' : 'anon';
+  const rol = ['authenticated', 'service_role'].includes(claims.role) ? claims.role : 'anon';
   return `BEGIN;
 SELECT set_config('request.jwt.claims', ${lit(JSON.stringify(claims))}, true) \\g /dev/null
 SET LOCAL ROLE ${rol};
@@ -162,6 +169,8 @@ function errorPg(res, e) {
 function claimsDe(req) {
   const auth = req.headers.authorization || '';
   const token = auth.startsWith('Bearer ') ? auth.slice(7) : '';
+  // Llave de servicio (solo pruebas): como las llaves nuevas de Supabase, basta en "apikey".
+  if (SERVICE_KEY && (token === SERVICE_KEY || (!token && esServicio(req)))) return { role: 'service_role' };
   if (!token || token === ANON_KEY) return { role: 'anon' };
   const p = verificar(token);
   if (!p || p.exp < Date.now() / 1000) return null;
@@ -191,6 +200,30 @@ async function manejarAuth(req, res, url) {
     }
     return enviar(res, 400, { error: 'unsupported_grant_type' });
   }
+  if (url.pathname === '/auth/v1/user' && req.method === 'GET') {
+    const c = claimsDe(req);
+    if (!c || c.role !== 'authenticated') return enviar(res, 401, { error: 'invalid_token' });
+    return enviar(res, 200, { id: c.sub, email: c.email, role: 'authenticated' });
+  }
+  // Administración de cuentas (como GoTrue /admin): solo con la llave de servicio de las pruebas.
+  if (url.pathname.startsWith('/auth/v1/admin/users')) {
+    if (!esServicio(req)) return enviar(res, 401, { error: 'not_admin' });
+    if (url.pathname === '/auth/v1/admin/users' && req.method === 'POST') {
+      const d = await leerCuerpo(req);
+      const correo = String(d.email || '').trim().toLowerCase();
+      if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(correo)) return enviar(res, 400, { msg: 'invalid email' });
+      const fila = await psql(`INSERT INTO auth.users (email) SELECT ${lit(correo)}
+        WHERE NOT EXISTS (SELECT 1 FROM auth.users WHERE lower(email) = ${lit(correo)}) RETURNING '@@R@@' || id::text;`);
+      if (!fila) return enviar(res, 422, { code: 422, error_code: 'email_exists', msg: 'A user with this email address has already been registered' });
+      return enviar(res, 200, { id: fila, email: correo });
+    }
+    const m = /^\/auth\/v1\/admin\/users\/([0-9a-f-]{36})$/.exec(url.pathname);
+    if (m && req.method === 'DELETE') {
+      await psql(`DELETE FROM auth.users WHERE id = ${lit(m[1])}::uuid;`);
+      return enviar(res, 200, {});
+    }
+    return enviar(res, 404, { error: 'not_found' });
+  }
   if (url.pathname === '/auth/v1/logout') {
     const c = claimsDe(req);
     if (c && c.session_id) {
@@ -203,7 +236,7 @@ async function manejarAuth(req, res, url) {
 }
 
 async function manejarRest(req, res, url) {
-  if (req.headers.apikey !== ANON_KEY) return enviar(res, 401, { message: 'Falta la clave anónima (apikey).' });
+  if (req.headers.apikey !== ANON_KEY && !esServicio(req)) return enviar(res, 401, { message: 'Falta la clave anónima (apikey).' });
   const claims = claimsDe(req);
   if (!claims) return enviar(res, 401, { code: 'PGRST301', message: 'JWT expired' });
   const ruta = url.pathname.slice('/rest/v1/'.length);

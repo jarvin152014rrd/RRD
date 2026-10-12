@@ -32,9 +32,23 @@ pruebas, así los permisos y RLS son los reales. El emulador SQL
 
 ## Publicar para un cliente
 
-Copie `config.ejemplo.js` como `app/config.js` con la URL y la clave ANÓNIMA del
-Supabase del cliente (sale de `personal/`; `app/config.js` no va a git). Nunca la
-llave service_role. Suba la carpeta `app/` a cualquier hosting estático con HTTPS.
+Un comando arma la carpeta lista para Netlify (guía completa para el dueño: `docs/SUPABASE.md`):
+
+```bash
+bash herramientas/armar_app.sh <cliente> https://<ref>.supabase.co <anon key>
+```
+
+Deja `dist/app-<cliente>/` (no va a git) con `config.js` (`modo: 'supabase'`, URL, clave ANÓNIMA o
+"publishable", rubro y palabras de `clientes/<cliente>/app.json`) y `_headers` (CSP que solo deja hablar
+con ese Supabase, sin marcos, nosniff; `sw.js` y `config.js` sin caché para que las versiones nuevas
+lleguen solas). Se arrastra la carpeta a Netlify (Deploy manually). No hace falta `_redirects`: la app
+navega con `#/…`. La herramienta **rechaza** la llave service_role o `sb_secret_…` y revisa que no quede
+ninguna llave secreta en la carpeta.
+
+Con `modo: 'supabase'` la app usa las Edge Functions de `supabase/functions/` (publicarlas: paso 9 de
+`docs/SUPABASE.md`): `crear-usuario` (Agregar usuario) y `cerrar-sesion-remota` (Cerrar sesión a distancia:
+cierra en la base y además borra sus sesiones de Supabase Auth). Sin `modo` (la demo) todo sigue igual:
+`servidor_app.js` imita `crear-usuario` y el cierre usa la RPC `cerrar_sesion_usuario`.
 
 ## Archivos
 

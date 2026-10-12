@@ -27,9 +27,11 @@
 `usuarios.administrar`). La persona debe estar registrada en Supabase Auth.
 
 **Contraseñas:** viven en Supabase Auth, nunca en estas tablas ni en SQL.
-PENDIENTE (etapa de pantallas, no implementado): el alta de un usuario con
-clave temporal y el "restablecer contraseña" se harán con una **Edge
-Function** de Supabase que:
+HECHO en 0.15.0: el alta con clave temporal es la Edge Function
+`supabase/functions/crear-usuario` y el cierre a distancia con revocación de
+sesiones es `supabase/functions/cerrar-sesion-remota` (usa
+`revocar_sesiones_auth`, solo service_role, después de `cerrar_sesion_usuario`).
+PENDIENTE: "restablecer contraseña" en pantalla. Diseño (el que siguen las funciones):
 1. reciba el token del usuario que la llama;
 2. verifique `tiene_permiso('usuarios.administrar', empresa)` (y las mismas
    reglas: no tocar dueños ni proveedor);

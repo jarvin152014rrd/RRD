@@ -12,6 +12,11 @@
 #       cambios (lo que reciben vista_previa_ficha / aplicar_ficha)
 #   python3 ficha.py vista_previa         lee el JSON de vista_previa_ficha (entrada
 #                                         estándar) y lo muestra en palabras sencillas
+#   python3 ficha.py primer_cliente ARCHIVO [ID_DUENO] [ID_PROVEEDOR] [ULTIMA_MIGRACION]
+#                                         imprime el SQL "primer cliente" para pegar en
+#                                         el SQL Editor de Supabase (crear_empresa_inicial
+#                                         + licencia y límites). Sin ID_DUENO deja una
+#                                         marca para pegar el "User UID" del dueño.
 #   python3 ficha.py tabla [json]         lee las filas de lista_clientes.sh y
 #                                         dibuja la tabla (con "json": una lista JSON,
 #                                         para el Armador)
@@ -120,6 +125,100 @@ def normalizar(archivo):
         salida = {"formato": 1, "cliente": None, "paquete": None, "nombre": f.get("nombre"), "empresa_id": None,
                   "conexion": None, "crear": crear, "cambios": {}, "licencia": None, "limites": None}
     print(json.dumps(salida, ensure_ascii=False))
+
+
+UUID = __import__("re").compile(r"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$")
+MARCA_DUENO = "PEGUE-AQUI-EL-ID-DEL-DUENO"
+
+
+def texto_sql(t):
+    # Texto SQL entre $marca$...$marca$ con una marca que no aparece en el texto.
+    import secrets
+    while True:
+        m = "dato_" + secrets.token_hex(6)
+        if m not in t:
+            return "$%s$%s$%s$" % (m, t, m)
+
+
+def primer_cliente(archivo, id_dueno="", id_proveedor="", ultima=0):
+    """SQL para crear la empresa del cliente en Supabase pegándolo en el SQL Editor."""
+    import io, contextlib
+    with contextlib.redirect_stdout(sys.stderr):
+        validar(archivo)
+    buf = io.StringIO()
+    with contextlib.redirect_stdout(buf):
+        normalizar(archivo)
+    n = json.loads(buf.getvalue())
+    for nombre, valor in (("dueño", id_dueno), ("proveedor", id_proveedor)):
+        if valor and not UUID.match(valor):
+            error("el id del %s no es un uuid (cópielo de Authentication > Users > User UID)." % nombre)
+    crear = dict(n["crear"])
+    dueno_nombre = (crear.get("dueno") or {}).get("nombre")
+    prov_nombre = (crear.get("proveedor") or {}).get("nombre") or "Proveedor"
+    crear.pop("dueno", None)
+    crear.pop("proveedor", None)
+    extra = {k: n["cambios"][k] for k in ("licencia", "limites") if k in n["cambios"]}
+    cliente = n.get("cliente") or "cliente"
+    motivo = "Ficha inicial del cliente " + cliente
+    print(f"""-- =====================================================================
+-- instalar_supabase_primer_cliente_{cliente}.sql  -  crea la empresa "{n.get('nombre')}"
+-- (Generado por herramientas/exportar_supabase.sh o el Armador; no tiene claves.)
+--
+-- ANTES: 1) el núcleo instalado (todas las partes y verificar_instalacion.sql dice TODO BIEN);
+--        2) el dueño creado en Supabase > Authentication > Users > Add user.
+-- CÓMO:  si abajo dice {MARCA_DUENO}, cámbielo por el "User UID" del dueño
+--        (Authentication > Users > clic en el dueño > copiar User UID), entre las comillas.
+--        Luego SQL Editor > New query > pegue TODO > Run. Debe salir "Empresa creada".
+--        Si la empresa ya estaba creada, sale YA_CREADA y no se cambia nada.
+-- =====================================================================
+SELECT set_config('instalar.id_dueno', '{id_dueno or MARCA_DUENO}', false);
+-- (Opcional) id del usuario de soporte del proveedor; vacío = sin usuario de soporte.
+SELECT set_config('instalar.id_proveedor', '{id_proveedor}', false);
+
+DO $primer_cliente$
+DECLARE
+  v_id      text := trim(current_setting('instalar.id_dueno'));
+  v_prov    text := trim(current_setting('instalar.id_proveedor'));
+  v_ficha   jsonb := {texto_sql(json.dumps(crear, ensure_ascii=False))}::jsonb;
+  v_extra   jsonb := {texto_sql(json.dumps(extra, ensure_ascii=False))}::jsonb;
+  v_empresa uuid;
+  v_ultima  integer;
+BEGIN
+  IF to_regclass('interno._migraciones') IS NULL OR to_regprocedure('public.crear_empresa_inicial(jsonb)') IS NULL THEN
+    RAISE EXCEPTION 'FALTA_NUCLEO: primero instale el núcleo (todas las partes instalar_supabase_parteNN.sql).';
+  END IF;
+  EXECUTE 'SELECT max(numero) FROM interno._migraciones' INTO v_ultima;
+  IF v_ultima < {ultima} THEN
+    RAISE EXCEPTION 'FALTAN_PARTES: el núcleo instalado llega a la migración %, y esta ficha es para la {ultima:03d} o más. Corra las partes que faltan.', v_ultima;
+  END IF;
+  IF v_id !~* '^[0-9a-f]{{8}}-[0-9a-f]{{4}}-[0-9a-f]{{4}}-[0-9a-f]{{4}}-[0-9a-f]{{12}}$' THEN
+    RAISE EXCEPTION 'FALTA_ID_DUENO: arriba, cambie {MARCA_DUENO} por el User UID del dueño (Authentication > Users).';
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM auth.users u WHERE u.id = v_id::uuid) THEN
+    RAISE EXCEPTION 'USUARIO_NO_EXISTE: no hay un usuario con id %. Créelo en Authentication > Users > Add user y copie su User UID.', v_id;
+  END IF;
+  IF EXISTS (SELECT 1 FROM public.empresa e JOIN public.usuario_empresa ue ON ue.empresa_id = e.id
+              WHERE e.nombre = v_ficha->>'nombre' AND ue.user_id = v_id::uuid AND ue.rol = 'dueno') THEN
+    RAISE EXCEPTION 'YA_CREADA: la empresa "%" ya existe con ese dueño. No se cambió nada.', v_ficha->>'nombre';
+  END IF;
+  v_ficha := v_ficha || jsonb_build_object('dueno', jsonb_strip_nulls(jsonb_build_object('user_id', v_id, 'nombre', {texto_sql(dueno_nombre) if dueno_nombre else 'NULL::text'})));
+  IF v_prov <> '' THEN
+    IF v_prov !~* '^[0-9a-f]{{8}}-[0-9a-f]{{4}}-[0-9a-f]{{4}}-[0-9a-f]{{4}}-[0-9a-f]{{12}}$' THEN
+      RAISE EXCEPTION 'DATO_INVALIDO: el id del proveedor no es un User UID válido (o déjelo vacío).';
+    END IF;
+    v_ficha := v_ficha || jsonb_build_object('proveedor', jsonb_build_object('user_id', v_prov, 'nombre', {texto_sql(prov_nombre)}));
+  END IF;
+  v_empresa := public.crear_empresa_inicial(v_ficha);
+  IF v_extra <> '{{}}'::jsonb THEN
+    PERFORM public.aplicar_ficha(v_empresa, v_extra, {texto_sql(motivo)});
+  END IF;
+  PERFORM set_config('instalar.empresa', v_empresa::text, false);
+END $primer_cliente$;
+
+SELECT 'Empresa creada' AS resultado, e.id AS empresa_id, e.nombre,
+       (SELECT l.vence_el FROM public.licencia l WHERE l.empresa_id = e.id) AS licencia_vence
+FROM public.empresa e WHERE e.id = nullif(current_setting('instalar.empresa', true), '')::uuid;
+""")
 
 
 def si_no(b):
@@ -236,6 +335,9 @@ if __name__ == "__main__":
         normalizar(sys.argv[2])
     elif accion == "vista_previa":
         vista_previa()
+    elif accion == "primer_cliente" and 3 <= len(sys.argv) <= 6:
+        a = sys.argv[3:] + [""] * 3
+        primer_cliente(sys.argv[2], a[0], a[1], int(a[2] or 0))
     elif accion == "tabla":
         tabla(len(sys.argv) > 2 and sys.argv[2] == "json")
     else:

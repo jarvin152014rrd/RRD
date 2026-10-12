@@ -1,4 +1,4 @@
-# Pendientes de la app (0.3.1)
+# Pendientes de la app (0.4.0)
 
 - Pantallas en construcción: apartados, cajas abiertas, compras, dinero, reportes, buscar, "Alertas que recibo".
 - Fotos de comprobantes: se suben a Supabase Storage solo con `bucketComprobantes` en config.js (no probado
@@ -17,15 +17,15 @@
 - Meta de ventas del día en Inicio (el núcleo aún no la tiene).
 - Al fallar Aprobar porque otro ya resolvió, la lista se refresca solo al volver a entrar a Inicio.
 - Letra IBM Plex se baja de Google Fonts; sin internet usa la del sistema. Evaluar incluirla en la app.
-- Tokens: el de renovación se guarda en el navegador (como Supabase) para no pedir la clave cada vez;
-  revocar tokens en Supabase al cerrar sesión a distancia necesita la Edge Function (pendiente del núcleo).
-- Probar en Supabase real (la demo usa un emulador local de PostgREST/Auth).
-- **Alta de usuarios con clave en Supabase real:** falta publicar la Edge Function `crear-usuario` (la app ya la
-  llama en `/functions/v1/crear-usuario` con el token del usuario; en la demo la imita `servidor_app.js`, donde la
-  clave de todos es la de la demo). Debe crear el usuario de Auth con la llave service_role SOLO dentro de la
-  función y llamar `agregar_usuario_empresa` como quien la llama (ver `nucleo/docs/usuarios.md`); si el núcleo
-  rechaza (límite del contrato), borrar el usuario recién creado. Tampoco hay "reactivar usuario" ni
-  "restablecer contraseña" en pantalla (usuario_empresa no guarda el correo).
+- HECHO (0.4.0): Edge Functions `crear-usuario` y `cerrar-sesion-remota` (`supabase/functions/`, probadas contra el
+  emulador con `app-pruebas/probar_funciones.mjs`) y `herramientas/armar_app.sh` para Netlify.
+- FALTA: probar todo en un proyecto REAL de Supabase y en Netlify (desde aquí no hay red a supabase.co). En
+  especial: las pantallas después de entrar con la CSP de `_headers` (la prueba local solo abre la pantalla de
+  entrar), las Edge Functions con las llaves nuevas (`sb_publishable_`/`sb_secret_`) y "Cerrar sesión" en modo
+  supabase en el navegador (probado solo la función, no el botón en ese modo).
+- Falta "reactivar usuario" y "restablecer contraseña" en pantalla (usuario_empresa no guarda el correo).
+- Si "Agregar usuario" usa un correo que YA tenía cuenta en Auth, no se le cambia la clave (se avisa "entra con
+  la clave que ya usaba"); si no la recuerda, hoy se cambia desde Authentication > Users.
 - Cobro del cajero restringido por sucursal: la app manda a qué facturas va el abono (solo las de su sucursal); el
   servidor todavía no rechaza un cobro "a la más vieja" que caiga en otra sucursal si alguien lo llama por fuera.
 - Cajas y bancos: cargar el saldo inicial de una cuenta YA creada (solo al crearla); editar nombre/fondo fijo.

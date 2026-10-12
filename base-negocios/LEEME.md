@@ -6,7 +6,8 @@ La app será una PWA (página web instalable) y los datos vivirán en Supabase
 funciones SQL que guardan todo o nada. El navegador solo muestra y llama
 esas funciones.
 
-Versión del núcleo: ver `VERSION_NUCLEO` (hoy 0.6.0, etapa 2b-1.1: arranque fácil). Cambios: `CHANGELOG.md`.
+Versión del núcleo: ver `VERSION_NUCLEO` (hoy 0.15.0). Cambios: `CHANGELOG.md`.
+Subir a un proyecto real de Supabase + Netlify, paso a paso: `docs/SUPABASE.md`.
 
 ## Carpetas
 

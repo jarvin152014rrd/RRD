@@ -1,8 +1,10 @@
 // Ajustes · Usuarios y permisos: lista con "X de Y usados" (límite del contrato), agregar usuario
 // con clave temporal (Edge Function "crear-usuario"; en la demo la imita servidor_app.js),
-// desactivar, asignar sucursales, cerrar sesión a distancia, "Solicitar ampliación" al proveedor
+// desactivar, asignar sucursales, cerrar sesión a distancia (con config.modo "supabase" por la
+// Edge Function "cerrar-sesion-remota", que además le quita la renovación del token; en la demo,
+// la RPC cerrar_sesion_usuario), "Solicitar ampliación" al proveedor
 // y la tabla de permisos por puesto (editable SOLO por el dueño, con motivo: cambiar_permiso_rol).
-import { rpc, leer, escribir, funcion } from '../api.js';
+import { rpc, leer, escribir, funcion, config } from '../api.js';
 import { empresaId, perfilActual, puede } from '../sesion.js';
 import { h, aviso, errorSimple, campo, conBoton, pedirMotivo, dialogo, cajaError } from '../ui.js';
 
@@ -52,7 +54,9 @@ export async function mostrar(vista, ctx) {
     const ok = await pedirMotivo({ titulo: cerrar ? `Cerrar la sesión de ${u.nombre}` : `Desactivar a ${u.nombre}`, peligro: !cerrar,
       textoBoton: cerrar ? 'Cerrar sesión' : 'Desactivar',
       explicacion: cerrar ? 'Tendrá que volver a entrar con su clave en todos sus equipos.' : 'Ya no podrá entrar. No se borra nada de lo que hizo.',
-      accion: (motivo) => rpc(cerrar ? 'cerrar_sesion_usuario' : 'desactivar_usuario_empresa', { p_empresa_id: E, p_user_id: u.user_id, p_motivo: motivo }) });
+      accion: (motivo) => (cerrar && config.modo === 'supabase'
+        ? funcion('cerrar-sesion-remota', { empresa_id: E, user_id: u.user_id, motivo })
+        : rpc(cerrar ? 'cerrar_sesion_usuario' : 'desactivar_usuario_empresa', { p_empresa_id: E, p_user_id: u.user_id, p_motivo: motivo })) });
     if (ok) { aviso(cerrar ? 'Sesión cerrada.' : 'Usuario desactivado.'); recargar(); }
   }
 
@@ -110,7 +114,10 @@ export async function mostrar(vista, ctx) {
       let error = null;
       const r = await conBoton(boton, null, () => funcion('crear-usuario', { empresa_id: E, correo: correo.value.trim(), nombre: nombre.value.trim(),
         rol: rol.value, clave: clave.value }).catch((e) => { error = e; return null; }), 'Agregando…');
-      if (r) { aviso(`${nombre.value.trim()} ya puede entrar.`); recargar(); return; }
+      if (r) {
+        aviso(r.ya_tenia_cuenta ? `${nombre.value.trim()} ya tenía cuenta: entra con la clave que ya usaba.` : `${nombre.value.trim()} ya puede entrar.`);
+        recargar(); return;
+      }
       if (error) {
         zona.append(await cajaError(error));
         if (error.clave === 'LIMITE_CONTRATO' && puede('proveedor.solicitar')) {

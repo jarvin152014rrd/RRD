@@ -203,8 +203,9 @@ function escribirApp(dir, app) {
   escribirJson(path.join(dir, 'app.json'), app);
   fs.writeFileSync(path.join(dir, 'config.js'), `// Configuración de la app de ${app.cliente} (la generó el Armador).
 // Copie este archivo como app/config.js al publicar y ponga la URL y la clave ANÓNIMA
-// del Supabase del cliente. NUNCA la llave service_role.
+// del Supabase del cliente. NUNCA la llave service_role. Más fácil: herramientas/armar_app.sh.
 export default {
+  modo: 'supabase',
   supabaseUrl: 'https://SU-PROYECTO.supabase.co',
   supabaseAnonKey: 'SU-CLAVE-ANONIMA',
   revisarSesionSegundos: 60,
@@ -335,6 +336,24 @@ async function listaClientes() {
   const r = await herramienta('lista_clientes.sh', ['--json'], { env: { ...ENV_BASE, DIR_CLIENTES } });
   if (r.codigo !== 0) throw falla(500, 'No se pudo leer la lista de clientes: ' + limpiarError(r.errores));
   return JSON.parse(r.salida.trim().split('\n').pop() || '[]');
+}
+
+// "Exportar para Supabase": SQL del primer cliente (crear la empresa con su ficha) para pegar en el
+// SQL Editor del proyecto real. Lo arma herramientas/exportar_supabase.sh (queda también en dist/).
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+async function exportarSupabase(d) {
+  const dir = dirCliente(d.cliente);
+  const ficha = path.join(dir, 'ficha.json');
+  if (!fs.existsSync(ficha)) throw falla(404, 'No existe ese cliente.');
+  const dueno = String(d.id_dueno || '').trim();
+  const prov = String(d.id_proveedor || '').trim();
+  if (dueno && !UUID.test(dueno)) throw falla(400, 'El id del dueño no es válido: cópielo de Supabase > Authentication > Users > User UID (o déjelo vacío y péguelo después en el archivo).');
+  if (prov && !UUID.test(prov)) throw falla(400, 'El id del proveedor no es válido (o déjelo vacío).');
+  const r = await herramienta('exportar_supabase.sh', [ficha, dueno, prov]);
+  if (r.codigo !== 0) throw falla(400, 'No se pudo exportar: ' + limpiarError(r.errores || r.salida));
+  const ficheroSql = (r.salida.match(/Listo: (.+\.sql)/) || [])[1];
+  if (!ficheroSql || !fs.existsSync(ficheroSql)) throw falla(500, 'No se encontró el archivo exportado.');
+  return { nombre: path.basename(ficheroSql), archivo: path.relative(RAIZ, ficheroSql), sql: fs.readFileSync(ficheroSql, 'utf8'), falta_id: !dueno };
 }
 
 function verCliente(id) {
@@ -527,6 +546,7 @@ const RUTAS = {
   'POST /api/aplicar': (d) => enFila(() => aplicar(d)),
   'POST /api/demo': (d) => enFila(() => crearDemo(d)),
   'POST /api/abrir_app': (d) => enFila(() => abrirAppCliente(d)),
+  'POST /api/exportar_supabase': (d) => exportarSupabase(d),
 };
 
 const servidor = http.createServer(async (req, res) => {

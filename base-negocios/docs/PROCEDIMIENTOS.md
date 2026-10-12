@@ -73,6 +73,34 @@ el identificador > Aplicar (igual que P-09). No probado aún contra Supabase rea
 
 ---
 
+## P-01b Instalar un cliente nuevo SIN terminal (SQL Editor de Supabase) — 0.15.0
+
+**Objetivo:** lo mismo que P-01, pegando archivos en el panel de Supabase (para el dueño o
+cuando no hay conexión directa a la base). **Guía completa, paso a paso: `docs/SUPABASE.md`.**
+**Responsable:** proveedor o dueño. **Se necesita:** cuenta de Supabase y Netlify, la ficha.
+
+1. `bash herramientas/armar_instalacion.sh` → `dist/instalar_supabase_parteNN.sql` (partes de
+   ≤ 200 KB; `MAX_KB=100` para más chicas) y `dist/verificar_instalacion.sql`.
+2. En el SQL Editor (rol postgres) pegar cada parte EN ORDEN; cada una dice "Parte N de M lista".
+   Todo-o-nada por parte; repetir una parte no cambia nada (salta lo ya instalado por su huella).
+3. `verificar_instalacion.sql` debe decir **TODO BIEN** y la versión.
+4. Crear el dueño en Authentication > Users (Auto Confirm) y copiar su User UID.
+5. `bash herramientas/exportar_supabase.sh clientes/<cliente>/ficha.json <User UID>` (o Armador >
+   Clientes > **Exportar para Supabase**) y pegar `dist/instalar_supabase_primer_cliente_<cliente>.sql`:
+   crea la empresa con licencia y límites ("Empresa creada"; si ya existía, `YA_CREADA`).
+6. Publicar las Edge Functions `crear-usuario` y `cerrar-sesion-remota` (`supabase/functions/`).
+7. `bash herramientas/armar_app.sh <cliente> <Project URL> <anon key>` → `dist/app-<cliente>/` →
+   arrastrar a Netlify. La herramienta rechaza la llave service_role/secret.
+8. Apagar "Allow new users to sign up" y hacer el **primer respaldo** (P-03): el plan gratis
+   no tiene respaldos descargables.
+
+**Registro:** captura de "TODO BIEN", id de la empresa en la ficha (`negocio.empresa_id`),
+enlace de Netlify, fecha del primer respaldo.
+Para actualizar después: P-02 (`migrar.sh` reconoce la base instalada así), o volver a armar el
+paquete y pegar TODAS las partes en orden (lo instalado se salta) **después de un respaldo**.
+
+---
+
 ## P-02 Actualizar el núcleo de un cliente
 
 **Objetivo:** llevar al cliente a la versión nueva sin perder datos.

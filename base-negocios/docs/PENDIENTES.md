@@ -1,10 +1,24 @@
-# Pendientes (núcleo 0.13.1, 129 pruebas OK)
+# Pendientes (núcleo 0.15.0, 132 pruebas OK; también con probar.sh --paquete)
 
 Estado: etapa 2 terminada. Las correcciones de la revisión de la etapa 2 están
 HECHAS en la migración 038 (núcleo 0.9.1) y las de la revisión de 0.9.1 en la
 migración 039 (núcleo 0.9.2), cada una con su prueba (falla contra la versión
 anterior y pasa con la nueva). Falta que el revisor las confirme antes de la
 etapa 3.
+
+## Etapa 6: subir a Supabase real (PREPARADA en 0.15.0, migración 051, prueba 132)
+
+- HECHO: paquete para el SQL Editor (`armar_instalacion.sh`), primer cliente (`exportar_supabase.sh` / Armador),
+  Edge Functions (`supabase/functions/`), app para Netlify (`armar_app.sh`), guía `docs/SUPABASE.md`.
+- HECHO: prueba sobre un "mini Supabase" (rol dueño sin superusuario, auth de otro dueño, una petición por parte).
+- FALTA (dueño): hacer los pasos de `docs/SUPABASE.md` en un proyecto real; avisar cualquier diferencia.
+- FALTA: probar con la imagen oficial `supabase/postgres` o un proyecto real (aquí Docker Hub dio 429 y no hay red
+  a supabase.co). Confirmar en real: que `postgres` puede leer y borrar `auth.sessions` (si no, el cierre sigue
+  por base, pero sin quitar la renovación), el tamaño de parte que acepta el SQL Editor, y las llaves nuevas.
+- RIESGO: plan gratis sin respaldos descargables → respaldo manual semanal (P-03) con la cadena del Session
+  pooler. Pausa por 7 días sin uso. Tiempo máximo de 8 s por consulta de la app (reportes grandes).
+- RIESGO: lecturas directas de la app (`/rest/v1/<vista>`) se cortan en 1000 filas sin aviso (`max_rows`).
+- Pendiente (menor): Storage para fotos de comprobantes (bucket y sus políticas) no está armado.
 
 ## Etapa 3a (HECHA en 0.10.0, migraciones 040-042, pruebas 120-123)
 

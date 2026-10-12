@@ -14,6 +14,7 @@ const URL = process.env.URL_ARMADOR || 'http://127.0.0.1:8093';
 const CLAVE = process.env.CLAVE_ARMADOR;
 const DIR_CLIENTES = process.env.DIR_CLIENTES;
 const CAPTURAS = process.env.CAPTURAS || path.join(__dirname, 'capturas');
+const VERSION = fs.readFileSync(path.join(__dirname, '..', 'VERSION_NUCLEO'), 'utf8').trim();
 
 let fallas = 0, total = 0;
 async function prueba(nombre, fn) {
@@ -194,11 +195,28 @@ function sql(consulta) {
     await p.waitForSelector('#cliente-taller-prueba', { timeout: 30000 });
     const fila = await p.locator('#cliente-taller-prueba').innerText();
     afirmar(fila.includes('Taller mecánico') && fila.includes('completo'), 'faltan rubro o paquete: ' + fila);
-    afirmar(fila.includes('Comisiones') && fila.includes('0.14.0'), 'faltan módulos o versión del núcleo');
+    afirmar(fila.includes('Comisiones') && fila.includes(VERSION), 'faltan módulos o versión del núcleo');
     const cerca = await p.locator('#cliente-taller-prueba .uso.cerca[data-limite="cajas"]').innerText();
     afirmar(cerca.includes('1 de 1') && cerca.includes('(!)'), 'no marca cajas al 100 %: ' + cerca);
     afirmar(await p.locator('#cliente-taller-prueba .uso[data-limite="usuarios"].cerca').count() === 0, 'marca usuarios (1 de 4) como cerca');
     await p.screenshot({ path: path.join(CAPTURAS, 'p4_lista_clientes.png'), fullPage: true });
+  });
+
+  await prueba('Exportar para Supabase: valida el id y descarga el SQL del primer cliente', async () => {
+    await p.click('#cliente-taller-prueba [data-exportar]');
+    await p.waitForSelector('#exportar-supabase');
+    await p.fill('#exp-id-dueno', 'no-es-un-id');
+    await p.click('#btn-exportar-sql');
+    await p.waitForSelector('#exp-resultado .mensaje-error');
+    afirmar((await p.locator('#exp-resultado').innerText()).includes('User UID'), 'no explica el id malo');
+    const id = '6d914f3e-20f7-4526-92ce-a3b6c99ae7b8';
+    await p.fill('#exp-id-dueno', id);
+    const [descarga] = await Promise.all([p.waitForEvent('download'), p.click('#btn-exportar-sql')]);
+    afirmar(descarga.suggestedFilename() === 'instalar_supabase_primer_cliente_taller-prueba.sql', 'nombre: ' + descarga.suggestedFilename());
+    const sqlTexto = fs.readFileSync(await descarga.path(), 'utf8');
+    afirmar(sqlTexto.includes(`'instalar.id_dueno', '${id}'`) && sqlTexto.includes('crear_empresa_inicial'), 'el SQL no trae el id o la creación');
+    afirmar(!/service_role|password|clave_bd/i.test(sqlTexto), 'el SQL trae algo secreto');
+    fs.rmSync(path.join(__dirname, '..', 'dist', 'instalar_supabase_primer_cliente_taller-prueba.sql'), { force: true });
   });
 
   await prueba('modo demostración: "Crear demo de Taller" llena una empresa con datos del rubro', async () => {

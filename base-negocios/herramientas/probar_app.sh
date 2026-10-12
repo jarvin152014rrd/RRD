@@ -9,6 +9,9 @@
 #    sesión cada 2 segundos para probar el "cerrar a distancia").
 # 3. Corre app-pruebas/probar_app.cjs con Playwright (Chromium ya instalado
 #    en /opt/pw-browsers; no descarga nada).
+# 4. Corre app-pruebas/probar_funciones.mjs: las Edge Functions reales de
+#    supabase/functions/ contra el emulador (con una llave de servicio de
+#    prueba) y la app de armar_app.sh con sus cabeceras de Netlify.
 # Capturas en app-pruebas/capturas/ (no van a git).
 # =====================================================================
 set -uo pipefail
@@ -35,6 +38,8 @@ trap terminar EXIT
 
 SOLO_PREPARAR=1 bash "$RAIZ/herramientas/demo_app.sh" || { echo "FALLA: no se pudo preparar la base de demo."; exit 1; }
 
+# SERVICE_KEY: solo para probar las Edge Functions reales (probar_funciones.mjs).
+export SERVICE_KEY="prueba-servicio-$RANDOM$RANDOM"
 BASE="$BASE_DEMO" PUERTO="$PUERTO_PRUEBA" REVISAR_SESION_SEGUNDOS=2 node "$RAIZ/herramientas/servidor_app.js" \
   > "$CAPTURAS/servidor.log" 2>&1 &
 SERVIDOR_PID=$!
@@ -44,3 +49,10 @@ for _ in $(seq 1 50); do
 done
 
 URL_APP="http://127.0.0.1:$PUERTO_PRUEBA" node "$RAIZ/app-pruebas/probar_app.cjs"
+codigo_app=$?
+echo
+# 4. Las Edge Functions reales (supabase/functions) contra el mismo emulador, y la app armada
+#    para Netlify (armar_app.sh) con sus cabeceras (CSP) en Chromium.
+URL_APP="http://127.0.0.1:$PUERTO_PRUEBA" node "$RAIZ/app-pruebas/probar_funciones.mjs" 2> >(grep -v ExperimentalWarning >&2)
+codigo_funciones=$?
+[ "$codigo_app" = "0" ] && [ "$codigo_funciones" = "0" ]

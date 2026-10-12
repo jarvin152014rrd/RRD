@@ -16,3 +16,5 @@ clientes/ejemplo/*
 app/config.js
 app-pruebas/node_modules/
 app-pruebas/capturas/
+# Paquetes para subir a Supabase y a Netlify (los arma herramientas/armar_*.sh; se regeneran)
+dist/
