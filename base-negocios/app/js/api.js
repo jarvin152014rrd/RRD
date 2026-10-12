@@ -167,4 +167,19 @@ export function nuevoId() {
   return `${h.slice(0, 8)}-${h.slice(8, 12)}-${h.slice(12, 16)}-${h.slice(16, 20)}-${h.slice(20)}`;
 }
 
+// Sube la foto de un comprobante a Supabase Storage (bucket de config.bucketComprobantes) en la
+// carpeta de la empresa. Sin bucket configurado (demo local) devuelve null: no se sube nada.
+// -> { ruta, tipo, sha256 } para mandar como "comprobante".
+export async function subirComprobante(empresa, carpeta, archivo) {
+  const bucket = config.bucketComprobantes;
+  if (!bucket) return null;
+  const datos = await archivo.arrayBuffer();
+  const huella = [...new Uint8Array(await crypto.subtle.digest('SHA-256', datos))].map((b) => b.toString(16).padStart(2, '0')).join('');
+  const ext = (archivo.name.split('.').pop() || 'jpg').toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 5) || 'jpg';
+  const ruta = `${empresa}/${carpeta}/${huella}.${ext}`;
+  await conToken(`/storage/v1/object/${encodeURIComponent(bucket)}/${ruta}`, {
+    method: 'POST', headers: { 'Content-Type': archivo.type || 'application/octet-stream', 'x-upsert': 'true' }, body: datos });
+  return { ruta, tipo: archivo.type || 'image/jpeg', sha256: huella };
+}
+
 export { config };

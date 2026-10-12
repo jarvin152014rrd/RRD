@@ -49,3 +49,30 @@ export function porcentaje(p) {
   const n = Number(p);
   return `${n > 0 ? '+' : ''}${n.toLocaleString('en-US', { maximumFractionDigits: 1 })} %`;
 }
+
+// Lo que la persona escribe -> centavos enteros (sin decimales flotantes).
+// "1,234.5" -> 123450; "" o texto raro -> null. Solo números positivos con hasta 2 decimales.
+export function aCentavos(texto) {
+  const t = String(texto ?? '').trim().replace(/,/g, '').replace(/^L\s*/i, '');
+  const m = /^(\d{1,12})(?:\.(\d{0,2}))?$/.exec(t);
+  if (!m) return null;
+  return Number(m[1]) * 100 + Number((m[2] || '').padEnd(2, '0'));
+}
+
+// Centavos -> texto para un campo ("1234.50"), sin símbolo ni comas.
+export function paraCampo(centavos) {
+  if (centavos === null || centavos === undefined) return '';
+  const n = Math.round(Number(centavos));
+  return `${Math.floor(n / 100)}.${String(n % 100).padStart(2, '0')}`;
+}
+
+// 2.5 -> "2.5"; 10.0000 -> "10"
+export function cantidad(n) {
+  const x = Number(n);
+  return Number.isFinite(x) ? x.toLocaleString('en-US', { maximumFractionDigits: 3 }) : '';
+}
+
+// Quita tildes y pasa a minúsculas (para buscar "galon" y encontrar "galón").
+export function sinTildes(t) {
+  return String(t || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+}

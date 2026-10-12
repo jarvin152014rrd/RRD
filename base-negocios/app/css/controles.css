@@ -26,7 +26,7 @@
   background: #ffffff; color: #1a1a1a; width: 100%;
 }
 .campo textarea { min-height: 88px; resize: vertical; }
-.ayuda { font-size: 14px; color: var(--color-suave, #4a4a4a); margin: 0; }
+.ayuda { font-size: 15px; color: var(--color-suave, #4a4a4a); margin: 0; }
 
 .mensaje { border-radius: 8px; padding: 12px 14px; font-size: 15px; margin: 0; }
 .mensaje p { margin: 0; }

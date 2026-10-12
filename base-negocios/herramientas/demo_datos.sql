@@ -9,7 +9,8 @@
 --   Módulos: inventario, compras, dinero, ventas.
 --   Cuentas: Caja 1, Caja fuerte, BAC cheques, Banco Atlántida, Caja chica.
 --   Ventas de contado, con tarjeta y al crédito (una ya vencida), un cobro,
---   un depósito en tránsito, gastos y dos solicitudes de gasto pendientes.
+--   un depósito en tránsito, gastos, dos solicitudes de gasto pendientes y
+--   dos promociones vigentes para la pintura (para ver la sugerida en Vender).
 -- Todas las fechas son relativas a "hoy" para que la demo siempre se vea viva.
 -- =====================================================================
 
@@ -167,7 +168,20 @@ BEGIN
   PERFORM public.registrar_venta(e, jsonb_build_object('lineas', jsonb_build_array(demo.l('CLA', 3.5), demo.l('PVC', 6)),
     'pagos', '[{"forma":"efectivo"}]'::jsonb), gen_random_uuid());
 
+  -- 4b) Dos promociones vigentes para la pintura (desde hoy, después de las ventas de arriba):
+  --     quien vende ve la sugerida (la que más descuenta) y puede cambiarla; nunca se suman.
+  PERFORM demo.g('CAT_PIN', (public.crear_categoria(e, 'Pinturas')->>'categoria_id')::uuid);
+  PERFORM public.editar_producto(e, demo.id('PIN'), jsonb_build_object('categoria_id', demo.id('CAT_PIN')));
+  PERFORM demo.g('PROMO10', (public.crear_promocion(e, jsonb_build_object('nombre', 'Pintura 10 %', 'categoria_id', demo.id('CAT_PIN'),
+    'tipo', 'porcentaje', 'porcentaje', 10, 'fecha_inicio', to_char(hoy, 'YYYY-MM-DD'),
+    'fecha_fin', to_char(hoy + 30, 'YYYY-MM-DD')))->>'promocion_id')::uuid);
+  PERFORM demo.g('PROMO60', (public.crear_promocion(e, jsonb_build_object('nombre', 'Galón L 60 menos', 'categoria_id', demo.id('CAT_PIN'),
+    'tipo', 'monto', 'monto_centavos', 6000, 'fecha_inicio', to_char(hoy, 'YYYY-MM-DD'),
+    'fecha_fin', to_char(hoy + 30, 'YYYY-MM-DD')))->>'promocion_id')::uuid);
+
   -- 5) Gastos y un depósito de la caja fuerte al banco que sigue en tránsito.
+  PERFORM public.trasladar_dinero(e, jsonb_build_object('tipo', 'reposicion_caja_chica', 'origen_id', demo.id('BAC'),
+    'destino_id', demo.id('CCHICA'), 'fecha', inicio + 3, 'referencia', 'Fondo de caja chica'), gen_random_uuid());
   PERFORM public.registrar_gasto(e, jsonb_build_object('cuenta_dinero_id', demo.id('BAC'), 'categoria_id', demo.id('CAT_ALQ'),
     'monto_centavos', 1200000, 'descripcion', 'Alquiler del local', 'fecha', inicio + 5), gen_random_uuid());
   PERFORM public.registrar_gasto(e, jsonb_build_object('cuenta_dinero_id', demo.id('BAC'), 'categoria_id', demo.id('CAT_LUZ'),

@@ -102,6 +102,13 @@ function mostrarApp() {
   alCambiarRuta();
 }
 
+// Tocar la pestaña o subpestaña en la que ya está vuelve a empezar esa pantalla
+// (por ejemplo, de un comprobante a una venta nueva). Sin cambio de ruta no hay hashchange.
+document.addEventListener('click', (ev) => {
+  const a = ev.target.closest && ev.target.closest('a.pestana, a.subpestana, a.boton-barra');
+  if (a && zonas && a.getAttribute('href') === location.hash) { ev.preventDefault(); alCambiarRuta(); }
+});
+
 // ---------------- Rutas ----------------
 function alCambiarRuta() {
   if (!zonas) return;

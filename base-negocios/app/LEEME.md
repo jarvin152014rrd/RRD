@@ -13,8 +13,8 @@ bash herramientas/demo_app.sh
 
 Abra http://127.0.0.1:8080 — usuarios `dueno@demo.hn`, `admin@demo.hn`,
 `cajero@demo.hn`, `vendedor@demo.hn`, clave `demo1234`. Es una ferretería falsa
-(ventas, clientes con deuda vencida, cajas, bancos, depósito en tránsito y dos
-gastos esperando aprobación). Cada vez que se corre, la demo empieza de cero.
+(ventas, clientes con deuda vencida, cajas, bancos, depósito en tránsito, dos
+gastos esperando aprobación y dos promociones para la pintura). Cada vez que se corre, la demo empieza de cero.
 
 Pruebas en el navegador: `bash herramientas/probar_app.sh` (capturas en
 `app-pruebas/capturas/`, no van a git).
@@ -53,7 +53,9 @@ llave service_role. Suba la carpeta `app/` a cualquier hosting estático con HTT
 | `js/errores.js` | Traduce errores con `error_catalogo` (mensaje sencillo + qué hacer). |
 | `js/formato.js` | `dinero(centavos)` → "L 1,234.56", fechas locales. |
 | `js/ui.js` | `h()` para armar pantallas sin innerHTML, avisos, diálogo de motivo, íconos. |
-| `js/pantallas/*.js` | Una pantalla por archivo: `inicio`, `alertas`, `aprobaciones`, `mas`, `entrar`, `en_construccion`. |
+| `js/datos.js` | Listas compartidas en memoria un minuto: productos, clientes, cajas, cuentas de dinero, mi turno; `filtrar()` sin tildes. |
+| `js/comprobante.js` | Comprobante de venta (`documento_venta`), impresión de 80 mm y texto para WhatsApp. |
+| `js/pantallas/*.js` | Una pantalla por archivo: `inicio`, `alertas`, `aprobaciones`, `mas`, `entrar`, `en_construccion`, `vender` (carrito; también lo usa `cotizaciones`), `ventas_dia`, `cotizaciones`, `devoluciones`, `caja_turno`, `caja_dinero`, `caja_gasto`, `clientes`, `me_deben`. |
 
 ## Agregar una pantalla
 
@@ -63,6 +65,21 @@ llave service_role. Suba la carpeta `app/` a cualquier hosting estático con HTT
    (y `modulos` / `permisos` si hace falta: basta uno de cada lista).
 3. Agregue el archivo a `CASCARON` en `sw.js` y suba `VERSION`.
 4. Agregue su prueba en `app-pruebas/probar_app.cjs`.
+
+## Cómo se usa (0.2.0)
+
+- **Vender:** escriba o escanee el código (lector USB o botón Cámara) y Enter. Cambie cantidad o descuento; si
+  hay varias promociones, viene marcada la que más descuenta y puede elegir otra. Elija cliente si es al
+  crédito, la forma de pago, escriba lo recibido (sale el vuelto) y toque **Cobrar**. Imprima o mande el
+  comprobante por WhatsApp. Si el descuento pasa su tope, la venta queda esperando aprobación.
+- **Caja > Mi turno:** abra el turno contando el fondo; al final toque **Cerrar turno**, cuente el dinero (total o
+  billetes) y después verá lo que debía haber y la diferencia.
+- **Clientes:** busque, abra la ficha y toque **Cobrar abono**. "Quién me debe" ordena por lo vencido y tiene
+  "Cobrar por WhatsApp".
+
+El total, el ISV y si el descuento pide aprobación los calcula el servidor (`calcular_venta_previa`, núcleo
+0.13.2) con la misma regla de la venta; la app solo muestra. El vuelto mientras se escribe es solo una ayuda: el
+que vale es el que devuelve el servidor.
 
 Reglas: palabras sencillas; nada gris ni bloqueado (lo que no se puede, no sale);
 montos siempre desde centavos con `dinero()`; nunca mostrar el código de error crudo.

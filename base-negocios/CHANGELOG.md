@@ -4,6 +4,17 @@ Formato: versión (fecha) y lista de cambios. La versión vive en `VERSION_NUCLE
 y queda guardada en cada base al migrar (vista `version_esquema`).
 Números: MAYOR.MENOR.ARREGLO (ver `docs/CONVENCIONES.md`).
 
+## 0.13.2 (2026-10-12) — Cálculo previo de la venta (para la app 0.2.0)
+
+Migración nueva 049 (las 001-048 no se tocaron). 130 pruebas (nueva 130, cifras a mano en sus comentarios).
+
+- `calcular_venta_previa(empresa, {"lineas","descuento_factura","fecha"?})`: calcula la venta con la MISMA regla
+  de `registrar_venta` (`interno.calcular_venta`) sin guardar nada, para que la pantalla muestre total, ISV y
+  vuelto sin calcular dinero en el navegador. Con varias promociones y sin elegir, usa y marca
+  (`promocion_sugerida_id`) la que más descuenta; la venta de verdad sigue exigiendo la elegida
+  (`PROMOCION_A_ELEGIR` no cambia). Trae `tope_descuento_porcentaje` y `descuento_pide_aprobacion` (total o
+  por línea). Sin costo estimado para quien no tiene `inventario.costos`. Permiso `ventas.vender` o `ventas.cotizar`.
+
 ## 0.13.1 (2026-10-06) — Correcciones de la revisión de 0.13.0
 
 Migración nueva 048 (las 001-047 no se tocaron). 129 pruebas (nueva 129: sus 5 partes fallan contra 0.13.0 y pasan

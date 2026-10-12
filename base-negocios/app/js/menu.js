@@ -1,7 +1,7 @@
 // Menú por pestañas y subpestañas. Se arma SOLO con lo que el usuario puede usar:
 // módulos activos + permisos de mi_perfil. Nada gris ni bloqueado: lo que no puede, no sale.
 // Ajustes siempre al final. Para agregar una pantalla: una línea aquí (ver app/LEEME.md).
-//   modulos: basta UNO activo   permisos: basta UNO   pantalla: archivo en js/pantallas/
+//   modulos: basta UNO activo   permisos: basta UNO   todos: hacen falta TODOS   pantalla: archivo en js/pantallas/
 import { puede, tieneModulo } from './sesion.js';
 
 export const MENU = [
@@ -11,21 +11,23 @@ export const MENU = [
     { id: 'aprobaciones', titulo: 'Aprobaciones', pantalla: 'aprobaciones', permisos: ['aprobaciones.ver'] },
   ] },
   { id: 'vender', titulo: 'Vender', subs: [
-    { id: 'nueva', titulo: 'Nueva venta', modulos: ['ventas'], permisos: ['ventas.vender'] },
-    { id: 'cotizaciones', titulo: 'Cotizaciones', modulos: ['ventas'], permisos: ['ventas.cotizar'] },
+    { id: 'nueva', titulo: 'Nueva venta', modulos: ['ventas'], permisos: ['ventas.vender'], pantalla: 'vender' },
+    { id: 'ventas', titulo: 'Ventas del día', modulos: ['ventas'], permisos: ['ventas.ver', 'ventas.vender'], pantalla: 'ventas_dia' },
+    { id: 'cotizaciones', titulo: 'Cotizaciones', modulos: ['ventas'], permisos: ['ventas.cotizar'], pantalla: 'cotizaciones' },
     { id: 'apartados', titulo: 'Apartados', modulos: ['apartados'], permisos: ['apartados.registrar'] },
-    { id: 'devoluciones', titulo: 'Devoluciones', modulos: ['ventas'], permisos: ['ventas.devolver'] },
-    { id: 'ventas', titulo: 'Ventas hechas', modulos: ['ventas'], permisos: ['ventas.ver'] },
+    { id: 'devoluciones', titulo: 'Devoluciones', modulos: ['ventas'], permisos: ['ventas.devolver'], pantalla: 'devoluciones' },
   ] },
   { id: 'caja', titulo: 'Caja', subs: [
-    { id: 'turno', titulo: 'Mi turno', modulos: ['dinero'], permisos: ['caja.turno'] },
-    { id: 'conteo', titulo: 'Conteo de caja', modulos: ['dinero'], permisos: ['caja.turno'] },
-    { id: 'cobros', titulo: 'Cobrar a clientes', modulos: ['ventas'], permisos: ['ventas.cobrar'] },
+    { id: 'turno', titulo: 'Mi turno', modulos: ['dinero'], permisos: ['caja.turno'], pantalla: 'caja_turno' },
+    { id: 'depositos', titulo: 'Depósito o retiro', modulos: ['dinero'], permisos: ['dinero.trasladar'], pantalla: 'caja_dinero' },
+    { id: 'gasto', titulo: 'Gasto de caja chica', modulos: ['dinero'], permisos: ['gastos.registrar'], pantalla: 'caja_gasto' },
+    // Cobrar necesita ver lo que deben (ventas.ver) además de cobrar: "todos" = hacen falta todos.
+    { id: 'cobros', titulo: 'Cobrar a clientes', modulos: ['ventas'], permisos: ['ventas.cobrar'], todos: ['ventas.ver'], pantalla: 'me_deben' },
     { id: 'cajas', titulo: 'Cajas abiertas', modulos: ['dinero'], permisos: ['caja.supervisar'] },
   ] },
   { id: 'clientes', titulo: 'Clientes', subs: [
-    { id: 'lista', titulo: 'Clientes', permisos: ['terceros.ver'] },
-    { id: 'me-deben', titulo: 'Quién me debe', modulos: ['ventas'], permisos: ['ventas.ver'] },
+    { id: 'lista', titulo: 'Clientes', permisos: ['terceros.ver'], pantalla: 'clientes' },
+    { id: 'me-deben', titulo: 'Quién me debe', modulos: ['ventas'], permisos: ['ventas.ver'], pantalla: 'me_deben' },
   ] },
   { id: 'inventario', titulo: 'Inventario', subs: [
     { id: 'productos', titulo: 'Productos y precios', modulos: ['inventario', 'ventas'], permisos: ['inventario.ver', 'productos.editar'] },
@@ -63,7 +65,8 @@ export const MENU = [
 ];
 
 function visible(item) {
-  return (!item.modulos || tieneModulo(...item.modulos)) && (!item.permisos || puede(...item.permisos));
+  return (!item.modulos || tieneModulo(...item.modulos)) && (!item.permisos || puede(...item.permisos))
+    && (!item.todos || item.todos.every((p) => puede(p)));
 }
 
 // Menú del usuario actual: solo pestañas con al menos una subpestaña permitida.

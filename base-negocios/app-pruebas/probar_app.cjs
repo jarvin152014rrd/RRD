@@ -200,6 +200,282 @@ const textoDe = (pagina, sel) => pagina.locator(sel).first().innerText();
     await ctx.close();
   });
 
+  // ===================== Etapa 4, parte 2: Vender, Caja y Clientes =====================
+  const EM = EMPRESA;
+  const id = (clave) => sql(null, `demo.id('${clave}')`);
+  const codigoCrudo = /\b[A-Z]{3,}_[A-Z_]+\b/;
+  // Abre Nueva venta y agrega productos por código (como un lector USB: código + Enter).
+  async function venderCon(p, codigos) {
+    await p.goto(URL_APP + '/#/vender/ventas'); // otra ruta primero: la misma ruta no vuelve a pintar
+    await p.waitForSelector('#t-dia');
+    await p.goto(URL_APP + '/#/vender/nueva');
+    await p.waitForSelector('#buscar-producto');
+    for (const c of codigos) {
+      const antes = await p.locator('.linea-carrito').count();
+      await p.fill('#buscar-producto', c);
+      await p.press('#buscar-producto', 'Enter');
+      await p.waitForFunction((n) => document.querySelectorAll('.linea-carrito').length > n, antes);
+    }
+    await calculado(p);
+  }
+  const calculado = (p) => p.waitForSelector('.vender:not([data-calculando])', { timeout: 10000 });
+  const ultimaVenta = () => JSON.parse(sql('dueno@demo.hn', `(SELECT row_to_json(x) FROM (SELECT v.venta_id, v.numero_documento, v.estado,
+    v.total_centavos, v.impuesto_centavos, v.condicion, v.cliente_id FROM public.v_venta v WHERE v.empresa_id = '${EM}' ORDER BY v.numero DESC LIMIT 1) x)`));
+  const contarVentas = () => Number(sql('dueno@demo.hn', `(SELECT count(*) FROM public.v_venta WHERE empresa_id = '${EM}')`));
+
+  const caj = await nueva();
+  await entrar(caj.p, 'cajero@demo.hn');
+
+  await prueba('vender en efectivo: vuelto correcto, comprobante = base, doble clic no duplica', async () => {
+    const p = caj.p;
+    await venderCon(p, ['CEM-425']);
+    await p.fill('.linea-carrito input[name=cantidad]', '2');
+    await p.press('.linea-carrito input[name=cantidad]', 'Tab');
+    await calculado(p);
+    // A mano: 2 x L 275.00 (ISV incluido) = L 550.00; sin ISV round(55,000 / 1.15) = 47,826; ISV 7,174.
+    afirmar((await textoDe(p, '[data-dato=total]')).trim() === 'L 550.00', 'total: ' + await textoDe(p, '[data-dato=total]'));
+    afirmar((await textoDe(p, '[data-dato="isv-ISV15"]')).trim() === 'L 71.74', 'ISV desglosado');
+    await p.click('[data-forma=efectivo]');
+    await p.fill('#recibido', '600');
+    afirmar((await textoDe(p, '[data-dato=vuelto]')).trim() === 'L 50.00', 'vuelto antes de cobrar');
+    const antes = contarVentas();
+    await p.dblclick('#cobrar');
+    await p.waitForSelector('.comprobante', { timeout: 15000 });
+    await p.waitForTimeout(500);
+    afirmar(contarVentas() === antes + 1, 'el doble clic hizo ' + (contarVentas() - antes) + ' ventas');
+    const v = ultimaVenta();
+    const pago = JSON.parse(sql('dueno@demo.hn', `(SELECT row_to_json(x) FROM (SELECT recibido_centavos, vuelto_centavos FROM public.v_venta_pago WHERE venta_id = '${v.venta_id}') x)`));
+    afirmar(v.total_centavos === 55000 && v.impuesto_centavos === 7174 && pago.vuelto_centavos === 5000, 'base: ' + JSON.stringify([v, pago]));
+    afirmar((await textoDe(p, '[data-dato=vuelto-final]')).trim() === lempiras(pago.vuelto_centavos), 'vuelto final');
+    const comp = await textoDe(p, '.comprobante');
+    afirmar(comp.includes(v.numero_documento) && comp.includes(lempiras(v.total_centavos)) && comp.includes(lempiras(v.impuesto_centavos)), 'comprobante: ' + comp);
+    afirmar(!/[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}]/u.test(comp), 'el comprobante tiene emojis');
+    const wa = await p.getAttribute('[data-accion=whatsapp]', 'href');
+    afirmar(wa.startsWith('https://wa.me/') && decodeURIComponent(wa).includes(v.numero_documento), 'enlace de WhatsApp: ' + wa);
+    await p.emulateMedia({ media: 'print' });
+    afirmar(!(await p.locator('.pestanas').isVisible()) && await p.locator('.comprobante').isVisible(), 'al imprimir solo sale el comprobante');
+    await p.screenshot({ path: path.join(CAPTURAS, 'p2_comprobante_impreso.png') });
+    await p.emulateMedia({ media: 'screen' });
+    await p.screenshot({ path: path.join(CAPTURAS, 'p2_comprobante.png'), fullPage: true });
+  });
+
+  await prueba('promoción: sugiere la que más descuenta y se puede cambiar (nunca se suman)', async () => {
+    const p = caj.p;
+    await venderCon(p, ['PIN-BLA']);
+    // Galón L 520.00: "L 60 menos" = 6,000; "10 %" = 5,200 -> sugiere la de L 60: L 460.00.
+    afirmar(await p.isChecked(`.promos input[value="${id('PROMO60')}"]`), 'no sugirió la de L 60');
+    afirmar((await textoDe(p, '[data-dato=total]')).trim() === 'L 460.00', 'total con la sugerida');
+    await p.screenshot({ path: path.join(CAPTURAS, 'p2_vender_computadora.png'), fullPage: true });
+    await p.check(`.promos input[value="${id('PROMO10')}"]`);
+    await calculado(p);
+    afirmar((await textoDe(p, '[data-dato=total]')).trim() === 'L 468.00', 'total con la cambiada: ' + await textoDe(p, '[data-dato=total]'));
+    afirmar(await p.locator('.linea-carrito input[name=descuento]').count() === 0, 'una línea con promoción no admite otro descuento');
+    await p.click('#cobrar');
+    await p.waitForSelector('.comprobante', { timeout: 15000 });
+    const v = ultimaVenta();
+    const promo = sql('dueno@demo.hn', `(SELECT promocion_id FROM public.v_venta_linea WHERE venta_id = '${v.venta_id}')`);
+    afirmar(promo === id('PROMO10') && v.total_centavos === 46800, 'la venta quedó con ' + promo + ' / ' + v.total_centavos);
+  });
+
+  await prueba('descuento sobre el tope: avisa y la venta queda pendiente de aprobación', async () => {
+    const p = caj.p;
+    await venderCon(p, ['CEM-425']);
+    await p.fill('.linea-carrito input[name=descuento]', '10');
+    await p.press('.linea-carrito input[name=descuento]', 'Tab');
+    await calculado(p);
+    await p.waitForSelector('.aviso-tope');
+    afirmar((await textoDe(p, '.aviso-tope')).includes('5 %'), 'el aviso no dice el tope');
+    afirmar((await textoDe(p, '[data-dato=total]')).trim() === 'L 247.50', 'total con 10 % (27,500 - 2,750)');
+    await p.click('#cobrar');
+    await p.waitForSelector('[data-dato=pendiente]', { timeout: 15000 });
+    const v = ultimaVenta();
+    afirmar(v.estado === 'pendiente_aprobacion', 'estado: ' + v.estado);
+    afirmar(!codigoCrudo.test(await p.locator('body').innerText()), 'se ve un código crudo');
+  });
+
+  await prueba('venta al crédito exige cliente', async () => {
+    const p = caj.p;
+    await venderCon(p, ['VAR-038']);
+    await p.click('[data-forma=credito]');
+    const antes = contarVentas();
+    await p.click('#cobrar');
+    await p.waitForSelector('.vender .mensaje-error');
+    afirmar((await textoDe(p, '.vender .mensaje-error')).includes('elija el cliente'), 'no pidió el cliente');
+    afirmar(contarVentas() === antes, 'guardó una venta al crédito sin cliente');
+    await p.selectOption('#cliente', id('CLI1'));
+    await p.click('#cobrar');
+    await p.waitForSelector('.comprobante', { timeout: 15000 });
+    const v = ultimaVenta();
+    afirmar(v.condicion === 'credito' && v.cliente_id === id('CLI1') && v.estado === 'emitida', 'venta: ' + JSON.stringify(v));
+  });
+
+  await prueba('abrir turno, vender y cerrar con conteo a ciegas: diferencia correcta', async () => {
+    const p = caj.p;
+    const saldo = Number(sql('dueno@demo.hn', `(SELECT saldo_centavos FROM public.v_cuenta_dinero WHERE cuenta_dinero_id = '${id('CAJA1')}')`));
+    await p.goto(URL_APP + '/#/caja/turno');
+    await p.waitForSelector('#fondo-total');
+    await p.fill('#fondo-total', (saldo / 100).toFixed(2));
+    await p.click('form.formulario button[type=submit]');
+    await p.waitForSelector('#cerrar-turno', { timeout: 15000 });
+    await venderCon(p, ['CEM-425']);
+    afirmar((await textoDe(p, '[data-dato=turno]')).includes('Turno'), 'Vender no muestra el turno');
+    await p.click('#cobrar');
+    await p.waitForSelector('.comprobante', { timeout: 15000 });
+    await p.goto(URL_APP + '/#/caja/turno');
+    await p.waitForSelector('#cerrar-turno');
+    afirmar(!(await p.locator('#contenido').innerText()).includes('Debía haber'), 'muestra lo esperado antes de contar');
+    await p.click('#cerrar-turno');
+    // Cuenta L 10.00 menos de lo que hay (fondo + 275.00), por billetes.
+    let falta = saldo + 27500 - 1000;
+    await p.check('input[name="cierre-modo"][value=billetes]');
+    for (const d of [50000, 20000, 10000, 5000, 2000, 1000, 500, 200, 100, 50, 20, 10, 5]) {
+      const n = Math.floor(falta / d);
+      if (n > 0) { await p.fill(`input[name="den-${d}"]`, String(n)); falta -= n * d; }
+    }
+    afirmar(falta === 0, 'no se pudo contar en billetes');
+    afirmar((await textoDe(p, '[data-dato=suma-conteo]')).trim() === lempiras(saldo + 26500), 'suma del conteo');
+    await p.click('form.formulario button[type=submit]');
+    await p.waitForSelector('[data-dato=diferencia]', { timeout: 15000 });
+    afirmar((await textoDe(p, '[data-dato=diferencia]')).trim() === '-L 10.00', 'diferencia: ' + await textoDe(p, '[data-dato=diferencia]'));
+    afirmar((await textoDe(p, '[data-dato=esperado]')).trim() === lempiras(saldo + 27500), 'esperado');
+    const t = JSON.parse(sql('dueno@demo.hn', `(SELECT row_to_json(x) FROM (SELECT esperado_centavos, contado_centavos, diferencia_centavos
+      FROM public.v_turno_caja WHERE empresa_id = '${EM}' ORDER BY numero DESC LIMIT 1) x)`));
+    afirmar(t.diferencia_centavos === -1000 && t.esperado_centavos === saldo + 27500, 'base: ' + JSON.stringify(t));
+    await p.screenshot({ path: path.join(CAPTURAS, 'p2_caja_cierre.png'), fullPage: true });
+  });
+  await caj.ctx.close();
+
+  const adm = await nueva();
+  await entrar(adm.p, 'admin@demo.hn');
+
+  await prueba('devolución parcial desde Ventas del día (nota de crédito)', async () => {
+    const p = adm.p;
+    const ventaId = sql('dueno@demo.hn', `(SELECT v.venta_id FROM public.v_venta v JOIN public.v_venta_linea l ON l.venta_id = v.venta_id
+      WHERE v.empresa_id = '${EM}' AND v.estado = 'emitida' AND l.codigo = 'CEM-425' AND l.cantidad = 5 AND v.fecha_contable = public.hoy_local('${EM}') LIMIT 1)`);
+    await p.goto(URL_APP + '/#/vender/ventas');
+    await p.click(`[data-venta="${ventaId}"] >> text=Devolver`);
+    await p.waitForSelector('#dev-motivo');
+    await p.fill('.linea-devolver input[name=devolver] >> nth=0', '2');
+    await p.fill('#dev-motivo', 'El cliente compró de más');
+    await p.selectOption('#dev-destino', 'saldo_favor');
+    await p.click('form.formulario button[type=submit]');
+    await p.waitForSelector('[data-dato=total-devolucion]', { timeout: 15000 });
+    // A mano: 2 de 5 sacos de L 275.00 = L 550.00.
+    afirmar((await textoDe(p, '[data-dato=total-devolucion]')).trim() === 'L 550.00', 'total devuelto');
+    const d = JSON.parse(sql('dueno@demo.hn', `(SELECT row_to_json(x) FROM (SELECT total_centavos, estado FROM public.v_devolucion WHERE venta_id = '${ventaId}') x)`));
+    afirmar(d.total_centavos === 55000 && d.estado === 'aplicada', 'base: ' + JSON.stringify(d));
+  });
+
+  await prueba('depósito al banco con referencia', async () => {
+    const p = adm.p;
+    await p.goto(URL_APP + '/#/caja/depositos');
+    await p.waitForSelector('#mov-monto');
+    await p.selectOption('#mov-caja', id('FUERTE'));
+    await p.selectOption('#mov-banco', id('BAC'));
+    await p.fill('#mov-monto', '1,000');
+    await p.fill('#mov-referencia', 'Boleta 5555');
+    await p.click('form.formulario button[type=submit]');
+    await p.waitForSelector('#avisos .mensaje-ok');
+    afirmar((await textoDe(p, '#avisos .mensaje-ok')).includes('L 1,000.00'), 'aviso del depósito');
+    const n = sql('dueno@demo.hn', `(SELECT count(*) FROM public.v_deposito_transito WHERE referencia = 'Boleta 5555' AND monto_centavos = 100000
+      AND origen_id = '${id('FUERTE')}' AND destino_id = '${id('BAC')}')`);
+    afirmar(n === '1', 'el depósito no está en tránsito en la base');
+  });
+
+  await prueba('cobrar abono con excedente a saldo a favor (con confirmación)', async () => {
+    const p = adm.p;
+    const debe = Number(sql('dueno@demo.hn', `(SELECT saldo_centavos FROM public.v_cxc_cliente WHERE cliente_id = '${id('CLI2')}')`));
+    await p.goto(URL_APP + '/#/clientes/me-deben');
+    await p.click(`[data-cliente="${id('CLI2')}"] >> text=Cobrar`);
+    await p.waitForSelector('#abono-monto');
+    await p.fill('#abono-monto', ((debe + 7000) / 100).toFixed(2));
+    await p.selectOption('#abono-forma', 'tarjeta');
+    await p.click('form.formulario button[type=submit]');
+    await p.waitForSelector('form.formulario .mensaje-error');
+    afirmar((await textoDe(p, 'form.formulario .mensaje-error')).includes('más de lo que debe'), 'no pidió confirmar el excedente');
+    await p.check('#abono-excedente');
+    await p.click('form.formulario button[type=submit]');
+    await p.waitForSelector('[data-dato=excedente]', { timeout: 15000 });
+    afirmar((await textoDe(p, '[data-dato=excedente]')).trim() === 'L 70.00', 'excedente');
+    afirmar((await textoDe(p, '[data-dato=saldo-restante]')).trim() === 'L 0.00', 'saldo restante');
+    const favor = sql('dueno@demo.hn', `(SELECT sum(saldo_centavos) FROM public.v_saldo_favor WHERE cliente_id = '${id('CLI2')}')`);
+    afirmar(favor === '7000', 'saldo a favor en la base: ' + favor);
+    await p.click('text=Ver la ficha');
+    await p.waitForSelector('[data-dato=saldo-favor]');
+    afirmar((await textoDe(p, '[data-dato=saldo-favor]')).trim() === 'L 70.00', 'ficha: saldo a favor');
+    await p.click('.subpestana >> text=Quién me debe'); // la misma pestaña vuelve a empezar la pantalla
+    await p.waitForSelector('[data-accion=whatsapp]');
+    const wa = decodeURIComponent(await p.getAttribute(`[data-cliente="${id('CLI1')}"] [data-accion=whatsapp]`, 'href'));
+    afirmar(wa.startsWith('https://wa.me/50499887766?text=') && wa.includes('saldo pendiente'), 'WhatsApp de cobro: ' + wa);
+    await p.goto(URL_APP + '/#/clientes/lista');
+    await p.click(`[data-cliente="${id('CLI1')}"] >> text=Ver`);
+    await p.waitForSelector('[data-dato=saldo-cliente]');
+    await p.screenshot({ path: path.join(CAPTURAS, 'p2_clientes.png'), fullPage: true });
+  });
+
+  await prueba('crear cliente: RTN validado', async () => {
+    const p = adm.p;
+    await p.click('.subpestana >> text=Clientes');
+    await p.click('#nuevo-cliente');
+    await p.fill('#cli-nombre', 'Ferretería La Prueba');
+    await p.fill('#cli-rtn', '0801-1999');
+    await p.click('form.formulario button[type=submit]');
+    await p.waitForSelector('form.formulario .mensaje-error');
+    afirmar((await textoDe(p, 'form.formulario .mensaje-error')).includes('14 números'), 'no validó el RTN');
+    await p.fill('#cli-rtn', '0801-1999-012345');
+    await p.click('form.formulario button[type=submit]');
+    await p.waitForSelector('#t-ficha');
+    const rtn = sql('dueno@demo.hn', `(SELECT rtn FROM public.tercero WHERE nombre = 'Ferretería La Prueba')`);
+    afirmar(rtn === '08011999012345', 'RTN guardado: ' + rtn);
+  });
+  await adm.ctx.close();
+
+  await prueba('vendedor no cobra si "vendedor que cobra" está apagado', async () => {
+    const { ctx, p } = await nueva();
+    await entrar(p, 'vendedor@demo.hn');
+    await venderCon(p, ['VAR-038']);
+    afirmar(await p.locator('[data-forma=efectivo]').count() === 0, 'el vendedor ve Efectivo');
+    afirmar(await p.locator('[data-forma=credito]').count() === 1, 'el vendedor no ve Crédito');
+    afirmar((await p.locator('.vender').innerText()).includes('lo hace el cajero'), 'no explica quién cobra');
+    // Aunque intente por fuera de la pantalla, el servidor no deja (y el error sale traducido).
+    const msj = await p.evaluate(async ([e, prod]) => {
+      const api = await import('./js/api.js');
+      const { traducir } = await import('./js/errores.js');
+      try { await api.escribir('registrar_venta', { p_empresa_id: e, p_datos: { lineas: [{ producto_id: prod, cantidad: 1 }], pagos: [{ forma: 'efectivo' }] } }); return 'pasó'; }
+      catch (err) { return (await traducir(err)).mensaje; }
+    }, [EM, id('VAR')]);
+    afirmar(msj !== 'pasó' && !codigoCrudo.test(msj), 'el servidor dejó cobrar o el error no se tradujo: ' + msj);
+    // Con "vendedor que cobra" encendido sí ve Efectivo.
+    sqlEscribir('dueno@demo.hn', `SELECT public.configurar_empresa('${EM}', '{"vendedor_cobra": true}', 'Prueba de la app')`);
+    await p.click('.quien button');
+    await p.waitForSelector('#correo');
+    await entrar(p, 'vendedor@demo.hn');
+    await venderCon(p, ['VAR-038']);
+    afirmar(await p.locator('[data-forma=efectivo]').count() === 1, 'con vendedor_cobra no ve Efectivo');
+    sqlEscribir('dueno@demo.hn', `SELECT public.configurar_empresa('${EM}', '{"vendedor_cobra": false}', 'Prueba de la app')`);
+    await ctx.close();
+  });
+
+  await prueba('celular: Vender se puede usar sin salirse a lo ancho', async () => {
+    const { ctx, p } = await nueva({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
+    await entrar(p, 'cajero@demo.hn');
+    await venderCon(p, ['PIN-BLA', 'CLA-250']);
+    await p.fill('.linea-carrito >> nth=1 >> input[name=cantidad]', '2.5');
+    await p.press('.linea-carrito >> nth=1 >> input[name=cantidad]', 'Tab');
+    await calculado(p);
+    // A mano: pintura con la sugerida L 460.00 + 2.5 lb de clavos x L 40.00 = L 100.00 -> L 560.00.
+    afirmar((await textoDe(p, '[data-dato=total]')).trim() === 'L 560.00', 'total en celular: ' + await textoDe(p, '[data-dato=total]'));
+    const ancho = await p.evaluate(() => document.documentElement.scrollWidth);
+    afirmar(ancho <= 390, 'la página se sale a lo ancho: ' + ancho);
+    const cobrar = await p.locator('#cobrar').boundingBox();
+    afirmar(cobrar && cobrar.height >= 44 && cobrar.width >= 300, 'botón Cobrar chico');
+    const letras = await p.locator('.vender').evaluate((el) => [...el.querySelectorAll('*')].filter((x) => x.childElementCount === 0 && x.tagName !== 'OPTION' && x.textContent.trim())
+      .map((x) => parseFloat(getComputedStyle(x).fontSize)).filter((t) => t < 15));
+    afirmar(letras.length === 0, 'letra menor de 15 px: ' + letras.join(','));
+    await p.screenshot({ path: path.join(CAPTURAS, 'p2_vender_celular.png'), fullPage: true });
+    await ctx.close();
+  });
+
   await prueba('sin errores de JavaScript en las páginas', async () => {
     afirmar(erroresJs.length === 0, erroresJs.join(' | '));
   });

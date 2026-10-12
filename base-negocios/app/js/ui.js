@@ -98,3 +98,54 @@ export function icono(nombre) {
   svg.append(p);
   return svg;
 }
+
+// Campo con etiqueta: campo('Nombre', h('input', {...}), 'ayuda opcional')
+let cuentaCampos = 0;
+export function campo(etiqueta, control, ayuda = null) {
+  const id = control.id || `c${++cuentaCampos}`;
+  control.id = id;
+  return h('div', { class: 'campo' }, h('label', { for: id }, etiqueta), control,
+    ayuda ? h('p', { class: 'ayuda' }, ayuda) : null);
+}
+
+// Corre accion() con el botón deshabilitado y "Guardando…" (un doble clic no manda dos veces).
+// El error se muestra en zonaError (traducido). Devuelve el resultado o null si falló.
+export async function conBoton(boton, zonaError, accion, texto = 'Guardando…') {
+  if (boton.disabled) return null;
+  const antes = boton.textContent;
+  boton.disabled = true;
+  boton.textContent = texto;
+  if (zonaError) zonaError.replaceChildren();
+  try {
+    return await accion();
+  } catch (err) {
+    if (zonaError) zonaError.append(await cajaError(err));
+    return null;
+  } finally {
+    boton.disabled = false;
+    boton.textContent = antes;
+  }
+}
+
+// Mensaje de error propio (validación antes de llamar al servidor).
+export function errorSimple(texto, queHacer = '') {
+  return h('div', { class: 'mensaje mensaje-error', role: 'alert' }, h('p', {}, h('strong', {}, texto)),
+    queHacer ? h('p', {}, queHacer) : null);
+}
+
+// Enlace de WhatsApp (wa.me). Teléfono de 8 dígitos = Honduras (504).
+export function enlaceWhatsApp(telefono, texto) {
+  let t = String(telefono || '').replace(/\D/g, '');
+  if (t.length === 8) t = '504' + t;
+  return `https://wa.me/${t}?text=${encodeURIComponent(texto)}`;
+}
+
+// Diálogo simple con contenido propio. Devuelve { dlg, cerrar }.
+export function dialogo(titulo, ...contenido) {
+  const dlg = h('dialog', { class: 'dialogo', 'aria-label': titulo },
+    h('div', { class: 'dialogo-cuerpo' }, h('h2', {}, titulo), ...contenido));
+  dlg.addEventListener('close', () => dlg.remove());
+  document.body.append(dlg);
+  dlg.showModal();
+  return { dlg, cerrar: () => dlg.close() };
+}

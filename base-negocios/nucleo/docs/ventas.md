@@ -136,6 +136,14 @@ no mueve inventario, dinero ni número; vigencia por defecto `empresa.cotizacion
 `convertir_cotizacion_a_venta(cotizacion, {"pagos","caja_id",...}, id)`: la venta queda a nombre del
 vendedor de la cotización. Vigencia de 15 días (configurable, **confirmado por el dueño**). **Decisión:** `cotizacion_precios = 'respetar'` (defecto): vigente → precios y descuentos COTIZADOS; vencida → precios del día. `'recalcular'`: siempre precios del día. El tope de descuento se revisa con el puesto de quien la convierte. `anular_cotizacion`. Si su venta se rechaza o cancela, se puede convertir otra vez.
 
+## Cálculo previo — `calcular_venta_previa(empresa, datos)` (0.13.2)
+
+Misma entrada que la venta (`lineas`, `descuento_factura`, `fecha`?), misma regla, **no guarda nada**. Devuelve lo
+de `interno.calcular_venta` más, por línea, `promociones` (de la que más descuenta a la que menos) y
+`promocion_sugerida_id` (cuando aplican varias y no se eligió: la previa usa la primera; la venta sigue pidiendo
+`promocion_id`), y `tope_descuento_porcentaje` / `descuento_pide_aprobacion` del puesto (el dueño: sin tope).
+Sin costos para quien no tiene `inventario.costos`. Permiso `ventas.vender` o `ventas.cotizar`. Prueba 130.
+
 ## Lecturas
 
 - `v_venta`, `v_venta_linea`, `v_venta_pago`: con `ventas.ver` todas; si no, las que uno registró o vendió. Costo y utilidad bruta (venta sin impuesto − costo − costo estimado de servicios) solo con `ventas.ver` + `inventario.costos`. La tabla `venta` la leen solo quienes ven costos.
