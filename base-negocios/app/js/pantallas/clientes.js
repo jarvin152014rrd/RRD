@@ -254,7 +254,7 @@ function formularioCliente(vista, ctx, cli) {
     }
     if (cli && !Object.keys(datos).length) { abrirFicha(vista, ctx, cli.id); return; }
     const r = await conBoton(boton, zonaError, () => (cli
-      ? escribir('editar_tercero', { p_empresa_id: empresaId(), p_tercero_id: cli.id, p_datos: datos, p_motivo: motivo.value.trim() || null })
+      ? rpc('editar_tercero', { p_empresa_id: empresaId(), p_tercero_id: cli.id, p_datos: datos, p_motivo: motivo.value.trim() || null })
       : escribir('crear_tercero', { p_empresa_id: empresaId(), p_datos: { ...datos, es_cliente: true }, p_id_operacion: id })));
     if (!r) return;
     olvidarDatos('clientes');

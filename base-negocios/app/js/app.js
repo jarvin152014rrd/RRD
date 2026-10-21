@@ -6,6 +6,7 @@ import { olvidarCatalogo } from './errores.js';
 import { cargarMarca, aplicarMarca, iniciales } from './marca.js';
 import { h, icono, chip, cajaError, limpiarAvisos } from './ui.js';
 import { vigilarImpresion } from './imprimible.js';
+import { olvidarDatos } from './datos.js';
 
 const raiz = document.getElementById('app');
 const bandaSinConexion = document.getElementById('sin-conexion');
@@ -59,6 +60,7 @@ async function salir(texto = 'Cerró su sesión.', tipo = 'ok') {
   aplicarMarca({});
   olvidarPerfil();
   olvidarCatalogo();
+  olvidarDatos(); // listas en memoria (productos, cuentas, alcance...): el próximo usuario no ve las del anterior
   await api.salir();
   if (location.hash) history.replaceState(null, '', location.pathname);
   mostrarEntrar({ tipo, texto });

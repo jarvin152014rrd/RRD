@@ -535,3 +535,8 @@ a.fila-icono:hover .fila-icono-titulo { text-decoration: underline; }
 .vista-marca-encabezado { padding: 0 16px; }
 .vista-marca-encabezado .pestanas { gap: 16px; }
 .vista-marca-cuerpo { padding: 14px 16px; background: var(--color-fondo); display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+
+/* app 0.7.0: Compras y Dinero */
+.filtros { margin-bottom: 12px; }
+.linea-isv { margin-top: 6px; }
+.linea-isv summary { cursor: pointer; font-size: 15px; color: var(--color-suave, #4a4a4a); min-height: 44px; display: flex; align-items: center; }

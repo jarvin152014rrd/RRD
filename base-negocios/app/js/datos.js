@@ -29,6 +29,26 @@ export const cuentasDinero = (fresco) => guardado('cuentas', () =>
 
 export const miTurno = () => rpc('mi_turno', { p_empresa_id: empresaId() }).then((r) => (r && r.turno) || null);
 
+// ---- app 0.7.0 (Compras y Dinero) ----
+export const proveedores = (fresco) => guardado('proveedores', () =>
+  leer('tercero', { empresa_id: empresaId(), es_proveedor: true }, { orden: 'nombre.asc', limite: 1000 }), fresco);
+
+export const categoriasGasto = (fresco) => guardado('categorias_gasto', () =>
+  leer('categoria_gasto', { empresa_id: empresaId(), activa: true }, { orden: 'nombre.asc' }), fresco);
+
+// Bodegas activas (RLS: un usuario limitado solo ve las de sus sucursales).
+export const bodegas = () => guardado('bodegas', () => leer('bodega', { empresa_id: empresaId(), activa: true }, { orden: 'codigo.asc' }));
+
+// ¿El usuario está limitado a unas sucursales? { limitado, sucursales: [ids] } (mi_estado_sesion).
+export const alcance = () => guardado('alcance', () => rpc('mi_estado_sesion', { p_empresa_id: empresaId() }).then((e) => ({
+  limitado: Boolean(e && e.todas_las_sucursales === false),
+  sucursales: ((e && e.sucursales) || []).map((x) => x.sucursal_id),
+})));
+
+// Cuentas de las que se puede pagar (caja de efectivo, caja chica o banco), ya leídas con cuentasDinero.
+export const TIPOS_QUE_PAGAN = ['efectivo_caja', 'caja_chica', 'banco'];
+export const cuentasQuePagan = (lista) => lista.filter((c) => TIPOS_QUE_PAGAN.includes(c.tipo));
+
 // Busca por nombre, código o código de barras (sin importar tildes ni mayúsculas).
 export function filtrar(lista, texto, campos) {
   const q = sinTildes(texto).trim();

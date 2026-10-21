@@ -70,13 +70,14 @@ cierra en la base y además borra sus sesiones de Supabase Auth). Sin `modo` (la
 | `js/formato.js` | `dinero(centavos)` → "L 1,234.56", fechas locales. |
 | `js/ui.js` | `h()` para armar pantallas sin innerHTML, avisos, diálogo de motivo y las piezas visuales: `chip`, `chipEstado` (pagada, pendiente, vencida, anulada, en espera de aprobación…), `burbuja`, `titulo` (con ícono dorado), `monto` (verde entra, rojo sale), `tarjetaCifra`, `botonAccion`, `filaIcono`, `tabla` (en el celular se ve como tarjetas), `graficaBarras`, `estadoVacio` (con botones para empezar), `mensaje`, `cabezaPantalla` (título con las subpestañas al lado). |
 | `js/iconos.js` | Íconos de línea propios (`icono('vender')`), dentro de la app: sin internet. Nunca en lo impreso. |
-| `js/datos.js` | Listas compartidas en memoria un minuto: productos, clientes, cajas, cuentas de dinero, mi turno; `filtrar()` sin tildes. |
+| `js/datos.js` | Listas compartidas en memoria un minuto: productos, clientes, proveedores, cajas, bodegas, cuentas de dinero, categorías de gasto, mi turno y si el usuario está limitado a su sucursal (`alcance`); `filtrar()` sin tildes. Se borran al salir. |
+| `js/formularios.js` | Piezas de formulario de Compras y Dinero: elegir caja o banco con su saldo, monto, fecha, dato, cifra chica, "vence en N días". |
 | `js/comprobante.js` | Comprobante de venta (`documento_venta`), impresión de 80 mm y texto para WhatsApp. Pasa por `imprimible.js`. |
 | `js/imprimible.js` | Lo impreso solo lleva texto y líneas: quita emojis y dibujos de comprobantes, WhatsApp y del título al imprimir (los datos guardados no cambian). |
 | `js/marca.js` | Nombre comercial, logo y colores del negocio (`marca_empresa`). Cambia solo el color principal y el de acento, con **contraste automático** (texto blanco u oscuro, AA); los colores con significado no cambian. Recuerda la marca en el equipo para la pantalla de entrar. |
 | `js/excel.js` | Arma y lee el `.xlsx` (columnas azules/grises, hoja Instrucciones) para `exportar_plantilla` / `importar_*`. |
 | `vendor/xlsx.bundle.js` | SheetJS (`xlsx-js-style` 1.2.0, licencia Apache 2.0 en `vendor/`), copia local: funciona sin internet. Se carga solo al usar Excel. |
-| `js/pantallas/*.js` | Una pantalla por archivo: `inicio`, `pendientes` (usa `alertas` y `aprobaciones`), `dinero_donde`, `mas`, `entrar`, `en_construccion`, `vender` (carrito; también lo usa `cotizaciones`), `ventas_dia`, `cotizaciones`, `devoluciones`, `caja_turno`, `caja_dinero`, `caja_gasto`, `clientes`, `me_deben`; Inventario: `inv_productos`, `inv_existencias`, `inv_conteo`, `inv_movimientos`, `inv_traslados`, `inv_excel`; Ajustes: `aj_negocio`, `aj_usuarios`, `aj_cajas`, `aj_impuestos`, `aj_reglas`, `aj_datos`. |
+| `js/pantallas/*.js` | Una pantalla por archivo: `inicio`, `pendientes` (usa `alertas` y `aprobaciones`), `dinero_donde`, `mas`, `entrar`, `en_construccion`, `vender` (carrito; también lo usa `cotizaciones`), `ventas_dia`, `cotizaciones`, `devoluciones`, `caja_turno`, `caja_dinero`, `caja_gasto`, `clientes`, `me_deben`; Compras: `compras`, `compras_proveedores`, `compras_pagos`; Inventario: `inv_productos`, `inv_existencias`, `inv_conteo`, `inv_movimientos`, `inv_traslados`, `inv_excel`; Ajustes: `aj_negocio`, `aj_usuarios`, `aj_cajas`, `aj_impuestos`, `aj_reglas`, `aj_datos`. |
 
 ## Agregar una pantalla
 
@@ -86,7 +87,20 @@ cierra en la base y además borra sus sesiones de Supabase Auth). Sin `modo` (la
    (y `modulos` / `permisos` si hace falta: basta uno de cada lista). Toda subpestaña lleva `icono`
    (un nombre de `js/iconos.js`); la prueba falla si falta. Si cambia una ruta, agregue la vieja a `RUTAS_VIEJAS`.
 3. Agregue el archivo a `CASCARON` en `sw.js` y suba `VERSION`.
-4. Agregue su prueba en `app-pruebas/probar_app.cjs`.
+4. Agregue su prueba en `app-pruebas/probar_app.cjs` (Compras y Dinero: `app-pruebas/probar_compras_dinero.cjs`).
+
+## Cómo se usa Compras (0.7.0)
+
+- **Registrar una compra:** Compras > Compras > **Nueva compra**. Elija el proveedor, escriba el número de la
+  factura, busque cada producto y escriba cuántos y cuánto costó cada uno **sin ISV**. Diga si es **al crédito**
+  (sale cuándo vence) o **de contado** (elija de qué caja o banco sale). Toque **Guardar compra** y confirme.
+  Revise que el subtotal, el ISV y el total cuadren con la factura de papel.
+- **Pagar a un proveedor:** Compras > Pagar a proveedores. Lo rojo ya venció. Toque **Pagar**, escriba cuánto
+  paga (todo o una parte), elija de qué caja o banco sale y confirme.
+- **Anular:** abra la compra (**Ver**) y toque **Anular compra**; escriba el motivo. Si ya tenía pagos, anule
+  primero los pagos (abajo, en la misma compra).
+- **Proveedores:** **Nuevo proveedor** con su RTN y los días de plazo que le da. En **Ver** está lo que le debe
+  y todo lo que le ha comprado y pagado.
 
 ## Cómo se usa (0.6.0)
 

@@ -1,7 +1,23 @@
-# Pendientes de la app (0.6.1)
+# Pendientes de la app (0.7.0)
 
-- Pantallas en construcción (con su estado vacío amable): apartados, cajas abiertas, compras, dinero (salvo
-  ¿Dónde está mi dinero?), reportes, proyección y cierre de mes.
+- Pantallas en construcción (con su estado vacío amable): apartados, cajas abiertas, dinero (salvo ¿Dónde está mi
+  dinero?), reportes, proyección y cierre de mes.
+  HECHO (0.7.0): Compras (compras, proveedores, pagar a proveedores).
+- Compras: solo de productos que se guardan en inventario (así es `registrar_compra` del núcleo: un servicio da
+  `PRODUCTO_INVALIDO`). Un servicio comprado (flete, reparación) se registra como gasto en Dinero.
+- Compras: el total de la pantalla es aproximado (calculado en el navegador con la tasa de cada producto); el
+  oficial lo da el núcleo al guardar y se muestra. Falta una lectura del núcleo tipo `calcular_venta_previa`
+  para compras si se quiere el total exacto antes de guardar.
+- Compras: el costo por unidad debe ser mayor que cero en pantalla (el núcleo acepta 0 para regalos o muestras).
+- Proveedores: falta desactivar o reactivar en pantalla (`desactivar_tercero`, `terceros.desactivar`) y
+  marcar como proveedor a alguien que ya es cliente.
+- Saldos iniciales de proveedores (`registrar_saldo_inicial_cxp`, solo el dueño): se pagan desde la app, pero
+  todavía se cargan solo por Excel o SQL.
+- NÚCLEO (usuario limitado a su sucursal): `v_cxp_documento` deja fuera las compras de otras sucursales (RLS de
+  `compra`) pero NO los saldos iniciales, y las tablas `pago_proveedor`, `compra_linea` y
+  `pago_proveedor_anulacion` no se limitan por sucursal. La app ya quita en pantalla los de otra sucursal
+  (`cuentasPorPagar` y la ficha del proveedor), pero el dato llega al navegador; tampoco hay revisión de sucursal
+  al pagar un saldo inicial. Conviene filtrarlo en el núcleo (próxima migración).
 - HECHO (0.6.0): "Alertas que recibo" y el estilo nuevo en todas las pantallas. Falta: notificaciones al celular.
 - Excel: los nombres con emojis se descargan tal cual (si se quitaran, al volver a subir el archivo saldrían
   como "cambios"). Solo lo impreso y lo que se manda por WhatsApp va sin emojis.

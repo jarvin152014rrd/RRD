@@ -6,7 +6,7 @@
 --   Usuarios (clave de la demo: la que imprime demo_app.sh):
 --     dueno@demo.hn (María López, dueña)   admin@demo.hn (Carlos Mejía)
 --     cajero@demo.hn (Ana Sosa)            vendedor@demo.hn (Juan Ramos)
---   Módulos: inventario, compras, dinero, ventas.
+--   Módulos: inventario, compras, dinero, ventas (y desde app 0.7.0 fondos y conciliación).
 --   Cuentas: Caja 1, Caja fuerte, BAC cheques, Banco Atlántida, Caja chica.
 --   Ventas de contado, con tarjeta y al crédito (una ya vencida), un cobro,
 --   un depósito en tránsito, gastos, dos solicitudes de gasto pendientes y
@@ -209,4 +209,68 @@ BEGIN
   PERFORM demo.como(NULL);
   INSERT INTO public.limite_contrato (empresa_id, usuarios) VALUES (e, 5)
   ON CONFLICT (empresa_id) DO UPDATE SET usuarios = 5;
+END $$;
+
+-- 8) (app 0.7.0) Para las pantallas de Dinero: pagos fijos, fondos y socios con un reparto del mes
+--    pasado (ya cerrado) y el estado de cuenta del BAC del mes pasado para cuadrar con el banco.
+DO $$
+DECLARE
+  e      uuid := demo.id('EMPRESA');
+  inicio date := (date_trunc('month', public.hoy_local(demo.id('EMPRESA'))) - interval '1 month')::date;
+  r      jsonb;
+  u_admin uuid := (SELECT id FROM auth.users WHERE email = 'admin@demo.hn');
+  u_dueno uuid := (SELECT id FROM auth.users WHERE email = 'dueno@demo.hn');
+BEGIN
+  INSERT INTO public.modulo_activo (empresa_id, modulo) VALUES (e, 'fondos'), (e, 'conciliacion')
+  ON CONFLICT (empresa_id, modulo) DO UPDATE SET activo = true;
+  PERFORM demo.como('dueno@demo.hn');
+  -- Pagos fijos
+  PERFORM demo.g('PF_ALQ', (public.crear_pago_fijo(e, jsonb_build_object('nombre', 'Alquiler del local', 'categoria_id', demo.id('CAT_ALQ'),
+    'monto_estimado_centavos', 1200000, 'frecuencia', 'mensual', 'dia', 5, 'fecha_inicio', inicio, 'cuenta_dinero_id', demo.id('BAC')))->>'pago_fijo_id')::uuid);
+  PERFORM demo.g('PF_LUZ', (public.crear_pago_fijo(e, jsonb_build_object('nombre', 'Energía eléctrica', 'categoria_id', demo.id('CAT_LUZ'),
+    'monto_estimado_centavos', 240000, 'frecuencia', 'mensual', 'dia', 20, 'fecha_inicio', inicio + 19, 'cuenta_dinero_id', demo.id('BAC')))->>'pago_fijo_id')::uuid);
+  -- Un producto de buen margen comprado y vendido el mes pasado (así el mes cierra con utilidad cobrada para repartir).
+  PERFORM demo.g('TAL', (public.crear_producto(e, '{"codigo": "TAL-500", "nombre": "Taladro eléctrico 500 W",
+    "precio_venta_centavos": 250000}', gen_random_uuid())->>'producto_id')::uuid);
+  PERFORM public.registrar_compra(e, jsonb_build_object('proveedor_id', demo.id('PROV1'), 'bodega_id', demo.id('B1'),
+    'numero_documento', 'FL-1088', 'fecha', inicio + 11, 'condicion', 'contado', 'cuenta_dinero_id', demo.id('BAC'),
+    'lineas', jsonb_build_array(jsonb_build_object('producto_id', demo.id('TAL'), 'cantidad', 10, 'costo_unitario', 100000))), gen_random_uuid());
+  PERFORM public.registrar_venta(e, jsonb_build_object('fecha', inicio + 12,
+    'lineas', jsonb_build_array(demo.l('TAL', 8)), 'pagos', '[{"forma":"efectivo"}]'::jsonb), gen_random_uuid());
+  -- Fondos y socios
+  PERFORM demo.g('F_REINV', (public.crear_fondo(e, jsonb_build_object('nombre', 'Reinversión', 'tipo', 'reinversion', 'meta_tipo', 'ninguna',
+    'cuenta_dinero_id', demo.id('ATL')), 'Demo: fondo de reinversión')->>'fondo_id')::uuid);
+  PERFORM demo.g('F_EMER', (public.crear_fondo(e, jsonb_build_object('nombre', 'Emergencias', 'tipo', 'emergencias', 'meta_tipo', 'meses_pagos_fijos',
+    'meta_meses', 3), 'Demo: fondo de emergencias')->>'fondo_id')::uuid);
+  PERFORM demo.g('S_MARIA', (public.guardar_socio(e, jsonb_build_object('user_id', u_dueno,
+    'nombre', 'María López', 'porcentaje', 60), 'Demo: socia principal')->>'socio_id')::uuid);
+  PERFORM demo.g('S_CARLOS', (public.guardar_socio(e, jsonb_build_object('user_id', u_admin, 'nombre', 'Carlos Mejía', 'porcentaje', 40), 'Demo: socio')->>'socio_id')::uuid);
+  PERFORM public.guardar_regla_distribucion(e, jsonb_build_object('fondos', jsonb_build_array(
+      jsonb_build_object('fondo_id', demo.id('F_REINV'), 'porcentaje', 40), jsonb_build_object('fondo_id', demo.id('F_EMER'), 'porcentaje', 30)),
+    'socios_porcentaje', 30), 'Demo: regla del negocio');
+  PERFORM public.cerrar_mes(e, extract(year FROM inicio)::int, extract(month FROM inicio)::int, 'Demo: cierre del mes pasado');
+  PERFORM public.distribuir_utilidades(e, extract(year FROM inicio)::int, extract(month FROM inicio)::int, '{}'::jsonb, 'Demo: reparto del mes pasado', gen_random_uuid());
+  PERFORM demo.como(NULL);
+END $$;
+
+DO $$
+DECLARE
+  e      uuid := demo.id('EMPRESA');
+  inicio date := (date_trunc('month', public.hoy_local(demo.id('EMPRESA'))) - interval '1 month')::date;
+  r      jsonb;
+BEGIN
+  PERFORM demo.como('dueno@demo.hn');
+  -- Estado de cuenta del BAC del mes pasado: 3 movimientos se emparejan solos; el cheque lo cobró el banco
+  -- 5 días después (queda para emparejarlo a mano) y la comisión y los intereses quedan para crearlos.
+  r := public.importar_estado_cuenta(e, demo.id('BAC'), extract(year FROM inicio)::int, extract(month FROM inicio)::int,
+    jsonb_build_object('archivo', 'bac_mes_pasado.csv', 'saldo_inicial_centavos', 9840000, 'saldo_final_centavos', 6285484,
+      'filas', jsonb_build_array(
+        jsonb_build_object('fecha', inicio + 3, 'descripcion', 'DEBITO TRASLADO CAJA CHICA', 'referencia', 'Fondo de caja chica', 'monto_centavos', -200000),
+        jsonb_build_object('fecha', inicio + 5, 'descripcion', 'PAGO ALQUILER LOCAL', 'monto_centavos', -1200000),
+        jsonb_build_object('fecha', inicio + 16, 'descripcion', 'CHEQUE 000451', 'monto_centavos', -1000000),
+        jsonb_build_object('fecha', inicio + 11, 'descripcion', 'TRANSFERENCIA DISTRIBUIDORA LARA', 'referencia', 'FL-1088', 'monto_centavos', -1150000),
+        jsonb_build_object('fecha', inicio + 27, 'descripcion', 'COMISION MANEJO DE CUENTA', 'monto_centavos', -5750),
+        jsonb_build_object('fecha', inicio + 27, 'descripcion', 'INTERESES GANADOS', 'monto_centavos', 1234))), gen_random_uuid());
+  PERFORM demo.g('CONC1', (r->>'conciliacion_id')::uuid);
+  PERFORM demo.como(NULL);
 END $$;

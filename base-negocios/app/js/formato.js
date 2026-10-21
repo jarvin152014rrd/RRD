@@ -59,6 +59,36 @@ export function aCentavos(texto) {
   return Number(m[1]) * 100 + Number((m[2] || '').padEnd(2, '0'));
 }
 
+// Costo por unidad (app 0.7.0): lempiras con hasta 4 decimales -> centavos con hasta 2 decimales
+// (el núcleo guarda el costo unitario en centavos con decimales). "12.505" -> 1250.5. Se arma con
+// texto (sin multiplicar flotantes) para que llegue exacto. Texto raro o 0 -> null.
+export function aCosto(texto) {
+  const t = String(texto ?? '').trim().replace(/,/g, '').replace(/^L\s*/i, '');
+  const m = /^(\d{1,12})(?:\.(\d{0,4}))?$/.exec(t);
+  if (!m) return null;
+  const dec = (m[2] || '').padEnd(4, '0');
+  const n = Number(`${Number(m[1]) * 100 + Number(dec.slice(0, 2))}.${dec.slice(2)}`);
+  return n > 0 ? n : null;
+}
+
+// Cantidad (unidades, libras...): positiva con hasta 4 decimales. "2.5" -> 2.5; texto raro o 0 -> null.
+export function aCantidad(texto) {
+  const t = String(texto ?? '').trim().replace(/,/g, '');
+  if (!/^\d{1,12}(?:\.\d{0,4})?$/.test(t)) return null;
+  const n = Number(t);
+  return n > 0 ? n : null;
+}
+
+// Fechas "AAAA-MM-DD" sin horas (sin problemas de zona): sumar días y días entre dos fechas.
+export function sumarDias(iso, n) {
+  const [a, m, d] = String(iso).split('-').map(Number);
+  return new Date(Date.UTC(a, m - 1, d + n, 12)).toISOString().slice(0, 10);
+}
+export function diasEntre(desde, hasta) {
+  const f = (x) => { const [a, m, d] = String(x).split('-').map(Number); return Date.UTC(a, m - 1, d); };
+  return Math.round((f(hasta) - f(desde)) / 86400000);
+}
+
 // Centavos -> texto para un campo ("1234.50"), sin símbolo ni comas.
 export function paraCampo(centavos) {
   if (centavos === null || centavos === undefined) return '';

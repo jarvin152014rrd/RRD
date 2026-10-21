@@ -45,9 +45,10 @@ export const MENU = [
     { id: 'traslados', titulo: 'Traslados', icono: 'traslado', modulos: ['inventario'], permisos: ['inventario.trasladar'], pantalla: 'inv_traslados' },
   ] },
   { id: 'compras', titulo: 'Compras', icono: 'compras', subs: [
-    { id: 'compras', titulo: 'Compras', icono: 'documento', modulos: ['compras'], permisos: ['compras.ver'] },
-    { id: 'proveedores', titulo: 'Proveedores', icono: 'proveedor', modulos: ['compras'], permisos: ['compras.ver'] },
-    { id: 'pagos', titulo: 'Pagar a proveedores', icono: 'billetes', modulos: ['compras'], permisos: ['compras.pagar'] },
+    { id: 'compras', titulo: 'Compras', icono: 'documento', modulos: ['compras'], permisos: ['compras.ver'], pantalla: 'compras' },
+    { id: 'proveedores', titulo: 'Proveedores', icono: 'proveedor', modulos: ['compras'], permisos: ['compras.ver'], pantalla: 'compras_proveedores' },
+    // Pagar necesita ver lo que se debe (v_cxp_documento pide compras.ver) además de pagar.
+    { id: 'pagos', titulo: 'Pagar a proveedores', icono: 'billetes', modulos: ['compras'], permisos: ['compras.pagar'], todos: ['compras.ver'], pantalla: 'compras_pagos' },
   ] },
   // Dinero: todo el dinero (para el dueño).
   { id: 'dinero', titulo: 'Dinero', icono: 'dinero', subs: [

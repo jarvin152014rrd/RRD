@@ -1,18 +1,19 @@
 // Service worker: guarda SOLO el "cascarón" (HTML, CSS, JS, íconos) para instalar
 // y abrir rápido. Los datos (/rest/, /auth/) SIEMPRE van al servidor, nunca se guardan.
 // Al cambiar cualquier archivo del cascarón, suba VERSION.
-const VERSION = 'cascaron-0.6.1';
+const VERSION = 'cascaron-0.7.0';
 const CASCARON = [
   './', 'index.html', 'manifest.webmanifest', 'config.js',
   'css/tema.css', 'css/base.css', 'css/controles.css',
   'js/app.js', 'js/api.js', 'js/iconos.js', 'js/sesion.js', 'js/menu.js', 'js/menu_datos.js', 'js/formato.js', 'js/errores.js', 'js/ui.js',
-  'js/datos.js', 'js/comprobante.js', 'js/imprimible.js', 'js/marca.js', 'js/excel.js', 'vendor/xlsx.bundle.js',
+  'js/datos.js', 'js/formularios.js', 'js/comprobante.js', 'js/imprimible.js', 'js/marca.js', 'js/excel.js', 'vendor/xlsx.bundle.js',
   'js/pantallas/entrar.js', 'js/pantallas/inicio.js', 'js/pantallas/alertas.js',
   'js/pantallas/aprobaciones.js', 'js/pantallas/pendientes.js', 'js/pantallas/en_construccion.js', 'js/pantallas/mas.js',
   'js/pantallas/dinero_donde.js',
   'js/pantallas/vender.js', 'js/pantallas/ventas_dia.js', 'js/pantallas/cotizaciones.js', 'js/pantallas/devoluciones.js',
   'js/pantallas/caja_turno.js', 'js/pantallas/caja_dinero.js', 'js/pantallas/caja_gasto.js',
   'js/pantallas/clientes.js', 'js/pantallas/me_deben.js',
+  'js/pantallas/compras.js', 'js/pantallas/compras_proveedores.js', 'js/pantallas/compras_pagos.js',
   'js/pantallas/inv_productos.js', 'js/pantallas/inv_existencias.js', 'js/pantallas/inv_conteo.js', 'js/pantallas/inv_movimientos.js',
   'js/pantallas/inv_traslados.js', 'js/pantallas/inv_excel.js',
   'js/pantallas/aj_negocio.js', 'js/pantallas/aj_usuarios.js', 'js/pantallas/aj_cajas.js', 'js/pantallas/aj_impuestos.js',

@@ -1,5 +1,36 @@
 # Cambios de la app
 
+## app 0.7.0 (núcleo 0.15.0, sin migraciones nuevas) — Compras y Dinero funcionando
+
+### Parte 1: Compras
+- **Compras > Compras:** lista con su estado en chips (pagada, por pagar con su vencimiento, vencida, anulada) y
+  filtros sencillos por fecha y proveedor; arriba cuánto compró en esas fechas y cuánto debe todavía.
+  **Nueva compra:** proveedor, número de factura, fecha, bodega y los productos (se buscan como en Vender) con
+  cantidad y costo por unidad sin ISV. El ISV lo calcula el núcleo con el impuesto de cada producto (en
+  pantalla se ve un total aproximado; si la factura de papel trae otro ISV por redondeo, se puede escribir el de
+  cada línea). **De contado** pide de qué caja o banco sale (con su saldo al lado); **al crédito** pone el
+  vencimiento con el plazo del proveedor (se puede cambiar). Pide confirmación y después muestra subtotal, ISV y
+  total que guardó el núcleo para cuadrarlos con el papel. Los productos entran al inventario con su costo
+  (lo hace `registrar_compra`). **Detalle** con líneas, pagos y **Anular** con motivo (`anular_compra`: nada se
+  borra; los productos salen y el dinero vuelve a su cuenta). Una compra con pagos vigentes pide anular antes
+  los pagos (también desde el detalle, `anular_pago_proveedor`).
+- **Compras > Proveedores:** lista con lo que se le debe a cada uno (rojo si hay vencido), crear y editar
+  (`crear_tercero` / `editar_tercero`; el plazo pide `terceros.credito`), y la ficha con lo que se le debe
+  factura por factura (con **Pagar**) y su historial de compras y pagos.
+- **Compras > Pagar a proveedores:** cuentas por pagar con chips (vencida, por vencer en 7 días, al día), lo
+  vencido primero y tres cifras (debo, vencido, vence en 7 días). **Pagar** total o parcial diciendo de qué caja
+  o banco sale; avisa si es parcial y cuánto quedará; no deja pagar de más. Mensaje: "Pago de L 4,500.00 a
+  Distribuidora X · sale de BAC cheques".
+- Cada formulario manda un `id_operacion` fijo: un doble envío o un reintento sin internet no duplica (probado).
+- **Arreglo:** "Editar cliente" no guardaba (la app mandaba un `id_operacion` que `editar_tercero` no recibe).
+- **Arreglo:** al salir se borran las listas guardadas en memoria (productos, cuentas…): quien entre después
+  en el mismo equipo ya no ve por un minuto las del anterior.
+- Piezas nuevas: `js/formularios.js` (cuentas con saldo, monto, fecha, dato, cifra chica) y en `formato.js`
+  `aCosto`, `aCantidad`, `sumarDias`, `diasEntre`; más estados en `chipEstado`.
+- Demo: módulos de fondos y conciliación, dos pagos fijos, dos fondos y dos socios con el reparto del mes pasado
+  (mes cerrado), una compra de contado y una venta de taladros y el estado de cuenta del BAC del mes pasado.
+- Pruebas nuevas en `app-pruebas/probar_compras_dinero.cjs` (las corre `probar_app.sh`). Cascarón `cascaron-0.7.0`.
+
 ## app 0.6.1 (núcleo 0.15.0, sin migraciones nuevas) — Arreglos de la revisión de la ronda 2
 
 - **Contraste automático siempre AA:** el texto oscuro ahora es negro (#000000); con colores "del medio"

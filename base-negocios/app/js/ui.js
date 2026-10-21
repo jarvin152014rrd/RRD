@@ -257,6 +257,11 @@ const ESTADOS = {
   pendiente: ['Pendiente', 'dorado'], pendiente_aprobacion: ['En espera de aprobación', 'dorado'], por_emitir: ['Por emitir', 'dorado'],
   vencida: ['Vencida', 'rojo'], anulada: ['Anulada', 'rojo'], rechazada: ['Rechazada', 'rojo'], bajo_minimo: ['Bajo el mínimo', 'rojo'],
   cancelada: ['Cancelada', 'neutro'], inactivo: ['Inactivo', 'neutro'], inactiva: ['Inactiva', 'neutro'],
+  // app 0.7.0 (Compras y Dinero)
+  aplicado: ['Aplicado', 'verde'], confirmada: ['Confirmado', 'verde'], conciliado: ['Cuadrado', 'verde'], cerrada: ['Cerrada', 'verde'],
+  por_vencer: ['Por vencer', 'dorado'], por_pagar: ['Por pagar', 'dorado'], en_transito: ['En tránsito', 'dorado'], proximo: ['Próximo', 'dorado'],
+  abierta: ['Abierta', 'dorado'],
+  vencido: ['Vencido', 'rojo'], anulado: ['Anulado', 'rojo'], rechazado: ['Rechazado', 'rojo'],
 };
 export function chipEstado(estado, texto = null) {
   const [t, c] = ESTADOS[estado] || [String(estado || ''), 'neutro'];
