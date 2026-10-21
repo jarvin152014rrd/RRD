@@ -26,8 +26,8 @@ export async function mostrar(vista, ctx) {
         derecha: [monto(dinero(v.total_centavos), { sentido: emitida ? 'entra' : null }),
           emitida ? chipEstado(v.condicion === 'credito' ? 'credito' : 'contado') : chipEstado(v.estado)],
         abajo: h('div', { class: 'botones' },
-          ['emitida', 'anulada'].includes(v.estado) ? h('button', { type: 'button', class: 'boton', onclick: () => verComprobante(v) }, 'Comprobante') : null,
-          emitida && puede('ventas.devolver') ? h('button', { type: 'button', class: 'boton',
+          ['emitida', 'anulada'].includes(v.estado) ? h('button', { type: 'button', class: 'boton', 'aria-label': `Comprobante de ${v.numero_documento || 'la venta #' + v.numero}`, onclick: () => verComprobante(v) }, 'Comprobante') : null,
+          emitida && puede('ventas.devolver') ? h('button', { type: 'button', class: 'boton', 'aria-label': `Devolver de ${v.numero_documento || 'la venta #' + v.numero}`,
             onclick: () => { prepararDevolucion(v.venta_id); location.hash = '#/vender/devoluciones'; } }, 'Devolver') : null),
         props: { class: 'venta-fila-icono', dataset: { venta: v.venta_id } },
       });

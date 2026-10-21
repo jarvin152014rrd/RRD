@@ -33,7 +33,7 @@ export async function mostrar(vista, ctx) {
         detalle: [c.rtn ? 'RTN ' + c.rtn : null, c.telefono].filter(Boolean).join(' · ') || 'Sin RTN ni teléfono',
         derecha: s && s.saldo_centavos ? [cifra(dinero(s.saldo_centavos), { negativo: Boolean(s.vencido_centavos) }),
           chip(s.vencido_centavos ? 'Con atraso' : 'Debe', s.vencido_centavos ? 'rojo' : 'dorado')] : null,
-        abajo: h('div', { class: 'botones' }, h('button', { type: 'button', class: 'boton', onclick: () => abrirFicha(vista, ctx, c.id) }, 'Ver')),
+        abajo: h('div', { class: 'botones' }, h('button', { type: 'button', class: 'boton', 'aria-label': `Ver a ${c.nombre}`, onclick: () => abrirFicha(vista, ctx, c.id) }, 'Ver')),
         props: { dataset: { cliente: c.id } },
       });
     }) : [estadoVacio({ icono: 'buscar', chico: true, texto: 'No hay clientes con ese nombre.' })]));
@@ -179,16 +179,20 @@ function formularioCobro(vista, ctx, cli, cxc) {
     const r = await conBoton(boton, zonaError, () => escribir('registrar_cobro', { p_empresa_id: empresaId(), p_datos: datos, p_id_operacion: id }), 'Cobrando…');
     if (!r) return;
     const hecho = `Cobro #${r.numero} guardado · ${dinero(r.monto_centavos)} en ${nombreForma(selForma.value).toLowerCase()}`;
+    // saldo_cliente_centavos es de TODA la empresa: a quien solo ve su sucursal se le muestra lo que
+    // queda de lo que él ve (lo que debía en su sucursal menos lo aplicado ahora).
+    const queda = soloLasMias ? Math.max(0, deuda - (r.aplicado_centavos || 0)) : r.saldo_cliente_centavos;
+    const textoQueda = soloLasMias ? 'Todavía debe en su sucursal' : 'Todavía debe';
     aviso(hecho);
     vista.replaceChildren(h('section', { class: 'tarjeta tarjeta-angosta', 'aria-labelledby': 't-cobok' },
       titulo('h1', 'cobrar', `Cobro #${r.numero} de ${cli.nombre}`, { id: 't-cobok' }),
-      mensaje('ok', hecho, r.saldo_cliente_centavos ? `Todavía debe ${dinero(r.saldo_cliente_centavos)}.` : 'Ya no debe nada.', { class: 'resultado' }),
+      mensaje('ok', hecho, queda ? `${textoQueda} ${dinero(queda)}.` : soloLasMias ? 'Ya no debe nada en su sucursal.' : 'Ya no debe nada.', { class: 'resultado' }),
       h('div', { class: 'fila' }, h('span', {}, 'Recibido'), cifra(dinero(r.monto_centavos), { sentido: 'entra' })),
       h('div', { class: 'fila' }, h('span', {}, 'Aplicado a facturas'), h('span', { class: 'monto', dataset: { dato: 'aplicado' } }, dinero(r.aplicado_centavos))),
       (r.aplicaciones || []).map((a) => h('div', { class: 'fila' }, h('span', { class: 'detalle' }, a.documento), h('span', { class: 'monto' }, dinero(a.monto_centavos)))),
       r.excedente_centavos ? h('div', { class: 'fila' }, h('span', {}, 'Queda a su favor'), h('span', { class: 'monto', dataset: { dato: 'excedente' } }, dinero(r.excedente_centavos))) : null,
       r.vuelto_centavos ? h('div', { class: 'fila' }, h('span', {}, 'Vuelto'), h('span', { class: 'monto' }, dinero(r.vuelto_centavos))) : null,
-      h('div', { class: 'fila fila-total' }, h('span', {}, 'Todavía debe'), h('span', { class: 'monto', dataset: { dato: 'saldo-restante' } }, dinero(r.saldo_cliente_centavos))),
+      h('div', { class: 'fila fila-total' }, h('span', {}, textoQueda), h('span', { class: 'monto', dataset: { dato: 'saldo-restante' } }, dinero(queda))),
       h('div', { class: 'botones' }, h('button', { type: 'button', class: 'boton', onclick: () => abrirFicha(vista, ctx, cli.id) }, 'Ver la ficha'))));
   });
   revisar();

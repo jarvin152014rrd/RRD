@@ -5,8 +5,8 @@
 // No importa nada: lo usan comprobante.js, app.js y las pruebas.
 
 // Emojis y pictogramas: Extended_Pictographic (menos (c), (R) y TM, que son letras de marca),
-// banderas (indicadores regionales), tonos de piel, selector de variación, unión (ZWJ) y tecla (keycap).
-export const EMOJI = /(?:(?![\u00A9\u00AE\u2122])\p{Extended_Pictographic}|[\u{1F1E6}-\u{1F1FF}\u{1F3FB}-\u{1F3FF}\uFE0E\uFE0F\u200D\u20E3])/gu;
+// banderas (indicadores regionales y las etiquetas de banderas de regiones, U+E0020 a U+E007F), tonos de piel, selector de variación, unión (ZWJ) y tecla (keycap).
+export const EMOJI = /(?:(?![\u00A9\u00AE\u2122])\p{Extended_Pictographic}|[\u{1F1E6}-\u{1F1FF}\u{1F3FB}-\u{1F3FF}\uFE0E\uFE0F\u200D\u20E3\u{E0020}-\u{E007F}])/gu;
 
 export function tieneEmoji(texto) {
   EMOJI.lastIndex = 0;

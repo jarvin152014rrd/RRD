@@ -46,9 +46,9 @@ export async function mostrar(vista, ctx) {
       detalle: `${PUESTOS[u.rol] || u.rol} · ${sucs.length ? 'Sucursal: ' + sucs.join(', ') : 'Todas las sucursales'}`,
       derecha: chipEstado(u.activo ? 'activo' : 'inactivo'),
       abajo: tocar ? h('div', { class: 'botones' },
-        sucursales.length > 1 ? h('button', { type: 'button', class: 'boton', onclick: () => elegirSucursales(u, sucs) }, 'Sucursales') : null,
-        h('button', { type: 'button', class: 'boton', onclick: () => accion(u, 'cerrar') }, 'Cerrar sesión'),
-        h('button', { type: 'button', class: 'boton boton-peligro', onclick: () => accion(u, 'desactivar') }, 'Desactivar')) : null,
+        sucursales.length > 1 ? h('button', { type: 'button', class: 'boton', 'aria-label': `Sucursales de ${u.nombre}`, onclick: () => elegirSucursales(u, sucs) }, 'Sucursales') : null,
+        h('button', { type: 'button', class: 'boton', 'aria-label': `Cerrar la sesión de ${u.nombre}`, onclick: () => accion(u, 'cerrar') }, 'Cerrar sesión'),
+        h('button', { type: 'button', class: 'boton boton-peligro', 'aria-label': `Desactivar a ${u.nombre}`, onclick: () => accion(u, 'desactivar') }, 'Desactivar')) : null,
       props: { dataset: { usuario: u.user_id } },
     });
   });
@@ -161,7 +161,8 @@ async function tablaPermisos(E) {
             accion: (motivo) => rpc('cambiar_permiso_rol', { p_empresa_id: E, p_rol: r, p_permiso: p.codigo, p_otorgar: otorgar, p_motivo: motivo }) });
           if (ok) aviso(`Permiso guardado · ${PUESTOS[r]}: ${otorgar ? 'ahora puede' : 'ya no puede'} ${(p.descripcion || p.codigo).toLowerCase()}`); else c.checked = !otorgar;
         });
-        return c;
+        // Casilla de 22 px dentro de un label de 44 px (área táctil).
+        return h('label', { class: 'casilla-toque' }, c);
       })]) });
   return h('section', { class: 'tarjeta', 'aria-labelledby': 't-perm' },
     titulo('h2', 'candado', 'Qué puede hacer cada puesto', { id: 't-perm' }),

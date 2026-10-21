@@ -15,7 +15,8 @@
      texto encima del color principal / del acento, el principal como letra sobre blanco y el foco. */
   --color-principal-texto: #0f1f3d;
   --color-en-acento: #0f1f3d;
-  --color-foco: #c8972a;
+  --color-acento-icono: #b48826; /* el acento oscurecido: contraste 3 o más sobre blanco (íconos de títulos) */
+  --color-foco: #0f1f3d;        /* el acento por defecto no llega a 3 sobre blanco: el foco usa el azul marino */
   --color-peligro: #a12a1e;
   --color-peligro-fondo: #fbeae7;
   --color-ok: #1e6b3a;

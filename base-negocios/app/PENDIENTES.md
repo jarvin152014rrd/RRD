@@ -1,4 +1,4 @@
-# Pendientes de la app (0.6.0)
+# Pendientes de la app (0.6.1)
 
 - Pantallas en construcción (con su estado vacío amable): apartados, cajas abiertas, compras, dinero (salvo
   ¿Dónde está mi dinero?), reportes, proyección y cierre de mes.
@@ -7,9 +7,15 @@
   como "cambios"). Solo lo impreso y lo que se manda por WhatsApp va sin emojis.
 - Comprobante: todavía no lleva el logo del negocio (la ronda 2 no agrega cambios visuales a lo impreso).
 - Vender no tiene un título grande (h1) arriba: la pantalla empieza con "Buscar producto o servicio".
-- La pantalla de entrar muestra la marca guardada en ESE equipo; en un equipo nuevo sale "Mi Negocio" hasta que
-  alguien entra una vez (antes de entrar no se puede leer la base). Si el proveedor quiere el nombre desde el
-  primer día, se podría poner en `config.js` (anotado, no hecho).
+- DECISIÓN: la pantalla de entrar muestra la marca (nombre, logo y colores) guardada en ESE equipo: en un equipo
+  compartido entre empresas distintas, la pantalla de entrar muestra la marca del último negocio. Son datos
+  públicos del negocio, no sensibles. En un equipo nuevo usa `nombreNegocio` de `config.js` (lo pone
+  `armar_app.sh` desde la ficha) o "Mi Negocio".
+- NÚCLEO (próxima migración): `guardar_preferencias_alertas` no revisa `interno.puede_ver_alerta`
+  (045_alertas_resumen.sql, líneas 320-328): un usuario podría guardar preferencias de tipos que no ve. No hace
+  daño (esas alertas no le llegan igual), pero conviene rechazarlo en el servidor.
+- Cobro de un usuario limitado a su sucursal: falta una prueba automática del saldo restante (hoy se calcula en
+  la app como lo que debía en su sucursal menos lo aplicado).
 - Vista previa del Armador: su burbuja de logo sigue en 36 px (la app pasó a 44 px).
 - Inicio: "Lo más vendido" se calcula en el navegador con las últimas 1,000 líneas de venta (si hay más en la
   semana, lo dice). Con mucho volumen convendrá una función del núcleo que ya lo sume.

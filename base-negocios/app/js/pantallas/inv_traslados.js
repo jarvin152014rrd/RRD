@@ -33,7 +33,7 @@ export async function mostrar(vista, ctx) {
   };
   const pintarLineas = () => zonaLineas.replaceChildren(...(lineas.length ? lineas.map((l, i) => h('div', { class: 'conteo-fila' },
     h('span', {}, h('strong', {}, l.nombre), h('span', { class: 'detalle' }, ` ${l.codigo} · hay ${cantidad(l.hay)} ${l.unidad || ''}`),
-      h('button', { type: 'button', class: 'boton', onclick: () => { lineas.splice(i, 1); pintarLineas(); } }, 'Quitar')), l.input))
+      h('button', { type: 'button', class: 'boton', 'aria-label': `Quitar ${l.nombre}`, onclick: () => { lineas.splice(i, 1); pintarLineas(); } }, 'Quitar')), l.input))
     : [estadoVacio({ icono: 'traslado', chico: true, texto: 'Busque y agregue los productos que va a trasladar.' })]));
   function agregar(x) {
     if (!lineas.some((l) => l.producto_id === x.producto_id)) {
@@ -71,7 +71,7 @@ export async function mostrar(vista, ctx) {
         titulo: h('strong', {}, `Traslado #${m.numero}: ${m.de} → ${m.a}`),
         detalle: `${fecha(m.fecha)} · ${m.lineas} producto(s) · hace ${m.dias} día(s)`,
         derecha: chip('En camino', 'dorado'),
-        abajo: m.puedo_recibir ? h('div', { class: 'botones' }, h('button', { type: 'button', class: 'boton boton-principal', onclick: async (ev) => {
+        abajo: m.puedo_recibir ? h('div', { class: 'botones' }, h('button', { type: 'button', class: 'boton boton-principal', 'aria-label': `Confirmar recepción del traslado #${m.numero}`, onclick: async (ev) => {
           if (!await confirmar({ titulo: 'Confirmar recepción', texto: `¿Llegó el traslado #${m.numero}? Si llegó menos, anótelo y haga un conteo.`, textoBoton: 'Sí, llegó' })) return;
           const z = h('div'); ev.target.after(z);
           const r = await conBoton(ev.target, z, () => escribir('confirmar_recepcion_traslado', { p_documento_id: m.documento_id }));

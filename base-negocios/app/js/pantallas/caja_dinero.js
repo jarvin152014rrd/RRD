@@ -58,9 +58,11 @@ export async function mostrar(vista, ctx = {}) {
     const r = await conBoton(boton, zonaError, () => escribir('trasladar_dinero', { p_empresa_id: empresaId(), p_datos: datos }));
     if (r) {
       olvidarDatos('cuentas');
-      const de = (sel) => (sel.selectedOptions[0] ? sel.selectedOptions[0].textContent.split(' · ')[0] : '');
-      aviso(dep ? `Depósito de ${dinero(m)} registrado · sale de ${de(selCaja)} · queda en tránsito hasta confirmarlo`
-        : `Retiro de ${dinero(m)} registrado · entra a ${de(selCaja)}`, 'ok', 7000);
+      // Monto que devuelve el servidor y nombre de la caja tomado del dato (no del texto de la opción).
+      const caja = (cajas.find((c) => c.cuenta_dinero_id === selCaja.value) || {}).nombre || 'la caja';
+      const monto = r.monto_centavos ?? m;
+      aviso(dep ? `Depósito de ${dinero(monto)} registrado · sale de ${caja} · queda en tránsito hasta confirmarlo`
+        : `Retiro de ${dinero(monto)} registrado · entra a ${caja}`, 'ok', 7000);
       vista.replaceChildren();
       mostrar(vista, ctx);
     }

@@ -276,13 +276,15 @@ export function monto(texto, { sentido = null, negativo = false, dato = null, si
 // filaProps(i) = props de cada <tr>.
 export function tabla({ columnas, filas, props = {}, filaProps = () => ({}) }) {
   const celda = (x) => (x && typeof x === 'object' && !(x instanceof Node) && !Array.isArray(x) && 'contenido' in x ? x : { contenido: x });
-  return h('div', { class: 'tabla-envoltura' }, h('table', { ...props, class: 'tabla tabla-celular' + (props.class ? ' ' + props.class : '') },
-    h('thead', {}, h('tr', {}, columnas.map((c) => h('th', { scope: 'col', class: c.num ? 'num' : null }, c.titulo)))),
-    h('tbody', {}, filas.map((f, i) => h('tr', filaProps(i) || {}, f.map((x, j) => {
+  // role="table/row/cell/columnheader": en el celular la tabla se pinta como bloques (CSS) y sin los
+  // roles el lector de pantalla dejaría de anunciarla como tabla.
+  return h('div', { class: 'tabla-envoltura' }, h('table', { role: 'table', ...props, class: 'tabla tabla-celular' + (props.class ? ' ' + props.class : '') },
+    h('thead', { role: 'rowgroup' }, h('tr', { role: 'row' }, columnas.map((c) => h('th', { scope: 'col', role: 'columnheader', class: c.num ? 'num' : null }, c.titulo)))),
+    h('tbody', { role: 'rowgroup' }, filas.map((f, i) => h('tr', { role: 'row', ...(filaProps(i) || {}) }, f.map((x, j) => {
       const c = columnas[j] || {};
       const { contenido, props: p = {} } = celda(x);
       const clase = [c.num ? 'num' : null, j === 0 ? 'celda-principal' : null, c.acciones ? 'celda-acciones' : null, p.class || null].filter(Boolean).join(' ');
-      return h('td', { ...p, class: clase || null, 'data-titulo': c.titulo || null }, contenido);
+      return h('td', { role: 'cell', ...p, class: clase || null, 'data-titulo': c.titulo || null }, contenido);
     }))))));
 }
 

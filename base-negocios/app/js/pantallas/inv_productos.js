@@ -36,7 +36,7 @@ export async function mostrar(vista, ctx) {
       titulo: [h('strong', {}, p.nombre), !p.activo ? [' ', chipEstado('inactivo')] : null],
       detalle: [p.codigo, p.categoria, p.tipo === 'servicio' ? 'Servicio' : p.unidad].filter(Boolean).join(' · '),
       derecha: monto(dinero(p.precio_con_isv_centavos)),
-      abajo: h('div', { class: 'botones' }, h('button', { type: 'button', class: 'boton', onclick: () => ficha(vista, ctx, p.producto_id) }, 'Ver')),
+      abajo: h('div', { class: 'botones' }, h('button', { type: 'button', class: 'boton', 'aria-label': `Ver ${p.nombre}`, onclick: () => ficha(vista, ctx, p.producto_id) }, 'Ver')),
       props: { dataset: { producto: p.producto_id } },
     }))
       : [estadoVacio({ icono: 'buscar', chico: true, texto: 'No hay productos con ese nombre.' })]));

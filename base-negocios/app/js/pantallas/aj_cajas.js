@@ -28,8 +28,8 @@ export async function mostrar(vista, ctx) {
       c.politica_saldo_negativo && c.politica_saldo_negativo !== 'no_permitir' ? POLITICAS[c.politica_saldo_negativo] : null].filter(Boolean).join(' · '),
     derecha: [monto(dinero(c.saldo_centavos), { negativo: c.saldo_centavos < 0 }), c.saldo_centavos < 0 ? chip('En negativo', 'rojo') : null],
     abajo: h('div', { class: 'botones' },
-      dueno && c.activa && c.tipo !== 'transito' ? h('button', { type: 'button', class: 'boton', onclick: () => politica(c) }, 'Saldo negativo') : null,
-      ['efectivo_caja', 'banco', 'caja_chica'].includes(c.tipo) ? h('button', { type: 'button', class: `boton ${c.activa ? 'boton-peligro' : ''}`,
+      dueno && c.activa && c.tipo !== 'transito' ? h('button', { type: 'button', class: 'boton', 'aria-label': `Saldo negativo de ${c.nombre}`, onclick: () => politica(c) }, 'Saldo negativo') : null,
+      ['efectivo_caja', 'banco', 'caja_chica'].includes(c.tipo) ? h('button', { type: 'button', class: `boton ${c.activa ? 'boton-peligro' : ''}`, 'aria-label': `${c.activa ? 'Desactivar' : 'Activar'} ${c.nombre}`,
         onclick: () => activar(c) }, c.activa ? 'Desactivar' : 'Activar') : null),
     props: { dataset: { cuenta: c.cuenta_dinero_id } },
   }));

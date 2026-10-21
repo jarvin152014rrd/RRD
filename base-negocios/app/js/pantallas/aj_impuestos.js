@@ -16,10 +16,10 @@ export async function mostrar(vista, ctx) {
   // En el celular cada impuesto es una tarjeta: arriba el nombre y su código.
   const tablaImp = tabla({ props: { id: 'tabla-impuestos' },
     columnas: [{ titulo: 'Nombre' }, { titulo: 'Código' }, { titulo: 'Tasa', num: true }, { titulo: 'Clase' }, { titulo: 'Predeterminado' }, { titulo: 'Activo' }]
-      .concat(editar ? [{ titulo: '', acciones: true }] : []),
+      .concat(editar ? [{ titulo: 'Acciones', acciones: true }] : []),
     filas: lista.map((i) => [h('strong', {}, i.nombre), i.codigo, `${Number(i.porcentaje)} %`, CLASES[i.clase] || i.clase,
       i.predeterminado ? chip('Sí', 'azul') : 'No', chipEstado(i.activo ? 'activo' : 'inactivo')]
-      .concat(editar ? [h('button', { type: 'button', class: 'boton', onclick: () => formulario(i) }, icono('editar'), 'Cambiar')] : [])) });
+      .concat(editar ? [h('button', { type: 'button', class: 'boton', 'aria-label': `Cambiar ${i.nombre}`, onclick: () => formulario(i) }, icono('editar'), 'Cambiar')] : [])) });
 
   function formulario(i) {
     const nuevo = !i;

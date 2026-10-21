@@ -1,5 +1,28 @@
 # Cambios de la app
 
+## app 0.6.1 (núcleo 0.15.0, sin migraciones nuevas) — Arreglos de la revisión de la ronda 2
+
+- **Contraste automático siempre AA:** el texto oscuro ahora es negro (#000000); con colores "del medio"
+  (#ff0000, #808080) el #1a1a1a no llegaba a 4.5. Si aun así ninguno llegara, el fondo se oscurece o aclara
+  hasta que llegue (`fondoLegible`).
+- **Foco:** usa el acento solo si tiene contraste 3 o más sobre blanco (antes 2); si no, el azul de la marca.
+  Por eso el foco de siempre pasa a azul marino fuera del encabezado. **Íconos de los títulos:** el acento
+  oscurecido hasta 3 o más sobre blanco (`--color-acento-icono`).
+- **Doble aprobación:** si el servidor responde `falta_segunda_aprobacion`, el aviso dice "Primera aprobación
+  lista; falta la segunda" (en Pendientes y en Inicio).
+- **Cobro de un usuario limitado a su sucursal:** "Todavía debe en su sucursal" = lo que debía en su sucursal
+  menos lo aplicado (antes salía el saldo de toda la empresa).
+- **Tablas en el celular accesibles:** `role` table/row/cell/columnheader y el encabezado escondido solo a la
+  vista. Impuestos: columna "Acciones" y "Cambiar <nombre>". Los botones repetidos en filas dicen de qué son
+  para el lector de pantalla (Ver, Cobrar, Devolver, Desactivar, Aprobar...).
+- **Tabla de permisos:** cada casilla dentro de un área de 44 px.
+- **Emojis:** también se quitan las etiquetas de banderas de regiones (U+E0020 a U+E007F).
+- **Gasto y depósito:** el mensaje usa el monto que devuelve el servidor y el nombre de la cuenta del dato.
+- **Entrar en un equipo nuevo:** `armar_app.sh` pone en `config.js` solo el nombre del negocio (de la ficha,
+  validado) como `nombreNegocio`; la pantalla de entrar lo usa si el equipo no tiene marca guardada.
+- Pruebas: `probar_app.cjs` 43 (nueva: doble aprobación, casillas de 44 px, nombre en config.js; ampliadas:
+  contraste con #ff0000, #808080, #f5e663 y #0b0b2e, roles de la tabla, bandera de región). Cascarón `cascaron-0.6.1`.
+
 ## app 0.6.0 (núcleo 0.15.0, sin migraciones nuevas) — Rediseño, ronda 2: todas las pantallas, la marca y lo impreso
 
 - **El estilo de Inicio en todas las pantallas:** títulos con ícono dorado; montos en verde (entra dinero) y

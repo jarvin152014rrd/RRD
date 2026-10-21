@@ -23,7 +23,7 @@ export async function mostrar(vista, ctx) {
       detalle: [`${c.cliente_nombre || 'Consumidor final'} · vence ${fecha(c.vigente_hasta)}${c.vendedor ? ' · ' + c.vendedor : ''}`, h('br'),
         (c.lineas || []).map((l) => `${fCantidad(l.cantidad)} ${l.descripcion}`).join(', ')],
       derecha: [monto(dinero(c.total_centavos)), chipEstado('vigente')],
-      abajo: h('div', { class: 'botones' }, h('button', { type: 'button', class: 'boton boton-principal', onclick: () => convertir(vista, ctx, c) }, 'Convertir en venta')),
+      abajo: h('div', { class: 'botones' }, h('button', { type: 'button', class: 'boton boton-principal', 'aria-label': `Convertir en venta la cotización #${c.numero}`, onclick: () => convertir(vista, ctx, c) }, 'Convertir en venta')),
       props: { dataset: { cotizacion: c.cotizacion_id } },
     })))
       : estadoVacio({ icono: 'documento', titulo: 'No hay cotizaciones vigentes',

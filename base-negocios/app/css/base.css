@@ -110,7 +110,7 @@ h2 { font-size: 18px; margin: 0 0 8px; }
   }
   .boton-barra svg { width: 24px; height: 24px; }
   .boton-barra[aria-current="page"] { color: var(--color-principal-texto); font-weight: 600; }
-  .boton-barra[aria-current="page"] svg { color: var(--color-acento); }
+  .boton-barra[aria-current="page"] svg { color: var(--color-acento-icono, var(--color-acento)); }
 }
 
 /* ---------------- Vender (0.2.0) ---------------- */
@@ -244,7 +244,10 @@ h2 { font-size: 18px; margin: 0 0 8px; }
 .campo input[type=color] { padding: 4px; height: 48px; }
 .permisos-tabla td, .permisos-tabla th { text-align: center; }
 .permisos-tabla td:first-child, .permisos-tabla th:first-child { text-align: left; }
-.permisos-tabla input { width: 22px; height: 22px; }
+.permisos-tabla input { width: 22px; height: 22px; margin: 0; }
+/* Cada casilla va dentro de un label de 44 px o más: fácil de tocar con el dedo. */
+.casilla-toque { display: inline-flex; align-items: center; justify-content: center; min-width: 44px; min-height: 44px; cursor: pointer; border-radius: 8px; }
+.casilla-toque:hover { background: var(--color-neutro-fondo); }
 .conteo-fila { display: grid; grid-template-columns: minmax(0, 1fr) 130px; gap: 12px; align-items: center; padding: 8px 0; border-bottom: 1px solid var(--color-linea); }
 .conteo-fila input { font: inherit; font-size: 16px; min-height: 44px; padding: 8px 10px; border: 1px solid #8a8780; border-radius: 8px; width: 100%; }
 /* Tablas en el celular: ver "Tablas como tarjetas" (app 0.6.0) al final. */
@@ -260,7 +263,7 @@ h2 { font-size: 18px; margin: 0 0 8px; }
 .texto-azul { color: var(--color-azul); }
 .texto-neutro { color: var(--color-neutro); }
 .titulo-icono { display: flex; align-items: center; gap: 10px; }
-.titulo-icono > .icono { color: var(--color-acento); width: 22px; height: 22px; }
+.titulo-icono > .icono { color: var(--color-acento-icono, var(--color-acento)); width: 22px; height: 22px; }
 h1.titulo-icono > .icono { width: 26px; height: 26px; }
 
 /* Encabezado: campanita con número */
@@ -450,7 +453,8 @@ a.fila-icono:hover .fila-icono-titulo { text-decoration: underline; }
 
   /* Tablas como tarjetas (todas las que usan ui.tabla o la clase tabla-celular) */
   .tabla-celular, .tabla-celular tbody { display: block; width: 100%; }
-  .tabla-celular thead { display: none; }
+  /* El encabezado se esconde solo a la vista: los lectores de pantalla lo siguen leyendo (role en ui.tabla). */
+  .tabla-celular thead { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
   .tabla-celular tr {
     display: block; background: var(--color-tarjeta); border: 1px solid var(--color-linea); border-radius: 12px;
     padding: 10px 14px; margin: 0 0 10px; box-shadow: 0 1px 2px rgba(15,31,61,.06);

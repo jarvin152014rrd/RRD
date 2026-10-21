@@ -48,7 +48,7 @@ export function nombreVisible() {
 // La marca SOLO cambia el color principal (encabezado y botones principales) y el de acento.
 // Los colores con significado (verde, rojo, dorado y azul de estado, css/tema.css) NUNCA cambian.
 const BLANCO = '#ffffff';
-const OSCURO = '#1a1a1a';
+const OSCURO = '#000000'; // con negro, blanco o negro siempre llega a 4.5 (el peor caso da ~4.58)
 const esColor = (x) => typeof x === 'string' && /^#[0-9a-fA-F]{6}$/.test(x);
 const rgb = (hex) => { const n = parseInt(hex.slice(1), 16); return [n >> 16, (n >> 8) & 255, n & 255]; };
 const aHex = (c) => '#' + c.map((x) => Math.round(Math.min(255, Math.max(0, x))).toString(16).padStart(2, '0')).join('');
@@ -69,9 +69,24 @@ export function contraste(a, b) {
 }
 export function contrasteConBlanco(hex) { return contraste(hex, BLANCO); }
 
-// Texto encima de un color: blanco u oscuro, el que más se lea (siempre cumple AA: con blanco o con
-// #1a1a1a, al menos uno de los dos pasa 4.5 sobre cualquier color).
+// Texto encima de un color: blanco o negro, el que más se lea.
 export function textoSobre(fondo) { return contraste(fondo, BLANCO) >= contraste(fondo, OSCURO) ? BLANCO : OSCURO; }
+
+// Fondo que SÍ permite texto AA: si con ningún texto llega a 4.5, se oscurece o se aclara (hacia el
+// lado que ya estaba más cerca) hasta que llegue. Con negro y blanco no debería hacer falta nunca,
+// pero así la regla queda garantizada aunque cambie el color oscuro.
+export function fondoLegible(fondo) {
+  const llega = (c) => Math.max(contraste(c, BLANCO), contraste(c, OSCURO)) >= 4.5;
+  if (llega(fondo)) return fondo;
+  const hacia = contraste(fondo, BLANCO) >= contraste(fondo, OSCURO) ? '#000000' : '#ffffff';
+  for (let t = 0.05; t <= 1.0001; t += 0.05) { const c = mezclar(fondo, hacia, t); if (llega(c)) return c; }
+  return hacia;
+}
+// Color para ÍCONOS decorativos sobre blanco (títulos): contraste 3 o más (se oscurece si hace falta).
+export function iconoSobreBlanco(hex) {
+  for (let t = 0; t <= 1.0001; t += 0.05) { const c = mezclar(hex, '#000000', t); if (contraste(c, BLANCO) >= 3) return c; }
+  return OSCURO;
+}
 
 // Texto "suave" (menos fuerte) encima de un color, sin bajar de AA.
 function suaveSobre(fondo, texto) {
@@ -89,21 +104,22 @@ function legibleSobreClaro(hex, fondo = '#f4f2ee') {
 export function coloresDeMarca(m = {}) {
   const v = {};
   if (esColor(m.color_principal)) {
-    const p = m.color_principal.toLowerCase();
+    const p = fondoLegible(m.color_principal.toLowerCase());
     const en = textoSobre(p);
     Object.assign(v, { '--color-principal': p, '--color-principal-2': mezclar(p, BLANCO, 0.12), '--color-en-principal': en,
       '--color-en-principal-suave': suaveSobre(p, en), '--color-principal-texto': legibleSobreClaro(p) });
   }
   if (esColor(m.color_acento)) {
-    const a = m.color_acento.toLowerCase();
-    // Foco: el acento, salvo que casi no se vea sobre blanco (entonces el principal legible).
-    Object.assign(v, { '--color-acento': a, '--color-en-acento': textoSobre(a),
-      '--color-foco': contraste(a, BLANCO) >= 2 ? a : (v['--color-principal-texto'] || '#0f1f3d') });
+    const a = fondoLegible(m.color_acento.toLowerCase());
+    // Foco: el acento solo si se ve sobre blanco (3 o más); si no, el principal legible.
+    // Íconos de los títulos: el acento oscurecido hasta 3 o más sobre blanco.
+    Object.assign(v, { '--color-acento': a, '--color-en-acento': textoSobre(a), '--color-acento-icono': iconoSobreBlanco(a),
+      '--color-foco': contraste(a, BLANCO) >= 3 ? a : (v['--color-principal-texto'] || '#0f1f3d') });
   }
   return v;
 }
 const VARIABLES = ['--color-principal', '--color-principal-2', '--color-en-principal', '--color-en-principal-suave',
-  '--color-principal-texto', '--color-acento', '--color-en-acento', '--color-foco'];
+  '--color-principal-texto', '--color-acento', '--color-en-acento', '--color-acento-icono', '--color-foco'];
 
 // Pone los colores (o vuelve a los del tema si no hay) y el logo y nombre del encabezado.
 // raiz puede ser otro elemento (la vista previa de Ajustes > Mi negocio): ahí solo cambian los colores.

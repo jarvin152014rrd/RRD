@@ -1,6 +1,7 @@
 // Pantalla para entrar: cálida, con el logo y el nombre del negocio grandes (los últimos que se
 // usaron en este equipo; ver marca.js) y solo dos datos: correo y contraseña.
 import * as api from '../api.js';
+import { config } from '../api.js';
 import { h, cajaError, mensaje as caja } from '../ui.js';
 import { marcaGuardada, aplicarMarca, iniciales } from '../marca.js';
 
@@ -8,9 +9,12 @@ export function mostrar(raiz, { mensaje, alEntrar }) {
   // Marca de este equipo (o la de siempre si nunca entró nadie aquí).
   const m = marcaGuardada();
   aplicarMarca(m || {});
-  const nombre = (m && m.nombre) || 'Mi Negocio';
+  // Sin marca guardada (equipo nuevo): el nombre que puso armar_app.sh en config.js, si hay.
+  const deConfig = config && typeof config.nombreNegocio === 'string' && config.nombreNegocio.trim().length >= 2
+    && config.nombreNegocio.trim().length <= 80 ? config.nombreNegocio.trim() : null;
+  const nombre = (m && m.nombre) || deConfig || 'Mi Negocio';
   const logo = h('div', { class: 'entrar-logo', 'aria-hidden': 'true' },
-    m && m.logo ? h('img', { src: m.logo, alt: '' }) : m && m.nombre ? iniciales(m.nombre)
+    m && m.logo ? h('img', { src: m.logo, alt: '' }) : (m && m.nombre) || deConfig ? iniciales(nombre)
       : h('img', { src: 'iconos/icono.svg', alt: '' }));
 
   const zonaMensaje = h('div', { 'aria-live': 'polite' },

@@ -45,9 +45,12 @@ export async function mostrar(vista, ctx = {}) {
     });
     if (r) {
       olvidarDatos('cuentas');
-      const caja = selCuenta.selectedOptions[0] ? selCuenta.selectedOptions[0].textContent.split(' · ')[0] : 'la caja chica';
-      aviso(r.estado === 'pendiente_aprobacion' ? `Gasto de ${dinero(m)} en espera de aprobación · pasa su tope, todavía no sale dinero`
-        : `Gasto de ${dinero(m)} guardado · sale de ${caja}`, r.estado === 'pendiente_aprobacion' ? 'info' : 'ok', 7000);
+      // Monto que devuelve el servidor y nombre de la cuenta tomado del dato (no del texto de la opción).
+      const cuenta = chicas.find((c) => c.cuenta_dinero_id === selCuenta.value);
+      const caja = cuenta ? cuenta.nombre : 'la caja chica';
+      const monto = r.monto_centavos ?? m;
+      aviso(r.estado === 'pendiente_aprobacion' ? `Gasto #${r.numero} de ${dinero(monto)} en espera de aprobación · pasa su tope, todavía no sale dinero`
+        : `Gasto #${r.numero} de ${dinero(monto)} guardado · sale de ${caja}`, r.estado === 'pendiente_aprobacion' ? 'info' : 'ok', 7000);
       vista.replaceChildren();
       mostrar(vista, ctx);
     }

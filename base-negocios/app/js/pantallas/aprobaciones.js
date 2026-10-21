@@ -30,15 +30,19 @@ export function listaAprobaciones(filas, alCambiar) {
   if (!filas.length) return estadoVacio({ icono: 'check_circulo', color: 'verde', texto: 'No hay solicitudes esperando su decisión.' });
   return h('div', { class: 'lista-filas' }, filas.map((a) => {
     const quien = `${a.solicitante || 'Alguien'}${a.rol_solicitante ? ` (${ROL[a.rol_solicitante] || a.rol_solicitante})` : ''}`;
+    let respuesta = null;
     const resolver = (aprobar) => pedirMotivo({
       titulo: aprobar ? 'Aprobar solicitud' : 'Rechazar solicitud',
       explicacion: `${TIPO[a.tipo] || a.tipo} por ${dinero(a.monto_centavos)}: ${a.descripcion}`,
       textoBoton: aprobar ? 'Aprobar' : 'Rechazar',
       peligro: !aprobar,
-      accion: (motivo) => escribir('resolver_aprobacion', { p_aprobacion_id: a.aprobacion_id, p_aprobar: aprobar, p_motivo: motivo }),
+      accion: async (motivo) => { respuesta = await escribir('resolver_aprobacion', { p_aprobacion_id: a.aprobacion_id, p_aprobar: aprobar, p_motivo: motivo }); },
     }).then((hecho) => {
       if (hecho) {
-        aviso(`${aprobar ? 'Solicitud aprobada' : 'Solicitud rechazada'} · ${TIPO[a.tipo] || a.tipo} ${dinero(a.monto_centavos)}`);
+        // Doble aprobación: la primera solo se anota (el servidor dice falta_segunda_aprobacion).
+        const que = !aprobar ? 'Solicitud rechazada' : respuesta && respuesta.falta_segunda_aprobacion
+          ? 'Primera aprobación lista; falta la segunda' : 'Solicitud aprobada';
+        aviso(`${que} · ${TIPO[a.tipo] || a.tipo} ${dinero(a.monto_centavos)}`, respuesta && respuesta.falta_segunda_aprobacion ? 'info' : 'ok');
         window.dispatchEvent(new Event('pendientes-cambiaron'));
         alCambiar();
       }
@@ -50,8 +54,8 @@ export function listaAprobaciones(filas, alCambiar) {
       detalle: [a.descripcion, h('br'), `Pide: ${quien} · ${fechaHora(a.solicitado_en)}`,
         a.falta_segunda_aprobacion ? ' · falta la segunda aprobación' : ''],
       abajo: puedeResolver(a.tipo) ? h('div', { class: 'botones' },
-        h('button', { type: 'button', class: 'boton boton-principal', onclick: () => resolver(true) }, 'Aprobar'),
-        h('button', { type: 'button', class: 'boton', onclick: () => resolver(false) }, 'Rechazar'))
+        h('button', { type: 'button', class: 'boton boton-principal', 'aria-label': `Aprobar: ${TIPO[a.tipo] || a.tipo} ${dinero(a.monto_centavos)}`, onclick: () => resolver(true) }, 'Aprobar'),
+        h('button', { type: 'button', class: 'boton', 'aria-label': `Rechazar: ${TIPO[a.tipo] || a.tipo} ${dinero(a.monto_centavos)}`, onclick: () => resolver(false) }, 'Rechazar'))
         : h('p', { class: 'ayuda', dataset: { info: 'espera-aprobacion' } }, 'Espera aprobación del dueño o de quien tenga permiso para aprobarla.'),
       props: { class: 'solicitud', dataset: { aprobacion: a.aprobacion_id } },
     });

@@ -17,7 +17,8 @@
 :where(a, button, input, textarea, select, [tabindex]):focus-visible {
   outline: 3px solid var(--color-foco, #c8972a); outline-offset: 2px;
 }
-/* En el encabezado (color del negocio) el foco va con el color del texto de encima: siempre se ve. */
+/* En el encabezado (color del negocio) el foco va con el color del texto de encima: siempre se ve.
+   Fuera del encabezado, --color-foco es el acento solo si tiene contraste 3 o más sobre blanco (marca.js). */
 .encabezado :where(a, button):focus-visible, .entrar-marca :focus-visible { outline-color: var(--color-en-principal, #ffffff); }
 
 .campo { display: flex; flex-direction: column; gap: 6px; }

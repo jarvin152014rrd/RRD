@@ -21,7 +21,7 @@ async function prueba(nombre, fn) {
 function afirmar(cond, que) { if (!cond) throw new Error(que); }
 
 // Emojis y pictogramas (igual que app/js/imprimible.js; escrito con \u{...} para que este archivo no tenga emojis).
-const EMOJI_RE = /(?:(?![\u{A9}\u{AE}\u{2122}])\p{Extended_Pictographic}|[\u{1F1E6}-\u{1F1FF}\u{1F3FB}-\u{1F3FF}\u{FE0E}\u{FE0F}\u{200D}\u{20E3}])/u;
+const EMOJI_RE = /(?:(?![\u{A9}\u{AE}\u{2122}])\p{Extended_Pictographic}|[\u{1F1E6}-\u{1F1FF}\u{1F3FB}-\u{1F3FF}\u{FE0E}\u{FE0F}\u{200D}\u{20E3}\u{E0020}-\u{E007F}])/u;
 
 // Consulta directa a la base (como el usuario indicado) para comparar con lo que muestra la app.
 function sql(correo, consulta) {
@@ -950,7 +950,16 @@ const textoDe = (pagina, sel) => pagina.locator(sel).first().innerText();
         principalArriba: td === tr.firstElementChild && getComputedStyle(td).display === 'block',
         titulos: [...tr.querySelectorAll('td:not(.celda-principal)')].every((x) => x.dataset.titulo) };
     });
-    afirmar(forma.tr === 'block' && forma.thead === 'none' && forma.principalArriba && forma.titulos, 'la tabla no se ve como tarjetas: ' + JSON.stringify(forma));
+    afirmar(forma.tr === 'block' && forma.thead !== 'none' && forma.principalArriba && forma.titulos, 'la tabla no se ve como tarjetas: ' + JSON.stringify(forma));
+    // 0.6.1: sigue siendo una tabla para el lector de pantalla (roles y encabezado escondido solo a la vista).
+    const roles = await cel.p.evaluate(() => {
+      const t = document.querySelector('.tabla-celular');
+      const th = t.querySelector('thead');
+      return { tabla: t.getAttribute('role'), fila: t.querySelector('tbody tr').getAttribute('role'), celda: t.querySelector('tbody td').getAttribute('role'),
+        cabeza: t.querySelector('th').getAttribute('role'), alto: th.getBoundingClientRect().height, visible: getComputedStyle(th).display };
+    });
+    afirmar(roles.tabla === 'table' && roles.fila === 'row' && roles.celda === 'cell' && roles.cabeza === 'columnheader' && roles.alto <= 1 && roles.visible !== 'none',
+      'roles de la tabla en el celular: ' + JSON.stringify(roles));
     afirmar(await cel.p.evaluate(() => document.documentElement.scrollWidth) <= 390, 'existencias se sale a lo ancho');
     await cel.ctx.close();
   });
@@ -1042,7 +1051,22 @@ const textoDe = (pagina, sel) => pagina.locator(sel).first().innerText();
       for (const k of ['nombre', 'pestana', 'salir', 'boton', 'titulo', 'iniciales']) afirmar(x[k] >= 4.5, `${n}: ${k} con contraste ${x[k].toFixed(2)} (< 4.5)`);
       afirmar(x.fijos, `${n}: la marca cambió un color de significado`);
     }
-    afirmar(r.claro.textoSobre === '#1a1a1a' && r.oscuro.textoSobre === '#ffffff', 'texto encima: ' + JSON.stringify([r.claro.textoSobre, r.oscuro.textoSobre]));
+    afirmar(r.claro.textoSobre === '#000000' && r.oscuro.textoSobre === '#ffffff', 'texto encima: ' + JSON.stringify([r.claro.textoSobre, r.oscuro.textoSobre]));
+    // 0.6.1: colores "del medio" (rojo puro y gris) donde #1a1a1a no llegaba a 4.5: texto encima AA siempre,
+    // íconos de títulos con 3 o más sobre blanco y el foco con el acento solo si llega a 3.
+    const medio = await p.evaluate(async () => {
+      const mk = await import('/js/marca.js');
+      return ['#ff0000', '#808080', '#f5e663', '#0b0b2e', '#c8972a', '#ffffff', '#000000'].map((c) => {
+        const v = mk.coloresDeMarca({ color_principal: c, color_acento: c });
+        return { c, principal: mk.contraste(v['--color-en-principal'], v['--color-principal']), acento: mk.contraste(v['--color-en-acento'], v['--color-acento']),
+          suave: mk.contraste(v['--color-en-principal-suave'], v['--color-principal']), icono: mk.contraste(v['--color-acento-icono'], '#ffffff'),
+          foco: mk.contraste(v['--color-foco'], '#ffffff'), letra: mk.contraste(v['--color-principal-texto'], '#f4f2ee') };
+      });
+    });
+    for (const x of medio) {
+      afirmar(x.principal >= 4.5 && x.acento >= 4.5 && x.suave >= 4.5 && x.letra >= 4.5, `${x.c}: texto con contraste menor que 4.5: ` + JSON.stringify(x));
+      afirmar(x.icono >= 3 && x.foco >= 3, `${x.c}: ícono o foco con contraste menor que 3: ` + JSON.stringify(x));
+    }
     // Ajustes > Mi negocio: vista previa en vivo antes de guardar (la app no cambia hasta guardar).
     await p.goto(URL_APP + '/#/ajustes/negocio');
     await p.waitForSelector('#marca-previa .encabezado');
@@ -1053,7 +1077,7 @@ const textoDe = (pagina, sel) => pagina.locator(sel).first().innerText();
       letra: getComputedStyle(document.querySelector('#marca-previa .marca-nombre')).color,
       real: getComputedStyle(document.querySelector('header.encabezado')).backgroundColor,
       iniciales: document.querySelector('#marca-previa .marca-logo').textContent }));
-    afirmar(prev.fondo === 'rgb(245, 230, 99)' && prev.letra === 'rgb(26, 26, 26)', 'vista previa: ' + JSON.stringify(prev));
+    afirmar(prev.fondo === 'rgb(245, 230, 99)' && prev.letra === 'rgb(0, 0, 0)', 'vista previa: ' + JSON.stringify(prev));
     afirmar(prev.real === real, 'la app cambió de color antes de guardar');
     afirmar(prev.iniciales === 'FR', 'sin logo, la vista previa no muestra las iniciales');
     await p.screenshot({ path: path.join(CAPTURAS, 'marca_vista_previa_amarilla.png') });
@@ -1096,6 +1120,10 @@ const textoDe = (pagina, sel) => pagina.locator(sel).first().innerText();
         nombre: el.querySelector('p').textContent };
     }, [E(0x1F9FE), E(0x1F528), E(0x1F3EA), E(0x1F44B) + E(0x1F3FD), E(0x1F1ED) + E(0x1F1F3), E(0x2B50), E(0x1F3A8),
       E(0x2705) + E(0xFE0F), E(0x2764) + E(0xFE0F), E(0x1F468) + E(0x200D) + E(0x1F527)]);
+    // 0.6.1: bandera de una región (con etiquetas U+E0020..U+E007F): se quita completa.
+    const region = [0x1F3F4, 0xE0067, 0xE0062, 0xE0065, 0xE006E, 0xE0067, 0xE007F].map((n) => String.fromCodePoint(n)).join('');
+    const sinRegion = await p.evaluate(async (t) => (await import('/js/imprimible.js')).sinEmojis(t), `Hola ${region} mundo`);
+    afirmar(sinRegion === 'Hola mundo' && EMOJI_RE.test(String.fromCodePoint(0xE0067)), 'bandera de región: ' + JSON.stringify(sinRegion));
     afirmar(!EMOJI_RE.test(r.texto) && r.texto.includes('Pintura blanca') && r.nombre === 'Ferretería El Roble', 'comprobante con emojis: ' + r.texto);
     afirmar(r.svg === 0 && r.otro === 0, 'lo impreso tiene íconos');
     afirmar(!EMOJI_RE.test(r.wa) && !EMOJI_RE.test(r.cobro), 'el texto para WhatsApp tiene emojis');
@@ -1154,6 +1182,45 @@ const textoDe = (pagina, sel) => pagina.locator(sel).first().innerText();
       }
       await ctx.close();
     }
+  });
+
+  await prueba('0.6.1: doble aprobación avisa "falta la segunda"; casillas de permisos de 44 px; nombre del negocio en config.js', async () => {
+    const { ctx, p } = await nueva();
+    await entrar(p, 'dueno@demo.hn');
+    // El servidor responde que falta la segunda aprobación (respuesta simulada; no toca la base).
+    await p.route('**/rest/v1/rpc/resolver_aprobacion', (r) => r.fulfill({ status: 200, contentType: 'application/json',
+      body: JSON.stringify({ aprobacion_id: 'x', estado: 'pendiente', falta_segunda_aprobacion: true }) }));
+    await p.evaluate(async () => {
+      const m = await import('/js/pantallas/aprobaciones.js');
+      const el = m.listaAprobaciones([{ aprobacion_id: 'x', tipo: 'gasto', monto_centavos: 900000, descripcion: 'Prueba doble',
+        solicitante: 'Ana', solicitado_en: '2026-10-20T15:00:00Z' }], () => {});
+      el.id = 'prueba-doble';
+      document.getElementById('contenido').append(el);
+    });
+    await p.locator('#prueba-doble').getByRole('button', { name: 'Aprobar' }).click();
+    await dialogoMotivo(p, 'Revisado, primera firma');
+    await p.waitForSelector('#avisos .mensaje');
+    const msj = await p.locator('#avisos').innerText();
+    afirmar(msj.includes('Primera aprobación lista; falta la segunda') && !msj.includes('Solicitud aprobada'), 'aviso de doble aprobación: ' + msj);
+    await p.unroute('**/rest/v1/rpc/resolver_aprobacion');
+    // Tabla de permisos: cada casilla dentro de un área de 44 px o más.
+    await p.goto(URL_APP + '/#/ajustes/usuarios');
+    await p.waitForSelector('#tabla-permisos .casilla-toque');
+    const chicas = await p.locator('#tabla-permisos .casilla-toque').evaluateAll((els) => els.filter((e) => {
+      const b = e.getBoundingClientRect(); return b.width < 44 || b.height < 44 || !e.querySelector('input[type=checkbox]'); }).length);
+    afirmar(chicas === 0, `${chicas} casilla(s) de permisos con menos de 44 px`);
+    await ctx.close();
+    // armar_app.sh pone SOLO el nombre del negocio (validado) en config.js.
+    const fs = require('node:fs');
+    const raiz = path.join(__dirname, '..');
+    const salida = path.join(raiz, 'dist', 'app-ejemplo');
+    const r = spawnSync('bash', [path.join(raiz, 'herramientas', 'armar_app.sh'), 'ejemplo', 'https://abcd1234.supabase.co', 'sb_publishable_prueba123'], { encoding: 'utf8' });
+    try {
+      afirmar(r.status === 0, 'armar_app.sh falló: ' + r.stderr);
+      const cfg = fs.readFileSync(path.join(salida, 'config.js'), 'utf8');
+      afirmar(/nombreNegocio: "Ferretería Ejemplo S\. de R\.L\.",/.test(cfg), 'config.js sin el nombre del negocio: ' + cfg);
+      afirmar(!/08011999000000|rtn|dueno|correo/i.test(cfg), 'config.js trae datos de la ficha que no son el nombre');
+    } finally { fs.rmSync(salida, { recursive: true, force: true }); }
   });
 
   await prueba('sin errores de JavaScript en las páginas', async () => {

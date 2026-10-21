@@ -9,7 +9,9 @@
 # Deja dist/app-<cliente>/ (dist/ no va a git) con:
 #   * los archivos de app/ (sin config.js local, ni LEEME/CHANGELOG/PENDIENTES)
 #   * config.js con modo "supabase", la URL y la llave PÚBLICA (anon o
-#     "publishable"); rubro y palabras de clientes/<cliente>/app.json si existe
+#     "publishable"); rubro y palabras de clientes/<cliente>/app.json si existe;
+#     y el NOMBRE del negocio (solo el nombre comercial o el nombre, de
+#     clientes/<cliente>/ficha.json) para la pantalla de entrar en un equipo nuevo
 #   * _headers: cabeceras de seguridad básicas (CSP que solo deja hablar con su
 #     Supabase, sin marcos, nosniff...) y sw.js / config.js / index.html sin
 #     caché, para que una versión nueva llegue sola a los celulares
@@ -58,10 +60,22 @@ mkdir -p "$DESTINO"
   --exclude=./CHANGELOG.md --exclude=./PENDIENTES.md .) | (cd "$DESTINO" && tar xf -)
 
 # config.js (rubro y palabras del Armador si existen).
-python3 - "$RAIZ/clientes/$CLIENTE/app.json" "$URL" "$LLAVE" "$CLIENTE" > "$DESTINO/config.js" <<'PY'
-import json, os, sys
-app_json, url, llave, cliente = sys.argv[1:]
+python3 - "$RAIZ/clientes/$CLIENTE/app.json" "$URL" "$LLAVE" "$CLIENTE" "$RAIZ/clientes/$CLIENTE/ficha.json" > "$DESTINO/config.js" <<'PY'
+import json, os, re, sys
+app_json, url, llave, cliente, ficha = sys.argv[1:]
 extra = ""
+# Nombre del negocio para la pantalla de entrar (opcional). SOLO el nombre: nada más de la ficha.
+# Se valida: 2 a 80 letras, números, espacios y signos comunes (sin < > ni controles).
+try:
+    neg = json.load(open(ficha, encoding="utf-8")).get("negocio") or {} if os.path.exists(ficha) else {}
+except Exception:
+    neg = {}
+nombre = (neg.get("nombre_comercial") or neg.get("nombre") or "") if isinstance(neg, dict) else ""
+nombre = nombre.strip() if isinstance(nombre, str) else ""
+if re.fullmatch(r"[\w .,&'()/#ºª+-]{2,80}", nombre):
+    extra += "  nombreNegocio: %s,\n" % json.dumps(nombre, ensure_ascii=False)
+elif nombre:
+    print("AVISO: el nombre del negocio de la ficha trae signos raros; la pantalla de entrar dirá 'Mi Negocio'.", file=sys.stderr)
 if os.path.exists(app_json):
     a = json.load(open(app_json, encoding="utf-8"))
     if a.get("rubro"):
