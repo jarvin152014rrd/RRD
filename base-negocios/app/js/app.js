@@ -5,6 +5,7 @@ import { menuDelUsuario, botonesCelular, RUTAS_VIEJAS } from './menu.js';
 import { olvidarCatalogo } from './errores.js';
 import { cargarMarca, aplicarMarca, iniciales } from './marca.js';
 import { h, icono, chip, cajaError, limpiarAvisos } from './ui.js';
+import { vigilarImpresion } from './imprimible.js';
 
 const raiz = document.getElementById('app');
 const bandaSinConexion = document.getElementById('sin-conexion');
@@ -22,6 +23,9 @@ api.escuchar((tipo, dato) => {
   if (tipo === 'sesion-terminada') forzarSalida(dato && dato.clave === 'SESION_CERRADA'
     ? 'Su sesión fue cerrada por el administrador. Vuelva a entrar.' : 'Su sesión terminó. Vuelva a entrar.');
 });
+
+// Al imprimir, el título de la hoja va sin emojis (palabras del rubro o nombre del negocio).
+vigilarImpresion();
 
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => navigator.serviceWorker.register('sw.js').catch(() => {}));

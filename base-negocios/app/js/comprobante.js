@@ -1,9 +1,11 @@
 // Comprobante de venta (lo que da documento_venta): pantalla, impresión de 80 mm
-// (css/base.css, @media print) y texto para WhatsApp. Sin emojis.
+// (css/base.css, @media print) y texto para WhatsApp. Sin íconos, sin emojis y sin colores de
+// pantalla: solo texto y líneas. Los nombres que vienen del cliente se limpian con imprimible.js.
 import { rpc } from './api.js';
 import { perfilActual } from './sesion.js';
 import { dinero, cantidad } from './formato.js';
 import { h, enlaceWhatsApp } from './ui.js';
+import { limpiarImprimible, sinEmojis } from './imprimible.js';
 
 const FORMA = { efectivo: 'Efectivo', tarjeta: 'Tarjeta', transferencia: 'Transferencia', credito: 'Crédito',
   saldo_favor: 'Saldo a favor', anticipo: 'Anticipo' };
@@ -18,7 +20,7 @@ export function comprobante(doc) {
   const t = doc.totales || {};
   const fiscal = doc.fiscal || {};
   const titulo = doc.tipo === 'FACTURA' || /factura/i.test(doc.tipo || '') ? 'FACTURA' : (doc.tipo || 'TICKET');
-  return h('article', { class: 'comprobante', 'aria-label': 'Comprobante de venta' },
+  return limpiarImprimible(h('article', { class: 'comprobante', 'aria-label': 'Comprobante de venta' },
     h('p', { class: 'comp-centro comp-negrita' }, doc.emisor.nombre),
     doc.emisor.rtn ? h('p', { class: 'comp-centro' }, 'RTN ' + doc.emisor.rtn) : null,
     h('p', { class: 'comp-centro' }, [doc.emisor.sucursal, doc.emisor.caja].filter(Boolean).join(' · ')),
@@ -51,16 +53,16 @@ export function comprobante(doc) {
     fiscal.rango_desde ? h('p', { class: 'comp-chico' }, `Rango autorizado del ${fiscal.rango_desde} al ${fiscal.rango_hasta}`) : null,
     fiscal.fecha_limite_emision ? h('p', { class: 'comp-chico' }, 'Fecha límite de emisión: ' + fiscal.fecha_limite_emision) : null,
     (fiscal.leyendas || []).map((x) => h('p', { class: 'comp-chico comp-centro' }, x)),
-    h('p', { class: 'comp-centro' }, 'Gracias por su compra'));
+    h('p', { class: 'comp-centro' }, 'Gracias por su compra')));
 }
 
 // Texto corto para mandar por WhatsApp.
 export function textoWhatsApp(doc) {
   const t = doc.totales || {};
   const lineas = (doc.lineas || []).map((l) => `${cantidad(l.cantidad)} x ${l.descripcion}: ${dinero(l.total_centavos)}`);
-  return [`${doc.emisor.nombre}`, `${doc.tipo || 'Ticket'} ${doc.numero_documento} · ${doc.fecha}`, '', ...lineas, '',
+  return sinEmojis([`${doc.emisor.nombre}`, `${doc.tipo || 'Ticket'} ${doc.numero_documento} · ${doc.fecha}`, '', ...lineas, '',
     `Total: ${dinero(t.total_centavos)} (ISV ${dinero(t.impuesto_centavos)})`,
-    doc.vence_el ? `Vence: ${doc.vence_el}` : null, 'Gracias por su compra.'].filter((x) => x !== null).join('\n');
+    doc.vence_el ? `Vence: ${doc.vence_el}` : null, 'Gracias por su compra.'].filter((x) => x !== null).join('\n'));
 }
 
 // Comprobante con sus botones (Imprimir, WhatsApp y los que se agreguen).

@@ -20,6 +20,9 @@ async function prueba(nombre, fn) {
 }
 function afirmar(cond, que) { if (!cond) throw new Error(que); }
 
+// Emojis y pictogramas (igual que app/js/imprimible.js; escrito con \u{...} para que este archivo no tenga emojis).
+const EMOJI_RE = /(?:(?![\u{A9}\u{AE}\u{2122}])\p{Extended_Pictographic}|[\u{1F1E6}-\u{1F1FF}\u{1F3FB}-\u{1F3FF}\u{FE0E}\u{FE0F}\u{200D}\u{20E3}])/u;
+
 // Consulta directa a la base (como el usuario indicado) para comparar con lo que muestra la app.
 function sql(correo, consulta) {
   const guion = `BEGIN; ${correo ? `SELECT demo.como('${correo}') \\g /dev/null` : ''}
@@ -1055,6 +1058,102 @@ const textoDe = (pagina, sel) => pagina.locator(sel).first().innerText();
     afirmar(prev.iniciales === 'FR', 'sin logo, la vista previa no muestra las iniciales');
     await p.screenshot({ path: path.join(CAPTURAS, 'marca_vista_previa_amarilla.png') });
     await ctx.close();
+  });
+
+  await prueba('impreso: comprobante, WhatsApp y título sin emojis ni íconos (aunque el negocio o el rubro los traigan)', async () => {
+    const { ctx, p } = await nueva();
+    await entrar(p, 'dueno@demo.hn');
+    // Datos "envenenados" como los podría escribir un cliente: emojis en el negocio, productos, cliente y rubro.
+    const E = (n) => String.fromCodePoint(n);
+    const r = await p.evaluate(async (emo) => {
+      const comp = await import('/js/comprobante.js');
+      const imp = await import('/js/imprimible.js');
+      const { MENU, conPalabras } = await import('/js/menu_datos.js');
+      const doc = { tipo: 'TICKET' + emo[0], numero_documento: 'T-001', fecha: '2026-10-21', anulada: false,
+        emisor: { nombre: 'Ferretería ' + emo[1] + ' El Roble', rtn: '0801', sucursal: 'Centro ' + emo[2], caja: 'Caja 1' },
+        cliente: { nombre: 'Ana ' + emo[3] + emo[4] }, vendedor: 'Luis ' + emo[5],
+        lineas: [{ descripcion: 'Pintura ' + emo[6] + ' blanca', cantidad: 1, precio_unitario_centavos: 1000, total_centavos: 1000 }],
+        totales: { subtotal_centavos: 870, impuesto_centavos: 130, total_centavos: 1000, impuestos: [{ nombre: 'ISV ' + emo[7], impuesto_centavos: 130 }] },
+        pagos: [{ forma: 'efectivo', monto_centavos: 1000 }], fiscal: { leyendas: ['Gracias ' + emo[8]] } };
+      const el = comp.comprobante(doc);
+      // Un ícono que se colara (por ejemplo, de una pieza de pantalla) también se quita al limpiar.
+      const otro = document.createElement('div');
+      otro.innerHTML = '<p>Hola <svg class="icono"><path d="M1 1"/></svg></p>';
+      imp.limpiarImprimible(otro);
+      // Título con palabras del rubro (las pone el cliente) al imprimir.
+      const ven = conPalabras(MENU, { vender: 'Órdenes ' + emo[9] + ' de trabajo' }).find((x) => x.id === 'vender').titulo;
+      const antes = document.title;
+      document.title = `${ven} · Ferretería ${emo[1]}`;
+      const conEmoji = document.title;
+      window.dispatchEvent(new Event('beforeprint'));
+      const impreso = document.title;
+      window.dispatchEvent(new Event('afterprint'));
+      const despues = document.title;
+      document.title = antes;
+      return { texto: el.textContent, svg: el.querySelectorAll('svg, .icono').length, aria: el.getAttribute('aria-label'),
+        wa: comp.textoWhatsApp(doc), otro: otro.querySelectorAll('svg').length, conEmoji, impreso, despues,
+        cobro: (await import('/js/pantallas/clientes.js')).mensajeCobro('Ana ' + emo[3], 1000, 0),
+        nombre: el.querySelector('p').textContent };
+    }, [E(0x1F9FE), E(0x1F528), E(0x1F3EA), E(0x1F44B) + E(0x1F3FD), E(0x1F1ED) + E(0x1F1F3), E(0x2B50), E(0x1F3A8),
+      E(0x2705) + E(0xFE0F), E(0x2764) + E(0xFE0F), E(0x1F468) + E(0x200D) + E(0x1F527)]);
+    afirmar(!EMOJI_RE.test(r.texto) && r.texto.includes('Pintura blanca') && r.nombre === 'Ferretería El Roble', 'comprobante con emojis: ' + r.texto);
+    afirmar(r.svg === 0 && r.otro === 0, 'lo impreso tiene íconos');
+    afirmar(!EMOJI_RE.test(r.wa) && !EMOJI_RE.test(r.cobro), 'el texto para WhatsApp tiene emojis');
+    afirmar(EMOJI_RE.test(r.conEmoji) && !EMOJI_RE.test(r.impreso) && r.impreso.startsWith('Órdenes de trabajo'), 'título al imprimir: ' + r.impreso);
+    afirmar(r.despues === r.conEmoji, 'después de imprimir no volvió el título');
+    // La regla de la prueba encuentra emojis de verdad (si no, la prueba no probaría nada).
+    afirmar(EMOJI_RE.test(String.fromCodePoint(0x1F600)) && EMOJI_RE.test(String.fromCodePoint(0x2705)) && !EMOJI_RE.test('Ñandú © L 1,000.00 → ok'), 'la regla de emojis');
+    // El código de lo impreso no usa íconos.
+    const fs = require('node:fs');
+    const fuente = fs.readFileSync(path.join(__dirname, '..', 'app', 'js', 'comprobante.js'), 'utf8');
+    afirmar(!/iconos\.js|\bicono\(|<svg/.test(fuente), 'comprobante.js usa íconos');
+    await ctx.close();
+  });
+
+  await prueba('en pantalla no hay emojis: ni en el código de la app ni en ninguna pantalla (computadora y celular, con capturas)', async () => {
+    const fs = require('node:fs');
+    const raizApp = path.join(__dirname, '..', 'app');
+    const malos = [];
+    const andar = (d) => {
+      for (const f of fs.readdirSync(d, { withFileTypes: true })) {
+        const x = path.join(d, f.name);
+        if (f.isDirectory()) { if (f.name !== 'vendor') andar(x); continue; }
+        if (!/\.(js|css|html|webmanifest|json)$/.test(f.name)) continue;
+        fs.readFileSync(x, 'utf8').split('\n').forEach((l, i) => { if (EMOJI_RE.test(l)) malos.push(`${path.relative(raizApp, x)}:${i + 1}`); });
+      }
+    };
+    andar(raizApp);
+    afirmar(malos.length === 0, 'emojis en el código: ' + malos.join(', '));
+    const nombre = (r) => r.replace(/[^a-z0-9]+/gi, '_').replace(/^_|_$/g, '');
+    const revisar = async (p, que) => p.evaluate(() => {
+      const raiz = document.getElementById('app');
+      const svgMalos = [...raiz.querySelectorAll('svg')].filter((x) => !x.classList.contains('icono') || x.getAttribute('aria-hidden') !== 'true').length;
+      const texto = raiz.innerText;
+      return { texto, svgMalos, ancho: document.documentElement.scrollWidth, nulos: /(^|\s)(null|undefined)(\s|$)/.test(texto) };
+    });
+    for (const [ancho, alto, sufijo] of [[1280, 900, 'computadora'], [390, 844, 'celular']]) {
+      const { ctx, p } = await nueva(ancho < 700 ? { viewport: { width: ancho, height: alto }, isMobile: true, hasTouch: true } : { viewport: { width: ancho, height: alto } });
+      await p.goto(URL_APP + '/');
+      await p.waitForSelector('#correo');
+      await p.screenshot({ path: path.join(CAPTURAS, `entrar_${sufijo}.png`) });
+      await entrar(p, 'dueno@demo.hn');
+      const rutas = await p.evaluate(async () => (await import('/js/menu.js')).menuDelUsuario().flatMap((x) => x.subs.map((s) => `${x.id}/${s.id}`)));
+      if (ancho < 700) rutas.push('mas');
+      for (const ruta of rutas) {
+        await p.goto(URL_APP + '/#/' + ruta);
+        await p.waitForFunction((r) => location.hash === '#/' + r && !document.querySelector('#contenido .cargando')
+          && [...document.querySelectorAll('#contenido > .lista')].some((x) => x.children.length), ruta, { timeout: 20000 })
+          .catch(() => { throw new Error(`${ruta} (${sufijo}) no terminó de cargar`); });
+        await p.waitForTimeout(250);
+        const x = await revisar(p);
+        afirmar(!EMOJI_RE.test(x.texto), `${ruta} (${sufijo}) tiene un emoji en pantalla`);
+        afirmar(x.svgMalos === 0, `${ruta} (${sufijo}): ${x.svgMalos} dibujo(s) que no son íconos de línea decorativos`);
+        afirmar(!x.nulos, `${ruta} (${sufijo}) muestra "null" o "undefined"`);
+        afirmar(x.ancho <= ancho, `${ruta} (${sufijo}) se sale a lo ancho: ${x.ancho}`);
+        await p.screenshot({ path: path.join(CAPTURAS, `${nombre(ruta)}_${sufijo}.png`), fullPage: true });
+      }
+      await ctx.close();
+    }
   });
 
   await prueba('sin errores de JavaScript en las páginas', async () => {

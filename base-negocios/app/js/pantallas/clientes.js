@@ -8,6 +8,7 @@ import { h, icono, aviso, cajaError, errorSimple, campo, conBoton, enlaceWhatsAp
 import { hayEnMenu } from '../menu.js';
 import { clientes, filtrar, olvidarDatos } from '../datos.js';
 import { nombreForma } from '../comprobante.js';
+import { sinEmojis } from '../imprimible.js';
 
 const verCxc = () => tieneModulo('ventas') && puede('ventas.ver');
 // Saldos para cobrar (cxc_para_cobrar, núcleo 0.14.0): también el cajero, sin ventas.ver.
@@ -273,8 +274,8 @@ function filaFactura(numero, fechaDoc, vence, diasVencido, saldo) {
 // Mensaje amable para cobrar por WhatsApp.
 export function mensajeCobro(nombre, saldo, vencido) {
   const negocio = perfilActual().empresa.nombre;
-  return `Hola ${nombre}, le saluda ${negocio}. Le recordamos con cariño que tiene un saldo pendiente de ${dinero(saldo)}`
+  return sinEmojis(`Hola ${nombre}, le saluda ${negocio}. Le recordamos con cariño que tiene un saldo pendiente de ${dinero(saldo)}`
     + (vencido > 0 ? ` (de eso, ${dinero(vencido)} ya venció)` : '')
-    + '. Puede pasar a pagar o responder este mensaje para coordinar. ¡Muchas gracias por su preferencia!';
+    + '. Puede pasar a pagar o responder este mensaje para coordinar. ¡Muchas gracias por su preferencia!');
 }
 export { enlaceWhatsApp };
