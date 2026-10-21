@@ -6,7 +6,7 @@
 --   Usuarios (clave de la demo: la que imprime demo_app.sh):
 --     dueno@demo.hn (María López, dueña)   admin@demo.hn (Carlos Mejía)
 --     cajero@demo.hn (Ana Sosa)            vendedor@demo.hn (Juan Ramos)
---   Módulos: inventario, compras, dinero, ventas (y desde app 0.7.0 fondos y conciliación).
+--   Módulos: inventario, compras, dinero, ventas (desde app 0.7.0 fondos y conciliación; desde 0.8.0 comisiones).
 --   Cuentas: Caja 1, Caja fuerte, BAC cheques, Banco Atlántida, Caja chica.
 --   Ventas de contado, con tarjeta y al crédito (una ya vencida), un cobro,
 --   un depósito en tránsito, gastos, dos solicitudes de gasto pendientes y
@@ -272,5 +272,53 @@ BEGIN
         jsonb_build_object('fecha', inicio + 27, 'descripcion', 'COMISION MANEJO DE CUENTA', 'monto_centavos', -5750),
         jsonb_build_object('fecha', inicio + 27, 'descripcion', 'INTERESES GANADOS', 'monto_centavos', 1234))), gen_random_uuid());
   PERFORM demo.g('CONC1', (r->>'conciliacion_id')::uuid);
+  PERFORM demo.como(NULL);
+END $$;
+
+-- 9) (app 0.8.0) Para Reportes: comisiones (Juan 5 %, Ana 3 %, sobre la ganancia), ventas de Juan y de Ana
+--    este mes, un turno de Ana cerrado con un faltante de L 50.00 y una venta anulada con motivo (bitácora).
+--    Las fechas nunca caen en el mes pasado (ya está cerrado).
+DO $$
+DECLARE
+  e       uuid := demo.id('EMPRESA');
+  hoy     date := public.hoy_local(demo.id('EMPRESA'));
+  mes1    date := date_trunc('month', public.hoy_local(demo.id('EMPRESA')))::date;
+  u_juan  uuid := (SELECT id FROM auth.users WHERE email = 'vendedor@demo.hn');
+  u_ana   uuid := (SELECT id FROM auth.users WHERE email = 'cajero@demo.hn');
+  caja1   uuid := (SELECT id FROM public.caja WHERE empresa_id = demo.id('EMPRESA') AND punto_emision = '001');
+  r       jsonb;
+  t       jsonb;
+  v_anul  uuid;
+  v_apr   uuid;
+  v_saldo bigint;
+BEGIN
+  INSERT INTO public.modulo_activo (empresa_id, modulo) VALUES (e, 'comisiones')
+  ON CONFLICT (empresa_id, modulo) DO UPDATE SET activo = true;
+  PERFORM demo.como('dueno@demo.hn');
+  PERFORM public.configurar_comisiones(e, '{"activas": true, "base": "ganancia"}', 'Demo: comisiones sobre la ganancia');
+  PERFORM public.fijar_porcentaje_comision(e, u_juan, 5, hoy, 'Demo: comisión de Juan');
+  PERFORM public.fijar_porcentaje_comision(e, u_ana, 3, hoy, 'Demo: comisión de Ana');
+  -- Ventas de contado a nombre de Juan (vendedor) y una al crédito que todavía no le da comisión.
+  PERFORM public.registrar_venta(e, jsonb_build_object('vendedor_id', u_juan,
+    'lineas', jsonb_build_array(demo.l('TAL', 1), demo.l('VAR', 5)), 'pagos', '[{"forma":"efectivo"}]'::jsonb), gen_random_uuid());
+  PERFORM public.registrar_venta(e, jsonb_build_object('vendedor_id', u_juan, 'cliente_id', demo.id('CLI3'),
+    'lineas', jsonb_build_array(demo.l('PVC', 4)), 'pagos', '[{"forma":"credito"}]'::jsonb), gen_random_uuid());
+  -- Una venta que se anula (queda en la bitácora con su motivo).
+  r := public.registrar_venta(e, jsonb_build_object('lineas', jsonb_build_array(demo.l('CLA', 2)),
+    'pagos', '[{"forma":"efectivo"}]'::jsonb), gen_random_uuid());
+  v_anul := (r->>'venta_id')::uuid;
+  -- Turno de Ana: abre con lo que tiene la caja, vende y al cerrar cuenta L 50.00 menos.
+  v_saldo := (SELECT saldo_centavos FROM public.v_cuenta_dinero WHERE caja_id = caja1);
+  PERFORM demo.como('cajero@demo.hn');
+  t := public.abrir_turno(e, caja1, v_saldo, gen_random_uuid());
+  PERFORM public.registrar_venta(e, jsonb_build_object('vendedor_id', u_ana,
+    'lineas', jsonb_build_array(demo.l('CEM', 2), demo.l('VAR', 3)), 'pagos', '[{"forma":"efectivo"}]'::jsonb), gen_random_uuid());
+  v_apr := (public.solicitar_anulacion_venta(v_anul, 'El cliente se arrepintió antes de llevarse el clavo', gen_random_uuid())->>'aprobacion_id')::uuid;
+  PERFORM demo.como('dueno@demo.hn');
+  v_saldo := (SELECT saldo_centavos FROM public.v_cuenta_dinero WHERE caja_id = caja1);
+  PERFORM demo.como('cajero@demo.hn');
+  PERFORM public.cerrar_turno((t->>'turno_id')::uuid, v_saldo - 5000, gen_random_uuid());
+  PERFORM demo.como('dueno@demo.hn');
+  PERFORM public.resolver_aprobacion(v_apr, true, 'Revisado con el cliente', gen_random_uuid());
   PERFORM demo.como(NULL);
 END $$;

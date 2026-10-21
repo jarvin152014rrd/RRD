@@ -62,14 +62,18 @@ export const MENU = [
     // proyeccion_flujo (núcleo 042) pide contabilidad.ver.
     { id: 'proyeccion', titulo: 'Proyección', icono: 'proyeccion', modulos: ['dinero'], permisos: ['contabilidad.ver'], pantalla: 'dinero_proyeccion' },
   ] },
-  // Reportes: solo mirar.
+  // Reportes: solo mirar (salvo cerrar y reabrir el mes). app 0.8.0: todas funcionando.
   { id: 'reportes', titulo: 'Reportes', icono: 'reportes', subs: [
-    { id: 'gane', titulo: '¿Gané o perdí?', icono: 'sube', permisos: ['contabilidad.ver'] },
-    { id: 'ventas', titulo: 'Ventas', icono: 'grafica', modulos: ['ventas'], permisos: ['ventas.ver'] },
-    { id: 'valorizado', titulo: 'Inventario valorizado', icono: 'inventario', modulos: ['inventario'], permisos: ['inventario.costos'] },
-    { id: 'empleados', titulo: 'Empleados y comisiones', icono: 'credencial', permisos: ['bitacora.ver', 'comisiones.ver'] },
-    { id: 'bitacora', titulo: 'Quién hizo qué', icono: 'bitacora', permisos: ['bitacora.ver'] },
-    { id: 'cierre', titulo: 'Cierre de mes', icono: 'cierre', permisos: ['periodos.cerrar'] },
+    // estado_resultados / saldo_cuentas / balance_general piden contabilidad.ver.
+    { id: 'gane', titulo: '¿Gané o perdí?', icono: 'sube', permisos: ['contabilidad.ver'], pantalla: 'rep_gane' },
+    { id: 'ventas', titulo: 'Ventas', icono: 'grafica', modulos: ['ventas'], permisos: ['ventas.ver'], pantalla: 'rep_ventas' },
+    // v_existencia pide inventario.ver; los valores y v_kardex, inventario.costos.
+    { id: 'valorizado', titulo: 'Inventario valorizado', icono: 'inventario', modulos: ['inventario'], permisos: ['inventario.costos'], todos: ['inventario.ver'], pantalla: 'rep_valorizado' },
+    // vigilancia_empleados pide bitacora.ver; v_comision, comisiones.ver (cada parte sale solo con su permiso).
+    { id: 'empleados', titulo: 'Empleados y comisiones', icono: 'credencial', permisos: ['bitacora.ver', 'comisiones.ver'], pantalla: 'rep_empleados' },
+    { id: 'bitacora', titulo: 'Quién hizo qué', icono: 'bitacora', permisos: ['bitacora.ver'], pantalla: 'rep_bitacora' },
+    // cerrar_mes pide periodos.cerrar; leer los meses (historial_cierres, exportar_mes, libros_isv), contabilidad.ver.
+    { id: 'cierre', titulo: 'Cierre de mes', icono: 'cierre', permisos: ['periodos.cerrar'], todos: ['contabilidad.ver'], pantalla: 'rep_cierre' },
   ] },
   // Siempre la última.
   { id: 'ajustes', titulo: 'Ajustes', icono: 'ajustes', final: true, subs: [

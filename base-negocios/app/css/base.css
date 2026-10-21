@@ -544,3 +544,55 @@ a.fila-icono:hover .fila-icono-titulo { text-decoration: underline; }
 .grafica-negativa .grafica-valor { color: var(--color-peligro, #a12a1e); }
 .pasos-simples { margin: 0; padding-left: 22px; font-size: 15px; display: flex; flex-direction: column; gap: 4px; }
 .fila-banco > .boton { align-self: flex-start; }
+
+/* app 0.8.0: Reportes y cierre de mes */
+.frase-grande { display: flex; align-items: center; gap: 10px; font-size: 20px; font-weight: 600; margin: 4px 0 8px; line-height: 1.3; }
+.frase-grande .icono { width: 28px; height: 28px; flex: none; }
+.botones-reporte { margin: 4px 0 12px; }
+@media (min-width: 700px) { .botones-reporte .boton { flex: 0 1 auto; min-width: 180px; } }
+.fila-parte { padding: 2px 0 8px; border-bottom: 1px solid var(--color-linea); }
+.fila-parte .fila { border-bottom: none; padding: 8px 0 0; }
+.fila-parte .progreso { margin: 6px 0 0; }
+.tarjeta-interna { border-top: 1px solid var(--color-linea); margin-top: 16px; padding-top: 12px; display: flex; flex-direction: column; gap: 10px; }
+.estado-formal { display: flex; flex-direction: column; }
+.linea-formal { display: flex; justify-content: space-between; gap: 12px; padding: 6px 0; border-bottom: 1px solid var(--color-linea); font-size: 15px; }
+.linea-formal .monto { white-space: nowrap; font-family: var(--letra-mono); }
+.linea-titulo { font-weight: 600; }
+.linea-subtotal { font-weight: 600; border-bottom-color: var(--color-suave); }
+.linea-total { font-weight: 700; border-top: 1px solid var(--color-suave); border-bottom: 2px solid var(--color-suave); }
+.linea-formal.nivel-1 { padding-left: 16px; } .linea-formal.nivel-2 { padding-left: 32px; } .linea-formal.nivel-3 { padding-left: 48px; }
+/* Gráfica con muchas barras (un mes por día): barras juntas, el número solo en la tabla de abajo. */
+.grafica.grafica-densa { gap: 2px; overflow: hidden; padding: 0 14px; }
+.grafica-densa .grafica-valor { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.grafica-densa .grafica-etiqueta { font-size: 12px; white-space: nowrap; overflow: visible; }
+.lista-comprobacion { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+.lista-comprobacion li { display: flex; gap: 12px; align-items: flex-start; padding: 10px 0; border-bottom: 1px solid var(--color-linea); }
+.lista-comprobacion .burbuja { flex: none; }
+.comprobacion-texto { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 6px; align-items: flex-start; }
+.comprobacion-texto p { margin: 0; }
+.lista-avisos { margin: 0; padding-left: 22px; font-size: 15px; display: flex; flex-direction: column; gap: 4px; }
+.reporte-impreso { display: none; }
+
+@media print {
+  /* Un reporte impreso: solo la hoja (logo, texto y líneas), en A4, sin íconos ni colores. */
+  @page reporte { size: A4 portrait; margin: 14mm; }
+  body.imprimiendo-reporte > *:not(.reporte-impreso) { display: none !important; }
+  body.imprimiendo-reporte .reporte-impreso { display: block; page: reporte; font-family: var(--letra); font-size: 11pt; }
+  body.imprimiendo-reporte .reporte-impreso, body.imprimiendo-reporte .reporte-impreso * {
+    visibility: visible; color: #000 !important; background: #fff !important; box-shadow: none !important; }
+  .reporte-impreso .impreso-cabeza { display: flex; gap: 12px; align-items: center; border-bottom: 1px solid #000; padding-bottom: 6px; }
+  .reporte-impreso .impreso-logo { width: 48px; height: 48px; object-fit: contain; }
+  .reporte-impreso .impreso-negocio { font-weight: 700; font-size: 13pt; }
+  .reporte-impreso p { margin: 2px 0; }
+  .reporte-impreso h1 { font-size: 15pt; margin: 10px 0 2px; }
+  .reporte-impreso h2 { font-size: 12pt; margin: 12px 0 4px; }
+  .reporte-impreso table { width: 100%; border-collapse: collapse; margin: 4px 0 8px; }
+  .reporte-impreso th, .reporte-impreso td { border-bottom: 1px solid #000; padding: 3px 4px; text-align: left; vertical-align: top; }
+  .reporte-impreso th { border-bottom-width: 2px; }
+  .reporte-impreso tfoot td { font-weight: 700; border-top: 2px solid #000; }
+  .reporte-impreso .num { text-align: right; white-space: nowrap; }
+  .reporte-impreso .impreso-nota { font-size: 9pt; }
+  .reporte-impreso svg, .reporte-impreso .icono, .reporte-impreso .chip-color, .reporte-impreso .burbuja { display: none !important; }
+}
+#cierre-detalle .titulo-chico, .tarjeta-interna .titulo-chico { margin-top: 14px; }
+#cierre-detalle .cifras { margin: 8px 0; }
