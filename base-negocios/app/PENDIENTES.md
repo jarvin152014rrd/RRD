@@ -1,10 +1,14 @@
-# Pendientes de la app (0.5.0)
+# Pendientes de la app (0.5.1)
 
 - Pantallas en construcción: apartados, cajas abiertas, compras, dinero (salvo ¿Dónde está mi dinero?), reportes,
   proyección, "Alertas que recibo" (el núcleo ya tiene `mis_preferencias_alertas`: se puede hacer en la ronda 2).
 - Rediseño ronda 2: llevar el estilo nuevo (íconos en títulos, burbujas, estados vacíos) a las demás pantallas.
 - Inicio: "Lo más vendido" se calcula en el navegador con las últimas 1,000 líneas de venta (si hay más en la
   semana, lo dice). Con mucho volumen convendrá una función del núcleo que ya lo sume.
+- NÚCLEO: `donde_esta_mi_dinero` devuelve las cuentas de TODA la empresa a un usuario limitado a sucursal. La app
+  ya solo muestra las suyas (0.5.1), pero el dato llega al navegador: corregirlo en el núcleo (filtrar con
+  `interno.sucursal_permitida`, como `resumen_hoy`).
+- "Lo más vendido" no resta devoluciones (lo dice en pantalla); falta una lectura de devoluciones por producto.
 - Inicio: a un usuario restringido por sucursal no se le muestran la gráfica ni lo más vendido (las vistas son de
   toda la empresa).
 - Fotos de productos: la burbuja de "Lo más vendido" ya está lista para la miniatura.

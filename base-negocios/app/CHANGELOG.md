@@ -1,5 +1,25 @@
 # Cambios de la app
 
+## app 0.5.1 (núcleo 0.15.0, sin migraciones nuevas) — Arreglos de la revisión de la ronda 1
+
+- **Usuario limitado a su sucursal:** en Inicio la tarjeta de dinero usa `resumen_hoy` (ya filtrado) y dice
+  "Dinero disponible en mis sucursales"; el monto y su chip salen de la misma lectura. En Dinero > ¿Dónde está mi
+  dinero? solo ve las cuentas de sus sucursales y las de toda la empresa, con un aviso y el total de lo que ve.
+- **"Hoy" es la fecha del servidor** en cada carga de Inicio (`resumen_hoy` → `fecha`) y se refresca en el
+  perfil: una app abierta toda la noche ya no se queda en el día anterior.
+- **"Descargar todo" vuelve a estar en Mi cuenta** cuando la persona no ve "Excel y copia de mis datos" (mismos
+  permisos que antes: `empresa.configurar` o `usuarios.administrar`).
+- **Próximo pago** pide solo lo que vence de hoy en adelante (máximo 20) y, para usuarios limitados a sucursal,
+  no toma los saldos iniciales sin sucursal. La gráfica y "lo más vendido" piden solo los últimos días.
+  `api.leer` acepta filtros "desde/hasta" (`{ col: { gte } }`, `{ col: { lte } }`); el emulador también.
+- "Me deben" solo con el módulo de ventas y "Debo a proveedores" solo con el de compras.
+- **Aprobar/Rechazar solo para quien puede:** cada tipo pide su permiso (gasto: `gastos.aprobar`; venta,
+  descuento, crédito y devolución: `ventas.aprobar`; anular venta: `ventas.anular`; uso de fondo:
+  `fondos.aprobar`; conteo: `inventario.ajustar`). Los demás (p. ej. el contador) ven "Espera aprobación…".
+- Lo más vendido: aviso "sin restar devoluciones" y plural correcto ("1 vendido", "13 vendidos", "8.5 unidades").
+- Pruebas: `probar_app.cjs` 36 (nueva: usuario limitado a sucursal; ampliadas: fecha del servidor, filtro desde,
+  copia en Mi cuenta, aprobación sin permiso, plural). Cascarón `cascaron-0.5.1`.
+
 ## app 0.5.0 (núcleo 0.15.0, sin migraciones nuevas) — Rediseño, ronda 1: base visual e Inicio
 
 - **Íconos propios** (`js/iconos.js`): 68 dibujos de línea dentro de la app (funcionan sin internet). Cada

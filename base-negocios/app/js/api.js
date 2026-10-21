@@ -159,10 +159,16 @@ export function funcion(nombre, datos = {}) {
   });
 }
 
-// Lee una vista o tabla permitida (RLS decide qué filas). Solo filtros "igual a".
+// Lee una vista o tabla permitida (RLS decide qué filas). Filtros "igual a" ({ col: valor }) y,
+// desde 0.5.1, "desde / hasta" ({ col: { gte: valor } }, { col: { lte: valor } }; PostgREST gte. y lte.).
 export function leer(vista, filtros = {}, { orden = null, limite = null } = {}) {
   const q = new URLSearchParams({ select: '*' });
-  for (const [k, v] of Object.entries(filtros)) q.set(k, 'eq.' + v);
+  for (const [k, v] of Object.entries(filtros)) {
+    if (v && typeof v === 'object') {
+      if (v.gte !== undefined) q.append(k, 'gte.' + v.gte);
+      if (v.lte !== undefined) q.append(k, 'lte.' + v.lte);
+    } else q.set(k, 'eq.' + v);
+  }
   if (orden) q.set('order', orden);
   if (limite) q.set('limit', String(limite));
   return conToken('/rest/v1/' + encodeURIComponent(vista) + '?' + q, { method: 'GET', headers: {} });

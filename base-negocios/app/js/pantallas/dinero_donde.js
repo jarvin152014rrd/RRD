@@ -3,7 +3,7 @@
 import { rpc } from '../api.js';
 import { empresaId } from '../sesion.js';
 import { dinero } from '../formato.js';
-import { h, icono, chip, burbuja, cajaError } from '../ui.js';
+import { h, icono, chip, burbuja, cajaError, mensaje } from '../ui.js';
 
 // Ícono y color por tipo de cuenta (azul = información; dorado = por confirmar).
 const TIPO = {
@@ -11,10 +11,16 @@ const TIPO = {
   transito: ['deposito', 'dorado'], pos_por_liquidar: ['reloj', 'dorado'], transferencia_por_confirmar: ['reloj', 'dorado'],
 };
 
-export function tarjetaDinero(d) {
+// sucursales: null = ve todas; lista de ids = usuario limitado a esas sucursales (mi_estado_sesion).
+// donde_esta_mi_dinero (núcleo 0.15.0) trae las cuentas de TODA la empresa: a un usuario limitado
+// solo se le muestran las de sus sucursales y las de toda la empresa (sin sucursal, como el banco),
+// y el total es la suma de esas. (Arreglo de fondo pendiente en el núcleo: ver PENDIENTES.)
+export function tarjetaDinero(d, sucursales = null) {
+  const ve = (c) => !sucursales || !c.sucursal_id || sucursales.includes(c.sucursal_id);
   const transito = (d.en_transito && d.en_transito.depositos) || [];
   const dias = transito.length ? Math.max(...transito.map((t) => t.dias || 0)) : 0;
-  const filas = (d.cuentas || []).filter((c) => c.activa !== false).map((c) => {
+  const cuentas = (d.cuentas || []).filter((c) => c.activa !== false && ve(c));
+  const filas = cuentas.map((c) => {
     const [ic, color] = TIPO[c.tipo] || ['dinero', 'azul'];
     return h('div', { class: 'fila-icono' }, burbuja(ic, c.saldo_centavos < 0 ? 'rojo' : color, { class: 'burbuja-chica' }),
       h('div', { class: 'fila-icono-texto' },
@@ -25,16 +31,22 @@ export function tarjetaDinero(d) {
       h('span', { class: 'monto' + (c.saldo_centavos < 0 ? ' peligro' : '') }, dinero(c.saldo_centavos)));
   });
   filas.push(h('div', { class: 'fila fila-total' }, h('span', {}, 'Total'),
-    h('span', { class: 'monto', dataset: { dato: 'total_dinero' } }, dinero(d.total_centavos))));
+    h('span', { class: 'monto', dataset: { dato: 'total_dinero' } },
+      dinero(sucursales ? cuentas.reduce((x, c) => x + (Number(c.saldo_centavos) || 0), 0) : d.total_centavos))));
   return h('section', { class: 'tarjeta', 'aria-labelledby': 't-donde' },
-    h('h1', { id: 't-donde', class: 'titulo-icono' }, icono('banco'), '¿Dónde está mi dinero hoy?'), ...filas);
+    h('h1', { id: 't-donde', class: 'titulo-icono' }, icono('banco'), '¿Dónde está mi dinero hoy?'),
+    sucursales ? mensaje('info', 'Usted ve solo el dinero de sus sucursales.',
+      'Más las cuentas de toda la empresa, como el banco. El total es la suma de lo que aparece aquí.', { dataset: { info: 'solo-sucursales' } }) : null,
+    ...filas);
 }
 
 export async function mostrar(vista, ctx) {
   try {
-    const d = await rpc('donde_esta_mi_dinero', { p_empresa_id: empresaId() });
+    const [d, estado] = await Promise.all([rpc('donde_esta_mi_dinero', { p_empresa_id: empresaId() }),
+      rpc('mi_estado_sesion', { p_empresa_id: empresaId() })]);
     if (!ctx.sigueVigente()) return;
-    vista.append(tarjetaDinero(d));
+    const limitado = estado && estado.todas_las_sucursales === false;
+    vista.append(tarjetaDinero(d, limitado ? (estado.sucursales || []).map((x) => x.sucursal_id) : null));
   } catch (err) {
     vista.append(await cajaError(err));
   }

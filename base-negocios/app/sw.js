@@ -1,7 +1,7 @@
 // Service worker: guarda SOLO el "cascarón" (HTML, CSS, JS, íconos) para instalar
 // y abrir rápido. Los datos (/rest/, /auth/) SIEMPRE van al servidor, nunca se guardan.
 // Al cambiar cualquier archivo del cascarón, suba VERSION.
-const VERSION = 'cascaron-0.5.0';
+const VERSION = 'cascaron-0.5.1';
 const CASCARON = [
   './', 'index.html', 'manifest.webmanifest', 'config.js',
   'css/tema.css', 'css/base.css', 'css/controles.css',

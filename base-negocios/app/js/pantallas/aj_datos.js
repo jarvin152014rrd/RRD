@@ -1,18 +1,20 @@
 // Ajustes · "Mi cuenta" (antes "Mis datos"): quién soy, estado de la licencia y versión, y
 // "Alertas que recibo" (todavía en construcción). La copia de los datos en Excel ("Descargar
-// todo") se movió a Ajustes > "Excel y copia de mis datos" (app 0.5.0).
+// todo") está en Ajustes > "Excel y copia de mis datos"; quien no ve esa subpestaña (le falta
+// excel.importar o el módulo) la tiene aquí: el cliente SIEMPRE puede sacar sus datos.
 import { rpc, leer } from '../api.js';
 import { empresaId, perfilActual, puede } from '../sesion.js';
 import { fecha } from '../formato.js';
 import { h, icono, aviso, conBoton, estadoVacio } from '../ui.js';
 import { descargarExcel } from '../excel.js';
+import { hayEnMenu } from '../menu.js';
 
-export const VERSION_APP = '0.5.0';
+export const VERSION_APP = '0.5.1';
 const ESTADO = { activa: 'Activa', en_gracia: 'En días de gracia', solo_lectura: 'Solo lectura (vencida)' };
 
 // "Descargar todo" (productos, categorías, clientes y proveedores: lo que el usuario puede ver).
 // Lo usa la pantalla de Excel. Devuelve null si el usuario no tiene permiso.
-export function tarjetaCopiaDatos() {
+export function tarjetaCopiaDatos(clase = '') {
   if (!puede('empresa.configurar', 'usuarios.administrar')) return null;
   const p = perfilActual();
   const zona = h('div', { 'aria-live': 'assertive' });
@@ -24,7 +26,7 @@ export function tarjetaCopiaDatos() {
     await descargarExcel(`${p.empresa.nombre}_datos_${p.empresa.hoy}.xlsx`.replace(/[^\p{L}\p{N}_.-]+/gu, '_'), plantillas);
     aviso('Descarga lista.');
   }, 'Preparando…'));
-  return h('section', { class: 'tarjeta', 'aria-labelledby': 't-todo' },
+  return h('section', { class: ('tarjeta ' + clase).trim(), 'aria-labelledby': 't-todo', id: 'copia-datos' },
     h('h2', { id: 't-todo', class: 'titulo-icono' }, icono('descargar'), 'Copia de mis datos'),
     h('p', { class: 'ayuda' }, 'Un Excel con sus productos, categorías y clientes de hoy. Sus datos son suyos.'), zona, boton);
 }
@@ -44,6 +46,7 @@ export async function mostrar(vista, ctx) {
       lic.vence_el ? fila('Vence', `${fecha(lic.vence_el)}${lic.dias !== undefined ? ` (faltan ${lic.dias} días)` : ''}`) : null,
       fila('Versión del programa', VERSION_APP, 'version-app'),
       fila('Versión del servidor', ver ? ver.version_nucleo : '—', 'version-nucleo')),
+    hayEnMenu(ctx.menu || [], 'ajustes', 'excel') ? null : tarjetaCopiaDatos('tarjeta-angosta'),
     h('section', { class: 'tarjeta tarjeta-angosta', 'aria-labelledby': 't-mis-alertas', id: 'mis-alertas' },
       h('h2', { id: 't-mis-alertas', class: 'titulo-icono' }, icono('campana'), 'Alertas que recibo'),
       estadoVacio({ icono: 'construccion', color: 'dorado',

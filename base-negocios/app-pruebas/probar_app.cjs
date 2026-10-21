@@ -112,6 +112,7 @@ const textoDe = (pagina, sel) => pagina.locator(sel).first().innerText();
 
   await prueba('Inicio (0.5.0): saludo, acciones, gráfica de 7 días, lo más vendido, primeros pasos y campanita', async () => {
     const p = dueno.p;
+    const r0 = JSON.parse(sql('dueno@demo.hn', `public.resumen_hoy('${EMPRESA}')`));
     const saludo = await textoDe(p, '.saludo h1');
     afirmar(/^Buen(os días|as tardes|as noches), María$/.test(saludo.trim()), 'saludo: ' + saludo);
     afirmar((await textoDe(p, '[data-info=fecha-caja]')).includes('caja'), 'no dice cómo está la caja');
@@ -147,6 +148,19 @@ const textoDe = (pagina, sel) => pagina.locator(sel).first().innerText();
     await p.waitForFunction((x) => document.getElementById('campana-numero').textContent === String(x), alertas + aprob);
     afirmar((await textoDe(p, '[data-contador=pendientes]')).trim() === String(alertas + aprob), 'la subpestaña Pendientes no tiene el número');
     afirmar(await p.locator('#inicio-pendientes .solicitud').count() >= 1, 'Pendientes no muestra las aprobaciones');
+    // 0.5.1: lo más vendido avisa que no resta devoluciones y dice "1 vendido" / "13 vendidos" / "8.5 unidades".
+    const top5 = await textoDe(p, '#mas-vendido');
+    afirmar(!top5.includes('vendido(s)') && /\d vendidos?\b|unidades/.test(top5), 'plural de vendidos: ' + top5.replace(/\n/g, ' | '));
+    afirmar(await p.locator('#mas-vendido [data-info=sin-devoluciones]').count() === 1, 'no avisa que no resta devoluciones');
+    // La fecha de "Hoy" es la del servidor (resumen_hoy), no la del momento de entrar.
+    afirmar(await p.evaluate(async () => (await import('/js/sesion.js')).perfilActual().empresa.hoy) === r0.fecha, 'la fecha de hoy no es la del servidor');
+    // Próximo pago: la app pide solo lo que vence de una fecha en adelante (filtro gte.), igual que la base.
+    const vence = await p.evaluate(async (e) => {
+      const api = await import('/js/api.js');
+      return (await api.leer('v_cxp_documento', { empresa_id: e, fecha_vencimiento: { gte: '2026-09-20' } }, { limite: 50 })).length;
+    }, EMPRESA);
+    afirmar(String(vence) === sql('dueno@demo.hn', `(SELECT count(*) FROM public.v_cxp_documento WHERE empresa_id = '${EMPRESA}' AND fecha_vencimiento >= '2026-09-20')`),
+      'el filtro "desde" no da lo mismo que la base: ' + vence);
     await p.screenshot({ path: path.join(CAPTURAS, 'inicio_computadora.png'), fullPage: true });
   });
 
@@ -181,6 +195,17 @@ const textoDe = (pagina, sel) => pagina.locator(sel).first().innerText();
     await p.click('#subir-excel');
     await p.waitForSelector('#excel-descargar');
     afirmar(await p.locator('#descargar-todo').count() === 1, 'falta la copia de mis datos en Excel');
+    // Mi cuenta: si la persona ve la subpestaña de Excel, la copia está allá; si no, aquí (0.5.1).
+    await p.goto(URL_APP + '/#/ajustes/mi-cuenta');
+    await p.waitForSelector('#mis-alertas');
+    afirmar(await p.locator('#copia-datos').count() === 0, 'copia repetida en Mi cuenta');
+    const sinExcel = await p.evaluate(async () => {
+      const m = await import('/js/pantallas/aj_datos.js');
+      const v = document.createElement('div');
+      await m.mostrar(v, { menu: [], sigueVigente: () => true });
+      return v.querySelectorAll('#copia-datos #descargar-todo').length;
+    });
+    afirmar(sinExcel === 1, 'sin la subpestaña de Excel, Mi cuenta no ofrece "Descargar todo"');
     await p.goto(URL_APP + '/#/reportes/ventas');
     await p.waitForSelector('.en-construccion .estado-vacio');
     await p.goto(URL_APP + '/#/inicio/hoy');
@@ -320,6 +345,15 @@ const textoDe = (pagina, sel) => pagina.locator(sel).first().innerText();
     for (const palabra of ['Ganancia', 'gané', 'Costo', 'Me deben', 'Aprobar']) {
       afirmar(!(await p.locator('#contenido').innerText()).includes(palabra), 'el cajero ve ' + palabra);
     }
+    // Quien no tiene el permiso de ese tipo de solicitud la ve sin botones, con "Espera aprobación".
+    const sinBotones = await p.evaluate(async () => {
+      const m = await import('/js/pantallas/aprobaciones.js');
+      const el = m.listaAprobaciones([{ aprobacion_id: 'x', tipo: 'gasto', monto_centavos: 10000, descripcion: 'Prueba',
+        solicitante: 'Ana', solicitado_en: '2026-10-20T15:00:00Z' }], () => {});
+      return { botones: el.querySelectorAll('button').length, espera: el.querySelectorAll('[data-info=espera-aprobacion]').length,
+        gasto: m.puedeResolver('gasto'), raro: m.puedeResolver('otra_cosa') };
+    });
+    afirmar(sinBotones.botones === 0 && sinBotones.espera === 1 && !sinBotones.gasto && !sinBotones.raro, 'aprobación sin permiso: ' + JSON.stringify(sinBotones));
   });
 
   await prueba('vender en efectivo: vuelto correcto, comprobante = base, doble clic no duplica', async () => {
@@ -848,6 +882,37 @@ const textoDe = (pagina, sel) => pagina.locator(sel).first().innerText();
     afirmar(r.caja === 'Caja' && r.cli === 'Clientes', 'acepta palabras vacías o muy largas');
     afirmar(r.mismas && r.intacto === 'Vender', 'las palabras cambiaron qué se ve o el menú original');
     await ctx.close();
+  });
+
+  await prueba('usuario limitado a su sucursal: Inicio y ¿Dónde está mi dinero? solo con lo suyo', async () => {
+    const admin = sql(null, "(SELECT id FROM auth.users WHERE email = 'admin@demo.hn')");
+    const suc = sql('dueno@demo.hn', `(SELECT id FROM public.sucursal WHERE empresa_id = '${EM}' ORDER BY codigo LIMIT 1)`);
+    sqlEscribir('dueno@demo.hn', `SELECT public.asignar_sucursales_usuario('${EM}', '${admin}', ARRAY['${suc}']::uuid[], 'Prueba: limitar a su sucursal')`);
+    try {
+      const { ctx, p } = await nueva();
+      await entrar(p, 'admin@demo.hn');
+      await p.waitForSelector('[data-dato=en_caja]');
+      const r = JSON.parse(sql('admin@demo.hn', `public.resumen_hoy('${EM}')`));
+      afirmar(r.solo_mis_sucursales === true, 'el admin no quedó limitado');
+      afirmar((await textoDe(p, '[data-dato=en_caja] .cifra-titulo')).includes('mis sucursales'), 'no dice que es de sus sucursales');
+      afirmar((await textoDe(p, '[data-dato=en_caja] .cifra-valor')).trim() === lempiras(r.dinero.disponible_centavos), 'el monto no es el de resumen_hoy');
+      afirmar(await p.locator('#grafica-ventas, #mas-vendido').count() === 0, 've la gráfica de toda la empresa');
+      await p.goto(URL_APP + '/#/dinero/donde');
+      await p.waitForSelector('[data-info=solo-sucursales]');
+      // A mano: cuentas de S1 (100.00), S2 (50.00) y sin sucursal (20.00); limitado a S1 -> ve 2 y total L 120.00.
+      const vista = await p.evaluate(async () => {
+        const m = await import('/js/pantallas/dinero_donde.js');
+        const el = m.tarjetaDinero({ total_centavos: 17000, cuentas: [
+          { nombre: 'Caja S1', tipo: 'efectivo_caja', sucursal_id: 'S1', saldo_centavos: 10000 },
+          { nombre: 'Caja S2', tipo: 'efectivo_caja', sucursal_id: 'S2', saldo_centavos: 5000 },
+          { nombre: 'Banco', tipo: 'banco', sucursal_id: null, saldo_centavos: 2000 }] }, ['S1']);
+        return { texto: el.innerText || el.textContent, total: el.querySelector('[data-dato=total_dinero]').textContent };
+      });
+      afirmar(!vista.texto.includes('Caja S2') && vista.texto.includes('Banco') && vista.total === 'L 120.00', 'filtro por sucursal: ' + JSON.stringify(vista));
+      await ctx.close();
+    } finally {
+      sqlEscribir('dueno@demo.hn', `SELECT public.asignar_sucursales_usuario('${EM}', '${admin}', ARRAY[]::uuid[], 'Prueba: quitar el límite')`);
+    }
   });
 
   await prueba('sin errores de JavaScript en las páginas', async () => {

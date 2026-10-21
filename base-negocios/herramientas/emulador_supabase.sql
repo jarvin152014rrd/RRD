@@ -83,6 +83,7 @@ DECLARE
   v_orden text := '';
   v_dir   text;
   v_res   jsonb;
+  v_tipo  text;
 BEGIN
   SELECT c.oid INTO v_rel FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
    WHERE n.nspname = 'public' AND c.relname = p_vista AND c.relkind IN ('r', 'v');
@@ -93,7 +94,14 @@ BEGIN
     IF NOT EXISTS (SELECT 1 FROM pg_attribute WHERE attrelid = v_rel AND attname = v_col AND attnum > 0) THEN
       RAISE EXCEPTION 'PGRST100: columna desconocida %', v_col;
     END IF;
-    v_where := v_where || format('%I::text = ($1->>%L)', v_col, v_col);
+    IF jsonb_typeof(p_filtros->v_col) = 'object' THEN
+      -- "mayor o igual" / "menor o igual" (gte. / lte. de PostgREST), comparado con el tipo de la columna.
+      SELECT format_type(atttypid, atttypmod) INTO v_tipo FROM pg_attribute WHERE attrelid = v_rel AND attname = v_col AND attnum > 0;
+      IF p_filtros->v_col ? 'gte' THEN v_where := v_where || format('%I >= ($1->%L->>''gte'')::%s', v_col, v_col, v_tipo); END IF;
+      IF p_filtros->v_col ? 'lte' THEN v_where := v_where || format('%I <= ($1->%L->>''lte'')::%s', v_col, v_col, v_tipo); END IF;
+    ELSE
+      v_where := v_where || format('%I::text = ($1->>%L)', v_col, v_col);
+    END IF;
   END LOOP;
   IF p_orden IS NOT NULL AND p_orden <> '' THEN
     v_col := split_part(p_orden, '.', 1);

@@ -20,6 +20,14 @@ async function parte(promesa) {
 
 // ---------------- Fechas (siempre con la zona del negocio) ----------------
 const zonaNegocio = () => perfilActual().empresa.zona_horaria || 'America/Tegucigalpa';
+// "Hoy" según el reloj de esta máquina en la zona del negocio. Solo sirve para pedir datos con un
+// día de margen; lo que se MUESTRA usa la fecha que trae el servidor (resumen_hoy -> fecha), así una
+// app que pasó la noche abierta no se queda en el día anterior.
+function hoyDeLaMaquina() {
+  try {
+    return new Intl.DateTimeFormat('en-CA', { timeZone: zonaNegocio(), year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
+  } catch { return perfilActual().empresa.hoy; }
+}
 function mayuscula(t) { return t ? t[0].toUpperCase() + t.slice(1) : t; }
 function sumarDias(iso, n) {
   const [a, m, d] = iso.split('-').map(Number);
@@ -69,9 +77,9 @@ function acciones(menu, turno) {
   return lista.length ? h('nav', { class: 'acciones', 'aria-label': 'Acciones rápidas' }, lista) : null;
 }
 
-function cifras(r, donde, cxp, menu) {
-  const hoy = perfilActual().empresa.hoy;
+function cifras(r, donde, cxp, menu, hoy) {
   const t = [];
+  const limitado = Boolean(r.solo_mis_sucursales);
   if (r.ventas_hoy) {
     const v = r.ventas_hoy;
     const p = v.porcentaje;
@@ -79,23 +87,33 @@ function cifras(r, donde, cxp, menu) {
       chip: p === null || p === undefined ? chip(`Ayer: ${dinero(v.ayer_centavos)}`, 'neutro') : chip(`${porcentaje(p)} que ayer`, p >= 0 ? 'verde' : 'rojo'),
       nota: `· ${plural(v.cantidad || 0, 'venta', 'ventas')}` }));
   }
-  if (donde) {
+  if (limitado && r.dinero) {
+    // Usuario limitado a sus sucursales: donde_esta_mi_dinero trae TODA la empresa; se usa el de
+    // resumen_hoy, que ya viene filtrado (sus sucursales + cuentas de toda la empresa como el banco).
+    t.push(tarjetaCifra({ dato: 'en_caja', icono: 'caja', color: 'azul', etiqueta: 'Dinero disponible en mis sucursales',
+      valor: dinero(r.dinero.disponible_centavos),
+      chip: r.dinero.por_confirmar_centavos ? chip(`${dinero(r.dinero.por_confirmar_centavos)} por confirmar`, 'dorado') : null,
+      nota: 'Cajas, caja chica y bancos que usted ve' }));
+  } else if (donde) {
     const pt = donde.por_tipo || {};
     const efectivo = (pt.efectivo_caja || 0) + (pt.caja_chica || 0);
-    const porConfirmar = r.dinero ? r.dinero.por_confirmar_centavos : 0;
+    // Por confirmar de la MISMA lectura que el monto grande (así cuadran).
+    const porConfirmar = (pt.transito || 0) + (pt.pos_por_liquidar || 0) + (pt.transferencia_por_confirmar || 0);
     t.push(tarjetaCifra({ dato: 'en_caja', icono: 'caja', color: 'azul', etiqueta: 'Hay en caja ahora', valor: dinero(efectivo),
       chip: porConfirmar ? chip(`${dinero(porConfirmar)} por confirmar`, 'dorado') : null,
       nota: [`En bancos ${dinero(pt.banco || 0)}`, hayEnMenu(menu, 'dinero', 'donde') ? [' · ', h('a', { href: '#/dinero/donde' }, 'Ver todo')] : null] }));
   }
-  if (r.te_deben) {
+  if (r.te_deben && tieneModulo('ventas')) {
     const d = r.te_deben;
     t.push(tarjetaCifra({ dato: 'te_deben', icono: 'clientes', color: 'dorado', etiqueta: 'Me deben', valor: dinero(d.total_centavos),
       chip: d.vencido_centavos > 0 ? chip(`${dinero(d.vencido_centavos)} vencido`, 'rojo') : chip('Nada vencido', 'verde'),
       nota: `· ${plural(d.clientes || 0, 'cliente', 'clientes')}` }));
   }
-  if (r.debes) {
+  if (r.debes && tieneModulo('compras')) {
     const d = r.debes;
-    const proximo = (cxp || []).find((x) => x.saldo_centavos > 0 && x.fecha_vencimiento && x.fecha_vencimiento >= hoy);
+    // Limitado a sucursal: los saldos iniciales de proveedores no tienen sucursal; no cuentan.
+    const proximo = (cxp || []).find((x) => x.saldo_centavos > 0 && x.fecha_vencimiento && x.fecha_vencimiento >= hoy
+      && !(limitado && x.origen === 'saldo_inicial'));
     t.push(tarjetaCifra({ dato: 'debes', icono: 'baja', color: 'rojo', etiqueta: 'Debo a proveedores', valor: dinero(d.total_centavos),
       chip: d.vencido_centavos > 0 ? chip(`${dinero(d.vencido_centavos)} vencido`, 'rojo') : chip('Nada vencido', 'verde'),
       nota: proximo ? `· Próximo pago: ${proximo.fecha_vencimiento === hoy ? 'hoy' : diaYNumero(proximo.fecha_vencimiento)} · ${dinero(proximo.saldo_centavos)}`
@@ -104,8 +122,7 @@ function cifras(r, donde, cxp, menu) {
   return t;
 }
 
-function graficaSemana(filas) {
-  const hoy = perfilActual().empresa.hoy;
+function graficaSemana(filas, hoy) {
   const por = new Map(filas.map((f) => [f.fecha, Number(f.total_centavos) || 0]));
   const barras = [];
   for (let i = 6; i >= 0; i--) {
@@ -121,8 +138,14 @@ function graficaSemana(filas) {
     graficaBarras(barras, { titulo: 'Ventas por día en lempiras, de hace 6 días hasta hoy' }));
 }
 
-function masVendido(lineas) {
-  const desde = sumarDias(perfilActual().empresa.hoy, -6);
+// "1 vendido", "13 vendidos"; con decimales (kilos, libras) "8.5 unidades".
+function vendidos(n) {
+  if (!Number.isInteger(n)) return `${cantidad(n)} unidades`;
+  return n === 1 ? '1 vendido' : `${cantidad(n)} vendidos`;
+}
+
+function masVendido(lineas, hoy) {
+  const desde = sumarDias(hoy, -6);
   const por = new Map();
   for (const l of lineas) {
     if (!l.fecha_contable || l.fecha_contable < desde) continue;
@@ -142,12 +165,12 @@ function masVendido(lineas) {
     // Burbuja lista para la miniatura de la foto (más adelante): por ahora, el ícono.
     burbuja: burbuja(x.servicio ? 'servicio' : 'etiqueta', 'neutro', { class: 'burbuja-foto', dataset: { productoId: x.id } }),
     titulo: x.nombre, detalle: x.codigo,
-    derecha: [h('span', { class: 'monto' }, dinero(x.total)), h('span', { class: 'suave' }, `${cantidad(x.cantidad)} vendido(s)`)],
+    derecha: [h('span', { class: 'monto' }, dinero(x.total)), h('span', { class: 'suave' }, vendidos(Math.round(x.cantidad * 10000) / 10000))],
     props: { dataset: { productoTop: x.id } },
   }))));
-  if (lineas.length >= LIMITE_LINEAS) {
-    tarjeta.append(h('p', { class: 'ayuda' }, `Se cuentan las últimas ${LIMITE_LINEAS.toLocaleString('en-US')} líneas de venta.`));
-  }
+  tarjeta.append(h('p', { class: 'ayuda', dataset: { info: 'sin-devoluciones' } },
+    'Ventas de los últimos 7 días, sin restar devoluciones.',
+    lineas.length >= LIMITE_LINEAS ? ` Se cuentan las últimas ${LIMITE_LINEAS.toLocaleString('en-US')} líneas de venta.` : ''));
   return tarjeta;
 }
 
@@ -231,6 +254,10 @@ export async function mostrar(vista, ctx) {
   const verCxp = tieneModulo('compras') && puede('compras.ver');
   const verTurno = hayEnMenu(menu, 'caja', 'turno');
   const esJefe = ['dueno', 'admin'].includes(perfil.rol.codigo) && puede('arranque.gestionar');
+  // Se pide con un día de margen (por si el reloj de la máquina no cuadra con el servidor);
+  // después se filtra con la fecha del servidor.
+  const desdeMargen = sumarDias(hoyDeLaMaquina(), -8);
+  const hoyMargen = sumarDias(hoyDeLaMaquina(), -1);
 
   const [resumen, donde, alertas, aprob, turno, dias, lineas, cxp, arranque, marca, turnos] = await Promise.all([
     parte(rpc('resumen_hoy', { p_empresa_id: e })),
@@ -238,19 +265,24 @@ export async function mostrar(vista, ctx) {
     parte(leerAlertas(puede('aprobaciones.ver'))),
     puede('aprobaciones.ver') ? parte(pendientes()) : null,
     verTurno ? parte(rpc('mi_turno', { p_empresa_id: e }).then((r) => (r && r.turno) || null)) : null,
-    verVentas ? parte(leer('v_ventas_por_dia', { empresa_id: e }, { orden: 'fecha.desc', limite: 14 })) : null,
-    verVentas ? parte(leer('v_venta_linea', { empresa_id: e, estado: 'emitida' }, { orden: 'fecha_contable.desc', limite: LIMITE_LINEAS })) : null,
-    verCxp ? parte(leer('v_cxp_documento', { empresa_id: e }, { orden: 'fecha_vencimiento.asc', limite: 200 })) : null,
+    verVentas ? parte(leer('v_ventas_por_dia', { empresa_id: e, fecha: { gte: desdeMargen } }, { orden: 'fecha.desc', limite: 20 })) : null,
+    verVentas ? parte(leer('v_venta_linea', { empresa_id: e, estado: 'emitida', fecha_contable: { gte: desdeMargen } },
+      { orden: 'fecha_contable.desc', limite: LIMITE_LINEAS })) : null,
+    // Próximo pago: solo lo que vence de hoy en adelante, el más cercano primero.
+    verCxp ? parte(leer('v_cxp_documento', { empresa_id: e, fecha_vencimiento: { gte: hoyMargen } }, { orden: 'fecha_vencimiento.asc', limite: 20 })) : null,
     esJefe ? parte(rpc('estado_arranque', { p_empresa_id: e })) : null,
     esJefe ? parte(rpc('marca_empresa', { p_empresa_id: e })) : null,
     esJefe && tieneModulo('dinero') ? parte(leer('v_turno_caja', { empresa_id: e }, { limite: 1 })) : null,
   ]);
   if (!ctx.sigueVigente()) return;
   const miTurno = turno && turno.ok ? turno.ok : null;
+  // La fecha de hoy la manda el servidor en cada carga (y se refresca en el perfil).
+  const hoy = (resumen.ok && resumen.ok.fecha) || perfil.empresa.hoy;
+  if (resumen.ok && resumen.ok.fecha) perfil.empresa.hoy = resumen.ok.fecha;
 
   // Saludo, fecha y estado de la caja del usuario
   const nombre = (perfil.usuario.nombre || '').split(' ')[0];
-  const partes = [mayuscula(fechaLarga(perfil.empresa.hoy).replace(',', ''))];
+  const partes = [mayuscula(fechaLarga(hoy).replace(',', ''))];
   if (miTurno) partes.push(`${miTurno.caja || 'Su caja'} abierta desde las ${horaCorta(miTurno.abierto_en)}`);
   else if (turno && turno.ok === null) partes.push('Su caja está cerrada');
   vista.append(h('div', { class: 'inicio-cabeza' }, h('div', { class: 'saludo' },
@@ -266,12 +298,12 @@ export async function mostrar(vista, ctx) {
 
   const izq = h('div', { class: 'inicio-izq' });
   const der = h('div', { class: 'inicio-der' });
-  const t = cifras(r, donde && donde.ok, cxp && cxp.ok, menu);
-  if (donde && donde.err) izq.append(await cajaError(donde.err));
+  const t = cifras(r, donde && donde.ok, cxp && cxp.ok, menu, hoy);
+  if (donde && donde.err && !sucursal) izq.append(await cajaError(donde.err));
   if (t.length) izq.append(h('div', { class: 'cifras-dos' }, t));
   if (r.frase) izq.append(h('p', { class: 'tarjeta frase', dataset: { dato: 'frase' } }, r.frase));
-  if (dias && dias.ok && !sucursal) izq.append(graficaSemana(dias.ok));
-  if (lineas && lineas.ok && !sucursal) izq.append(masVendido(lineas.ok));
+  if (dias && dias.ok && !sucursal) izq.append(graficaSemana(dias.ok, hoy));
+  if (lineas && lineas.ok && !sucursal) izq.append(masVendido(lineas.ok, hoy));
   if (!t.length) { const a = atajos(menu); if (a) izq.append(a); }
 
   if (arranque && arranque.ok && marca && marca.ok) {
