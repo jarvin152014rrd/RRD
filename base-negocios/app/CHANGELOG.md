@@ -1,5 +1,34 @@
 # Cambios de la app
 
+## app 0.6.0 (núcleo 0.15.0, sin migraciones nuevas) — Rediseño, ronda 2: todas las pantallas, la marca y lo impreso
+
+- **El estilo de Inicio en todas las pantallas:** títulos con ícono dorado; montos en verde (entra dinero) y
+  rojo (sale o falta); chips de estado (pagada, pendiente, vencida, anulada, en espera de aprobación); listas
+  con burbuja de ícono y los botones en su propia línea. Piezas nuevas en `js/ui.js`: `titulo`, `chipEstado`,
+  `monto`, `tabla`, `cabezaPantalla`; `estadoVacio` acepta varios botones.
+- **Pantallas vacías que enseñan** (productos, clientes, ventas del día, cotizaciones, existencias, conteo,
+  traslados, cajas y bancos, caja chica, depósitos, quién me debe), con botón solo si la persona puede usarlo.
+- **Mensajes claros después de cada acción**, con ícono verde (o rojo si hay un problema, como un faltante) y
+  los datos que devuelve el servidor: venta, cotización, devolución, gasto, depósito o retiro, abrir y cerrar
+  turno, cobro, cliente, producto y precio, conteo, traslado, Excel, cajas, impuestos, reglas, usuarios.
+- **Tablas como tarjetas en el celular** (< 700 px) con una sola solución: `ui.tabla` + CSS (existencias,
+  movimientos, vista previa del Excel, impuestos, topes y permisos).
+- **Entrar** cálida: banda con el color del negocio, logo (o iniciales) y nombre grandes, sin textos técnicos.
+- **Alertas que recibo** ya funciona (`mis_preferencias_alertas` / `guardar_preferencias_alertas`, del núcleo).
+- **Subpestañas de Inicio y Pendientes al lado del título** en computadora (como el dibujo); arriba en el celular.
+- **Marca del cliente:** logo de 44 px (o iniciales en burbuja de acento) en el encabezado y en entrar; la
+  marca solo cambia el principal y el acento; **contraste automático AA** (texto blanco u oscuro; el principal
+  usado como letra se oscurece si hace falta); ya no se rechaza un color claro. **Vista previa en vivo** del
+  encabezado real en Ajustes > Mi negocio. La barra del navegador del celular toma el color del negocio.
+- **Lo impreso** (comprobante, WhatsApp de la venta y del cobro, título de la hoja al imprimir): sin íconos,
+  sin emojis (aunque el negocio, los productos o las palabras del rubro los traigan; nuevo `js/imprimible.js`)
+  y en negro. Sin cambios visuales nuevos.
+- **Arreglo:** ya no sale el texto "null" en Mi cuenta (dueño), Excel (sin permiso de copia), Mi negocio
+  (admin) y Traslados (sin mercadería en camino).
+- Pruebas: `probar_app.cjs` 42 (nuevas: subpestañas y tablas como tarjetas, estado vacío, alertas que recibo,
+  contraste de la marca con #f5e663 y #0b0b2e y vista previa, lo impreso con emojis, ninguna pantalla con
+  emojis ni "null" en computadora y celular con capturas de todas). Cascarón `cascaron-0.6.0`.
+
 ## app 0.5.1 (núcleo 0.15.0, sin migraciones nuevas) — Arreglos de la revisión de la ronda 1
 
 - **Usuario limitado a su sucursal:** en Inicio la tarjeta de dinero usa `resumen_hoy` (ya filtrado) y dice

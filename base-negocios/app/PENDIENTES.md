@@ -1,8 +1,16 @@
-# Pendientes de la app (0.5.1)
+# Pendientes de la app (0.6.0)
 
-- Pantallas en construcción: apartados, cajas abiertas, compras, dinero (salvo ¿Dónde está mi dinero?), reportes,
-  proyección, "Alertas que recibo" (el núcleo ya tiene `mis_preferencias_alertas`: se puede hacer en la ronda 2).
-- Rediseño ronda 2: llevar el estilo nuevo (íconos en títulos, burbujas, estados vacíos) a las demás pantallas.
+- Pantallas en construcción (con su estado vacío amable): apartados, cajas abiertas, compras, dinero (salvo
+  ¿Dónde está mi dinero?), reportes, proyección y cierre de mes.
+- HECHO (0.6.0): "Alertas que recibo" y el estilo nuevo en todas las pantallas. Falta: notificaciones al celular.
+- Excel: los nombres con emojis se descargan tal cual (si se quitaran, al volver a subir el archivo saldrían
+  como "cambios"). Solo lo impreso y lo que se manda por WhatsApp va sin emojis.
+- Comprobante: todavía no lleva el logo del negocio (la ronda 2 no agrega cambios visuales a lo impreso).
+- Vender no tiene un título grande (h1) arriba: la pantalla empieza con "Buscar producto o servicio".
+- La pantalla de entrar muestra la marca guardada en ESE equipo; en un equipo nuevo sale "Mi Negocio" hasta que
+  alguien entra una vez (antes de entrar no se puede leer la base). Si el proveedor quiere el nombre desde el
+  primer día, se podría poner en `config.js` (anotado, no hecho).
+- Vista previa del Armador: su burbuja de logo sigue en 36 px (la app pasó a 44 px).
 - Inicio: "Lo más vendido" se calcula en el navegador con las últimas 1,000 líneas de venta (si hay más en la
   semana, lo dice). Con mucho volumen convendrá una función del núcleo que ya lo sume.
 - NÚCLEO: `donde_esta_mi_dinero` devuelve las cuentas de TODA la empresa a un usuario limitado a sucursal. La app

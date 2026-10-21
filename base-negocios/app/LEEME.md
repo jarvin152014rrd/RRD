@@ -68,11 +68,12 @@ cierra en la base y además borra sus sesiones de Supabase Auth). Sin `modo` (la
 | `js/menu_datos.js` | Lista de pestañas y subpestañas (datos puros, sin importar nada): la usa también la vista previa del Armador. |
 | `js/errores.js` | Traduce errores con `error_catalogo` (mensaje sencillo + qué hacer). |
 | `js/formato.js` | `dinero(centavos)` → "L 1,234.56", fechas locales. |
-| `js/ui.js` | `h()` para armar pantallas sin innerHTML, avisos, diálogo de motivo y las piezas visuales: `chip`, `burbuja`, `tarjetaCifra`, `botonAccion`, `filaIcono`, `graficaBarras`, `estadoVacio`, `mensaje`. |
+| `js/ui.js` | `h()` para armar pantallas sin innerHTML, avisos, diálogo de motivo y las piezas visuales: `chip`, `chipEstado` (pagada, pendiente, vencida, anulada, en espera de aprobación…), `burbuja`, `titulo` (con ícono dorado), `monto` (verde entra, rojo sale), `tarjetaCifra`, `botonAccion`, `filaIcono`, `tabla` (en el celular se ve como tarjetas), `graficaBarras`, `estadoVacio` (con botones para empezar), `mensaje`, `cabezaPantalla` (título con las subpestañas al lado). |
 | `js/iconos.js` | Íconos de línea propios (`icono('vender')`), dentro de la app: sin internet. Nunca en lo impreso. |
 | `js/datos.js` | Listas compartidas en memoria un minuto: productos, clientes, cajas, cuentas de dinero, mi turno; `filtrar()` sin tildes. |
-| `js/comprobante.js` | Comprobante de venta (`documento_venta`), impresión de 80 mm y texto para WhatsApp. |
-| `js/marca.js` | Nombre comercial, logo y colores del negocio (`marca_empresa`); cambia solo variables de color. |
+| `js/comprobante.js` | Comprobante de venta (`documento_venta`), impresión de 80 mm y texto para WhatsApp. Pasa por `imprimible.js`. |
+| `js/imprimible.js` | Lo impreso solo lleva texto y líneas: quita emojis y dibujos de comprobantes, WhatsApp y del título al imprimir (los datos guardados no cambian). |
+| `js/marca.js` | Nombre comercial, logo y colores del negocio (`marca_empresa`). Cambia solo el color principal y el de acento, con **contraste automático** (texto blanco u oscuro, AA); los colores con significado no cambian. Recuerda la marca en el equipo para la pantalla de entrar. |
 | `js/excel.js` | Arma y lee el `.xlsx` (columnas azules/grises, hoja Instrucciones) para `exportar_plantilla` / `importar_*`. |
 | `vendor/xlsx.bundle.js` | SheetJS (`xlsx-js-style` 1.2.0, licencia Apache 2.0 en `vendor/`), copia local: funciona sin internet. Se carga solo al usar Excel. |
 | `js/pantallas/*.js` | Una pantalla por archivo: `inicio`, `pendientes` (usa `alertas` y `aprobaciones`), `dinero_donde`, `mas`, `entrar`, `en_construccion`, `vender` (carrito; también lo usa `cotizaciones`), `ventas_dia`, `cotizaciones`, `devoluciones`, `caja_turno`, `caja_dinero`, `caja_gasto`, `clientes`, `me_deben`; Inventario: `inv_productos`, `inv_existencias`, `inv_conteo`, `inv_movimientos`, `inv_traslados`, `inv_excel`; Ajustes: `aj_negocio`, `aj_usuarios`, `aj_cajas`, `aj_impuestos`, `aj_reglas`, `aj_datos`. |
@@ -86,6 +87,21 @@ cierra en la base y además borra sus sesiones de Supabase Auth). Sin `modo` (la
    (un nombre de `js/iconos.js`); la prueba falla si falta. Si cambia una ruta, agregue la vieja a `RUTAS_VIEJAS`.
 3. Agregue el archivo a `CASCARON` en `sw.js` y suba `VERSION`.
 4. Agregue su prueba en `app-pruebas/probar_app.cjs`.
+
+## Cómo se usa (0.6.0)
+
+- **Todas las pantallas** tienen el estilo de Inicio: títulos con ícono, montos en verde (entra dinero) o rojo
+  (sale o falta) y chips de estado (pagada, pendiente, vencida, anulada, en espera de aprobación).
+- **Pantallas vacías que enseñan:** si todavía no hay productos, clientes, ventas o cajas, sale un dibujo, una
+  frase y el botón para empezar (por ejemplo "Agregar el primero" y "Subir mi Excel"), solo si usted puede.
+- **Después de cada acción** sale un mensaje con lo que pasó: "Venta T-… guardada · L 850.00 en efectivo",
+  "Gasto de L 150.00 guardado · sale de Caja chica", "Turno #3 cerrado · faltante L 50.00" (en rojo).
+- **En el celular** las tablas se ven como tarjetas, con lo principal arriba y los botones grandes.
+- **Ajustes > Mi cuenta > Alertas que recibo:** marque o desmarque qué avisos le llegan y toque
+  **Guardar mis alertas**. Solo cambia lo que usted ve.
+- **Ajustes > Mi negocio:** al cambiar logo o colores, la vista previa muestra el encabezado tal como quedará.
+  Si elige un color claro, las letras de encima se ponen oscuras solas para que se lean.
+- **Entrar:** muestra el logo y el nombre del negocio que se usó la última vez en ese equipo.
 
 ## Cómo se usa Inicio (0.5.0)
 
