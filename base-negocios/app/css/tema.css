@@ -11,6 +11,11 @@
   --color-suave: #4a4a4a;       /* gris oscuro: se lee bien */
   --color-en-principal: #ffffff;
   --color-en-principal-suave: #c9d2e3;
+  /* Colores que salen de la MARCA (js/marca.js los recalcula con contraste AA automático):
+     texto encima del color principal / del acento, el principal como letra sobre blanco y el foco. */
+  --color-principal-texto: #0f1f3d;
+  --color-en-acento: #0f1f3d;
+  --color-foco: #c8972a;
   --color-peligro: #a12a1e;
   --color-peligro-fondo: #fbeae7;
   --color-ok: #1e6b3a;
@@ -35,5 +40,3 @@
   --letra: 'IBM Plex Sans', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
   --letra-mono: 'IBM Plex Mono', ui-monospace, 'SFMono-Regular', Menlo, Consolas, monospace;
 }
-/* Texto encima del color de acento (burbujas, número de la campanita). La marca lo recalcula. */
-:root { --color-en-acento: #0f1f3d; }

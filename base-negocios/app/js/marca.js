@@ -44,39 +44,83 @@ export function nombreVisible() {
   return (actual && actual.marca && actual.marca.nombre_comercial) || (p && p.empresa ? p.empresa.nombre : '');
 }
 
-// Aclara un color #rrggbb mezclándolo con blanco (0..1).
-function aclarar(hex, cuanto) {
-  const n = parseInt(hex.slice(1), 16);
-  const c = [n >> 16, (n >> 8) & 255, n & 255].map((x) => Math.round(x + (255 - x) * cuanto));
-  return '#' + c.map((x) => x.toString(16).padStart(2, '0')).join('');
+// ---------------- Colores y contraste (WCAG) ----------------
+// La marca SOLO cambia el color principal (encabezado y botones principales) y el de acento.
+// Los colores con significado (verde, rojo, dorado y azul de estado, css/tema.css) NUNCA cambian.
+const BLANCO = '#ffffff';
+const OSCURO = '#1a1a1a';
+const esColor = (x) => typeof x === 'string' && /^#[0-9a-fA-F]{6}$/.test(x);
+const rgb = (hex) => { const n = parseInt(hex.slice(1), 16); return [n >> 16, (n >> 8) & 255, n & 255]; };
+const aHex = (c) => '#' + c.map((x) => Math.round(Math.min(255, Math.max(0, x))).toString(16).padStart(2, '0')).join('');
+
+// Mezcla dos colores (t = 0 -> a, t = 1 -> b).
+export function mezclar(a, b, t) {
+  const x = rgb(a), y = rgb(b);
+  return aHex(x.map((v, i) => v + (y[i] - v) * t));
+}
+function luminancia(hex) {
+  const l = rgb(hex).map((x) => { const v = x / 255; return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4; });
+  return 0.2126 * l[0] + 0.7152 * l[1] + 0.0722 * l[2];
+}
+// Contraste WCAG entre dos colores (1 a 21). AA para texto normal = 4.5 o más.
+export function contraste(a, b) {
+  const [x, y] = [luminancia(a), luminancia(b)].sort((m, n) => n - m);
+  return (x + 0.05) / (y + 0.05);
+}
+export function contrasteConBlanco(hex) { return contraste(hex, BLANCO); }
+
+// Texto encima de un color: blanco u oscuro, el que más se lea (siempre cumple AA: con blanco o con
+// #1a1a1a, al menos uno de los dos pasa 4.5 sobre cualquier color).
+export function textoSobre(fondo) { return contraste(fondo, BLANCO) >= contraste(fondo, OSCURO) ? BLANCO : OSCURO; }
+
+// Texto "suave" (menos fuerte) encima de un color, sin bajar de AA.
+function suaveSobre(fondo, texto) {
+  for (const t of [0.3, 0.2, 0.1]) { const c = mezclar(texto, fondo, t); if (contraste(c, fondo) >= 4.5) return c; }
+  return texto;
+}
+// El color de la marca usado como LETRA sobre blanco o crema (títulos, botones de borde): si es muy
+// claro se oscurece hasta que se lea (AA sobre el fondo crema, que es un poco más oscuro que el blanco).
+function legibleSobreClaro(hex, fondo = '#f4f2ee') {
+  for (let t = 0; t <= 1.0001; t += 0.05) { const c = mezclar(hex, '#000000', t); if (contraste(c, fondo) >= 4.5) return c; }
+  return OSCURO;
 }
 
-// Contraste WCAG entre un color y el blanco (para avisar si las letras blancas no se leen).
-export function contrasteConBlanco(hex) {
-  const n = parseInt(hex.slice(1), 16);
-  const l = [n >> 16, (n >> 8) & 255, n & 255].map((x) => { const v = x / 255; return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4; });
-  const lum = 0.2126 * l[0] + 0.7152 * l[1] + 0.0722 * l[2];
-  return 1.05 / (lum + 0.05);
+// Todas las variables de color que salen de la marca. null = usar las del tema (css/tema.css).
+export function coloresDeMarca(m = {}) {
+  const v = {};
+  if (esColor(m.color_principal)) {
+    const p = m.color_principal.toLowerCase();
+    const en = textoSobre(p);
+    Object.assign(v, { '--color-principal': p, '--color-principal-2': mezclar(p, BLANCO, 0.12), '--color-en-principal': en,
+      '--color-en-principal-suave': suaveSobre(p, en), '--color-principal-texto': legibleSobreClaro(p) });
+  }
+  if (esColor(m.color_acento)) {
+    const a = m.color_acento.toLowerCase();
+    // Foco: el acento, salvo que casi no se vea sobre blanco (entonces el principal legible).
+    Object.assign(v, { '--color-acento': a, '--color-en-acento': textoSobre(a),
+      '--color-foco': contraste(a, BLANCO) >= 2 ? a : (v['--color-principal-texto'] || '#0f1f3d') });
+  }
+  return v;
 }
+const VARIABLES = ['--color-principal', '--color-principal-2', '--color-en-principal', '--color-en-principal-suave',
+  '--color-principal-texto', '--color-acento', '--color-en-acento', '--color-foco'];
 
 // Pone los colores (o vuelve a los del tema si no hay) y el logo y nombre del encabezado.
+// raiz puede ser otro elemento (la vista previa de Ajustes > Mi negocio): ahí solo cambian los colores.
 export function aplicarMarca(m = {}, raiz = document.documentElement) {
-  const ok = (x) => typeof x === 'string' && /^#[0-9a-fA-F]{6}$/.test(x);
-  if (ok(m.color_principal)) {
-    raiz.style.setProperty('--color-principal', m.color_principal);
-    raiz.style.setProperty('--color-principal-2', aclarar(m.color_principal, 0.12));
-  } else {
-    raiz.style.removeProperty('--color-principal'); raiz.style.removeProperty('--color-principal-2');
+  const v = coloresDeMarca(m || {});
+  for (const k of VARIABLES) {
+    if (v[k]) raiz.style.setProperty(k, v[k]); else raiz.style.removeProperty(k);
   }
-  if (ok(m.color_acento)) raiz.style.setProperty('--color-acento', m.color_acento);
-  else raiz.style.removeProperty('--color-acento');
   if (raiz !== document.documentElement) return;
+  const meta = document.querySelector('meta[name=theme-color]');
+  if (meta) meta.setAttribute('content', v['--color-principal'] || '#0f1f3d');
   const nombre = document.getElementById('marca-nombre');
   if (nombre) nombre.textContent = nombreVisible();
   const logo = document.getElementById('marca-logo');
   if (logo && perfilActual()) logo.dataset.iniciales = iniciales(nombreVisible());
   if (logo) {
-    if (m.logo) {
+    if (m && m.logo) {
       const img = document.createElement('img');
       img.src = m.logo; img.alt = ''; img.className = 'marca-logo-img';
       logo.replaceChildren(img);

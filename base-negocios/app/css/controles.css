@@ -3,20 +3,22 @@
 .boton {
   font: inherit; font-size: 15px; font-weight: 600; line-height: 1.2; border-radius: 8px;
   padding: 10px 18px; min-height: 44px; min-width: 44px; cursor: pointer;
-  border: 1px solid var(--color-principal, #0f1f3d); background: #ffffff; color: var(--color-principal, #0f1f3d);
+  border: 1px solid var(--color-principal-texto, #0f1f3d); background: #ffffff; color: var(--color-principal-texto, #0f1f3d);
   display: inline-flex; align-items: center; justify-content: center; gap: 8px; text-decoration: none; text-align: center;
 }
-.boton-principal { background: var(--color-principal, #0f1f3d); color: #ffffff; }
+.boton-principal { background: var(--color-principal, #0f1f3d); border-color: var(--color-principal, #0f1f3d); color: var(--color-en-principal, #ffffff); }
 .boton-peligro { border-color: var(--color-peligro, #a12a1e); color: var(--color-peligro, #a12a1e); background: #ffffff; }
-.boton-claro { border-color: rgba(255,255,255,.5); color: #ffffff; background: transparent; min-height: 40px; padding: 6px 14px; }
+.boton-claro { border-color: var(--color-en-principal-suave, rgba(255,255,255,.5)); color: var(--color-en-principal, #ffffff); background: transparent; min-height: 40px; padding: 6px 14px; }
 .boton-ancho { width: 100%; }
 .boton[disabled] { opacity: .6; cursor: progress; }
 .botones { display: flex; gap: 8px; flex-wrap: wrap; }
 .botones .boton { flex: 1 1 auto; }
 
 :where(a, button, input, textarea, select, [tabindex]):focus-visible {
-  outline: 3px solid var(--color-acento, #c8972a); outline-offset: 2px;
+  outline: 3px solid var(--color-foco, #c8972a); outline-offset: 2px;
 }
+/* En el encabezado (color del negocio) el foco va con el color del texto de encima: siempre se ve. */
+.encabezado :where(a, button):focus-visible, .entrar-marca :focus-visible { outline-color: var(--color-en-principal, #ffffff); }
 
 .campo { display: flex; flex-direction: column; gap: 6px; }
 .campo label { font-size: 15px; font-weight: 600; color: var(--color-texto, #1a1a1a); }

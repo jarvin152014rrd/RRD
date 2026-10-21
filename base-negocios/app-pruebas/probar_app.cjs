@@ -280,6 +280,10 @@ const textoDe = (pagina, sel) => pagina.locator(sel).first().innerText();
     sqlEscribir('dueno@demo.hn', `SELECT public.cerrar_sesion_usuario('${EMPRESA}', '${uid}', 'Prueba: cerrar a distancia')`);
     await p.waitForSelector('#correo', { timeout: 15000 });
     afirmar((await textoDe(p, '.entrar .mensaje')).includes('cerrada por el administrador'), 'no explicó por qué salió');
+    // 0.6.0: la pantalla de entrar muestra el nombre y las iniciales del negocio que se usó en este equipo.
+    afirmar((await textoDe(p, '#entrar-nombre')).trim() === 'Ferretería El Roble', 'entrar sin el nombre del negocio: ' + await textoDe(p, '#entrar-nombre'));
+    afirmar((await textoDe(p, '.entrar-logo')).trim() === 'FR', 'entrar sin las iniciales en la burbuja');
+    afirmar(!/\b(RPC|JWT|token|Supabase|servidor)\b/i.test(await p.locator('.entrar').innerText()), 'la pantalla de entrar tiene textos técnicos');
     // Puede volver a entrar (sesión nueva).
     await entrar(p, 'vendedor@demo.hn');
   });
@@ -992,6 +996,64 @@ const textoDe = (pagina, sel) => pagina.locator(sel).first().innerText();
     await p.click('#alertas-guardar');
     await p.waitForFunction((n) => document.querySelector('#avisos').innerText.includes(`recibe ${n} de ${n}`), total);
     afirmar(sql('dueno@demo.hn', `(SELECT recibir FROM public.alerta_preferencia WHERE tipo = 'stock_minimo' AND user_id = auth.uid())`) === 'true', 'no se volvió a encender');
+    await ctx.close();
+  });
+
+  await prueba('marca del cliente: contraste automático (amarillo #f5e663 y azul muy oscuro) y los colores de significado no cambian', async () => {
+    const { ctx, p } = await nueva();
+    await entrar(p, 'dueno@demo.hn');
+    await p.goto(URL_APP + '/#/vender/ventas');
+    await p.waitForSelector('#t-dia');
+    const r = await p.evaluate(async () => {
+      const mk = await import('/js/marca.js');
+      const raiz = document.documentElement;
+      const SIGNIFICADO = ['--color-verde', '--color-rojo', '--color-dorado', '--color-azul', '--color-verde-fondo', '--color-rojo-fondo',
+        '--color-dorado-fondo', '--color-azul-fondo', '--color-peligro', '--color-ok'];
+      const fijos = () => SIGNIFICADO.map((v) => getComputedStyle(raiz).getPropertyValue(v).trim()).join(',');
+      const hex = (c) => '#' + c.match(/\d+/g).slice(0, 3).map((x) => Number(x).toString(16).padStart(2, '0')).join('');
+      const color = (el) => hex(getComputedStyle(el).color);
+      const fondo = (el) => hex(getComputedStyle(el).backgroundColor);
+      const boton = document.createElement('button'); boton.className = 'boton boton-principal'; boton.textContent = 'Prueba';
+      document.getElementById('contenido').append(boton);
+      const antes = fijos();
+      const medir = (principal, acento) => {
+        mk.aplicarMarca({ color_principal: principal, color_acento: acento });
+        const enc = document.querySelector('.encabezado');
+        return {
+          textoSobre: mk.textoSobre(principal),
+          nombre: mk.contraste(color(document.getElementById('marca-nombre')), fondo(enc)),
+          pestana: mk.contraste(color(document.querySelector('.pestana[aria-current]')), fondo(enc)),
+          salir: mk.contraste(color(document.querySelector('.quien .boton-claro')), fondo(enc)),
+          boton: mk.contraste(color(boton), fondo(boton)),
+          titulo: mk.contraste(color(document.querySelector('#t-dia')), '#ffffff'),
+          iniciales: mk.contraste(color(document.getElementById('marca-logo')), fondo(document.getElementById('marca-logo'))),
+          fijos: fijos() === antes,
+        };
+      };
+      const claro = medir('#f5e663', '#fff3a0');
+      const oscuro = medir('#0b0b2e', '#1d1d5c');
+      mk.aplicarMarca({}); boton.remove();
+      return { claro, oscuro, vuelve: fijos() === antes };
+    });
+    for (const [n, x] of Object.entries({ claro: r.claro, oscuro: r.oscuro })) {
+      for (const k of ['nombre', 'pestana', 'salir', 'boton', 'titulo', 'iniciales']) afirmar(x[k] >= 4.5, `${n}: ${k} con contraste ${x[k].toFixed(2)} (< 4.5)`);
+      afirmar(x.fijos, `${n}: la marca cambió un color de significado`);
+    }
+    afirmar(r.claro.textoSobre === '#1a1a1a' && r.oscuro.textoSobre === '#ffffff', 'texto encima: ' + JSON.stringify([r.claro.textoSobre, r.oscuro.textoSobre]));
+    // Ajustes > Mi negocio: vista previa en vivo antes de guardar (la app no cambia hasta guardar).
+    await p.goto(URL_APP + '/#/ajustes/negocio');
+    await p.waitForSelector('#marca-previa .encabezado');
+    const real = await p.evaluate(() => getComputedStyle(document.querySelector('header.encabezado')).backgroundColor);
+    await p.fill('#marca-principal', '#f5e663');
+    await p.waitForSelector('[data-info=contraste]');
+    const prev = await p.evaluate(() => ({ fondo: getComputedStyle(document.querySelector('#marca-previa .encabezado')).backgroundColor,
+      letra: getComputedStyle(document.querySelector('#marca-previa .marca-nombre')).color,
+      real: getComputedStyle(document.querySelector('header.encabezado')).backgroundColor,
+      iniciales: document.querySelector('#marca-previa .marca-logo').textContent }));
+    afirmar(prev.fondo === 'rgb(245, 230, 99)' && prev.letra === 'rgb(26, 26, 26)', 'vista previa: ' + JSON.stringify(prev));
+    afirmar(prev.real === real, 'la app cambió de color antes de guardar');
+    afirmar(prev.iniciales === 'FR', 'sin logo, la vista previa no muestra las iniciales');
+    await p.screenshot({ path: path.join(CAPTURAS, 'marca_vista_previa_amarilla.png') });
     await ctx.close();
   });
 

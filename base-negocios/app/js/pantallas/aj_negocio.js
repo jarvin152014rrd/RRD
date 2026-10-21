@@ -3,8 +3,8 @@
 // (nombre legal y RTN) solo los ve el dueño y se cambian con el proveedor (ficha del cliente).
 import { rpc } from '../api.js';
 import { empresaId, puede } from '../sesion.js';
-import { h, aviso, errorSimple, campo, pedirMotivo } from '../ui.js';
-import { guardarMarcaLocal, aplicarMarca, contrasteConBlanco } from '../marca.js';
+import { h, icono, aviso, errorSimple, campo, pedirMotivo, titulo, burbuja, chip, mensaje } from '../ui.js';
+import { guardarMarcaLocal, aplicarMarca, textoSobre, iniciales } from '../marca.js';
 
 const BASE = { color_principal: '#0f1f3d', color_acento: '#c8972a' }; // los del tema
 
@@ -20,25 +20,33 @@ export async function mostrar(vista, ctx) {
   let logo = marca.logo || null;
   const quitarLogo = h('input', { type: 'checkbox', id: 'marca-quitar-logo' });
   const zonaError = h('div', { 'aria-live': 'assertive' });
-  const aviContraste = h('p', { class: 'mensaje mensaje-info', hidden: true });
+  const aviContraste = h('div', { 'aria-live': 'polite' });
 
-  // Vista previa: una barra como el encabezado con los colores elegidos.
-  const imgPrev = h('span', { class: 'marca-logo' });
-  const nomPrev = h('span', {});
-  const barra = h('div', { class: 'vista-tema-barra' }, imgPrev, nomPrev);
-  const btnPrev = h('span', { class: 'boton boton-principal' }, 'Botón');
-  const cuerpo = h('div', { class: 'vista-tema-cuerpo' }, btnPrev, h('span', { class: 'etiqueta' }, 'Etiqueta'));
-  const previa = h('div', { class: 'vista-tema', id: 'marca-previa', 'aria-label': 'Vista previa' }, barra, cuerpo);
+  // Vista previa EN VIVO: el mismo encabezado de la app (mismas clases) con los colores elegidos,
+  // antes de guardar. Los colores se ponen solo dentro de la vista previa (aplicarMarca con raíz propia),
+  // con el mismo contraste automático que tendrá la app.
+  const prevLogo = h('div', { class: 'marca-logo', 'aria-hidden': 'true' });
+  const prevNombre = h('span', { class: 'marca-nombre' });
+  const previa = h('div', { class: 'vista-marca', id: 'marca-previa', role: 'img', 'aria-label': 'Vista previa del encabezado con su logo y colores' },
+    h('div', { class: 'encabezado vista-marca-encabezado' },
+      h('div', { class: 'encabezado-fila' }, h('div', { class: 'marca' }, prevLogo, prevNombre),
+        h('div', { class: 'quien' }, h('span', { class: 'campana' }, icono('campana'), h('span', { class: 'campana-numero' }, '3')),
+          h('span', { class: 'boton boton-claro' }, 'Salir'))),
+      h('div', { class: 'pestanas' }, [['inicio', 'Inicio', true], ['vender', 'Vender'], ['caja', 'Caja'], ['clientes', 'Clientes']]
+        .map(([i, t, on]) => h('span', { class: 'pestana', 'aria-current': on ? 'page' : null }, icono(i), h('span', {}, t))))),
+    h('div', { class: 'vista-marca-cuerpo' },
+      h('span', { class: 'boton boton-principal' }, icono('vender'), 'Botón principal'), h('span', { class: 'boton' }, 'Otro botón'),
+      burbuja('estrella', 'acento'), chip('Entra dinero', 'verde'), chip('Sale dinero', 'rojo'), chip('Importante', 'dorado')));
   function pintarPrevia() {
-    barra.style.background = principal.value;
-    btnPrev.style.background = principal.value; btnPrev.style.borderColor = principal.value;
-    imgPrev.style.background = acento.value;
-    nomPrev.textContent = nombre.value.trim() || m.nombre;
+    aplicarMarca({ color_principal: principal.value, color_acento: acento.value }, previa);
+    const n = nombre.value.trim() || m.nombre;
+    prevNombre.textContent = n;
     const l = quitarLogo.checked ? null : logo;
-    imgPrev.replaceChildren(l ? h('img', { src: l, alt: '', class: 'marca-logo-img' }) : (nombre.value.trim() || m.nombre).slice(0, 2).toUpperCase());
-    const c = contrasteConBlanco(principal.value);
-    aviContraste.hidden = c >= 4.5;
-    aviContraste.textContent = 'Con ese color principal las letras blancas se leen mal. Elija uno más oscuro.';
+    prevLogo.replaceChildren(l ? h('img', { src: l, alt: '', class: 'marca-logo-img' }) : iniciales(n));
+    // Contraste automático: si el color es muy claro, las letras de encima se ponen oscuras.
+    const oscuro = textoSobre(principal.value) !== '#ffffff';
+    aviContraste.replaceChildren(oscuro ? mensaje('info', 'Su color principal es claro: las letras de encima se ponen oscuras para que se lean bien.',
+      null, { dataset: { info: 'contraste' } }) : '');
   }
   for (const x of [nombre, principal, acento, quitarLogo]) x.addEventListener('input', pintarPrevia);
   quitarLogo.addEventListener('change', pintarPrevia);
@@ -61,7 +69,7 @@ export async function mostrar(vista, ctx) {
       accion: async (motivo) => { r = await rpc('configurar_marca', { p_empresa_id: empresaId(), p_datos: datos, p_motivo: motivo }); } });
     if (!ok || !r) return;
     guardarMarcaLocal(r);
-    aviso('Listo: se guardó la marca del negocio.');
+    aviso(`Marca guardada · ${r.marca && r.marca.nombre_comercial ? r.marca.nombre_comercial : r.nombre || 'su negocio'} ya se ve con su logo y colores`);
     vista.replaceChildren(); await mostrar(vista, ctx);
   }
 
@@ -70,7 +78,9 @@ export async function mostrar(vista, ctx) {
     campo('Logo (PNG, JPG o WEBP, hasta 200 KB)', archivoLogo),
     logo ? h('label', { class: 'opcion-check' }, quitarLogo, ' Quitar el logo') : null,
     h('div', { class: 'dos-columnas' }, campo('Color principal', principal), campo('Color de acento', acento)),
-    h('h2', { class: 'titulo-chico' }, 'Vista previa'), previa, aviContraste, zonaError,
+    titulo('h2', 'sol', 'Así se verá (antes de guardar)', { class: 'titulo-chico' }), previa, aviContraste,
+    h('p', { class: 'ayuda' }, 'Su marca cambia el color principal y el de acento. Los colores de los avisos (verde, rojo, dorado y azul) no cambian, para que siempre signifiquen lo mismo.'),
+    zonaError,
     editar ? h('div', { class: 'botones' },
       h('button', { type: 'submit', class: 'boton boton-principal', id: 'marca-guardar' }, 'Guardar'),
       m.puede_volver ? h('button', { type: 'button', class: 'boton', id: 'marca-volver',
@@ -78,16 +88,15 @@ export async function mostrar(vista, ctx) {
   form.addEventListener('submit', (ev) => {
     ev.preventDefault();
     zonaError.replaceChildren();
-    if (contrasteConBlanco(principal.value) < 4.5) { zonaError.append(errorSimple('Elija un color principal más oscuro para que se lea bien.')); return; }
     const datos = { nombre_comercial: nombre.value.trim() || null, color_principal: principal.value, color_acento: acento.value,
       logo: quitarLogo.checked ? null : logo };
     guardar(datos, 'Guardar la marca del negocio');
   });
 
   vista.append(...[
-    h('section', { class: 'tarjeta tarjeta-angosta', 'aria-labelledby': 't-neg' }, h('h1', { id: 't-neg' }, 'Mi negocio'), form),
+    h('section', { class: 'tarjeta tarjeta-angosta', 'aria-labelledby': 't-neg' }, titulo('h1', 'tienda', 'Mi negocio', { id: 't-neg' }), form),
     puede('empresa.configurar') ? h('section', { class: 'tarjeta tarjeta-angosta', 'aria-labelledby': 't-fis' },
-      h('h2', { id: 't-fis' }, 'Datos fiscales'),
+      titulo('h2', 'documento', 'Datos fiscales', { id: 't-fis' }),
       h('div', { class: 'fila' }, h('span', {}, 'Nombre legal'), h('span', {}, m.nombre)),
       h('div', { class: 'fila' }, h('span', {}, 'RTN'), h('span', { dataset: { dato: 'rtn' } }, m.rtn || '—')),
       h('p', { class: 'ayuda' }, 'Salen en las facturas. Para cambiarlos hable con su proveedor (quedan en la ficha del negocio).')) : null].filter(Boolean));
