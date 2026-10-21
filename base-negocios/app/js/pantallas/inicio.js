@@ -7,7 +7,7 @@
 import { rpc, leer } from '../api.js';
 import { empresaId, perfilActual, puede, tieneModulo } from '../sesion.js';
 import { dinero, fechaLarga, porcentaje, cantidad } from '../formato.js';
-import { h, icono, chip, burbuja, cajaError, tarjetaCifra, botonAccion, graficaBarras, filaIcono, estadoVacio } from '../ui.js';
+import { h, icono, chip, burbuja, cajaError, tarjetaCifra, botonAccion, graficaBarras, filaIcono, estadoVacio, cabezaPantalla } from '../ui.js';
 import { MENU, hayEnMenu } from '../menu.js';
 import { tarjetaAlerta, leerAlertas } from './alertas.js';
 import { pendientes, listaAprobaciones } from './aprobaciones.js';
@@ -285,7 +285,8 @@ export async function mostrar(vista, ctx) {
   const partes = [mayuscula(fechaLarga(hoy).replace(',', ''))];
   if (miTurno) partes.push(`${miTurno.caja || 'Su caja'} abierta desde las ${horaCorta(miTurno.abierto_en)}`);
   else if (turno && turno.ok === null) partes.push('Su caja está cerrada');
-  vista.append(h('div', { class: 'inicio-cabeza' }, h('div', { class: 'saludo' },
+  // Saludo y, a su lado (computadora), las subpestañas de Inicio, como en el dibujo aprobado.
+  vista.append(cabezaPantalla(ctx, h('div', { class: 'saludo' },
     h('h1', {}, `${saludoSegunHora()}${nombre ? `, ${nombre}` : ''}`),
     h('p', { dataset: { info: 'fecha-caja' } }, partes.join(' · ')))));
 

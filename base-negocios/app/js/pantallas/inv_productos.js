@@ -5,7 +5,7 @@
 import { rpc, leer, escribir } from '../api.js';
 import { empresaId, puede, tieneModulo } from '../sesion.js';
 import { dinero, fechaHora, aCentavos, paraCampo, cantidad } from '../formato.js';
-import { h, icono, aviso, errorSimple, campo, conBoton, pedirMotivo, confirmar } from '../ui.js';
+import { h, icono, aviso, errorSimple, campo, conBoton, pedirMotivo, confirmar, titulo, filaIcono, burbuja, chipEstado, monto, estadoVacio } from '../ui.js';
 import { hayEnMenu } from '../menu.js';
 import { filtrar, olvidarDatos } from '../datos.js';
 
@@ -30,25 +30,36 @@ export async function mostrar(vista, ctx) {
   const zona = h('div', { class: 'lista' });
   const pintar = () => {
     const vistos = filtrar(lista.filter((p) => verInactivos.checked || p.activo), buscar.value, ['nombre', 'codigo', 'codigo_barras', 'categoria']);
-    zona.replaceChildren(...(vistos.length ? vistos.slice(0, 200).map((p) => h('article', { class: 'venta-fila', dataset: { producto: p.producto_id } },
-      h('div', {}, h('strong', {}, p.nombre), !p.activo ? h('span', { class: 'etiqueta' }, ' Inactivo') : null,
-        h('span', { class: 'detalle' }, [p.codigo, p.categoria, p.tipo === 'servicio' ? 'Servicio' : p.unidad].filter(Boolean).join(' · '))),
-      h('span', { class: 'monto' }, dinero(p.precio_con_isv_centavos)),
-      h('div', { class: 'botones' }, h('button', { type: 'button', class: 'boton', onclick: () => ficha(vista, ctx, p.producto_id) }, 'Ver'))))
-      : [h('p', { class: 'vacio' }, 'No hay productos con ese nombre.')]));
+    zona.replaceChildren(...(vistos.length ? vistos.slice(0, 200).map((p) => filaIcono({
+      // Burbuja lista para la foto del producto (más adelante); por ahora, el ícono.
+      burbuja: burbuja(p.tipo === 'servicio' ? 'servicio' : 'etiqueta', p.activo ? 'neutro' : 'neutro', { class: 'burbuja-foto' }),
+      titulo: [h('strong', {}, p.nombre), !p.activo ? [' ', chipEstado('inactivo')] : null],
+      detalle: [p.codigo, p.categoria, p.tipo === 'servicio' ? 'Servicio' : p.unidad].filter(Boolean).join(' · '),
+      derecha: monto(dinero(p.precio_con_isv_centavos)),
+      abajo: h('div', { class: 'botones' }, h('button', { type: 'button', class: 'boton', onclick: () => ficha(vista, ctx, p.producto_id) }, 'Ver')),
+      props: { dataset: { producto: p.producto_id } },
+    }))
+      : [estadoVacio({ icono: 'buscar', chico: true, texto: 'No hay productos con ese nombre.' })]));
   };
   buscar.addEventListener('input', pintar);
   verInactivos.addEventListener('change', pintar);
   pintar();
+  const excel = hayEnMenu(ctx.menu || [], 'ajustes', 'excel');
+  const nuevo = () => formulario(vista, ctx, null);
   vista.append(h('section', { class: 'tarjeta', 'aria-labelledby': 't-prod' },
-    h('div', { class: 'titulo-con-boton' }, h('h1', { id: 't-prod', class: 'titulo-icono' }, icono('etiqueta'), 'Productos y servicios'),
+    h('div', { class: 'titulo-con-boton' }, titulo('h1', 'etiqueta', 'Productos y servicios', { id: 't-prod' }),
       h('div', { class: 'botones' },
         // Subir muchos productos de una vez: lleva a Ajustes > Excel (si el usuario la ve).
-        hayEnMenu(ctx.menu || [], 'ajustes', 'excel') ? h('a', { class: 'boton', href: '#/ajustes/excel', id: 'subir-excel' }, icono('excel'), 'Subir Excel') : null,
-        puede('productos.editar') ? h('button', { type: 'button', class: 'boton boton-principal', id: 'nuevo-producto',
-          onclick: () => formulario(vista, ctx, null) }, icono('mas'), 'Nuevo producto') : null)),
-    campo('Buscar', buscar), h('label', { class: 'opcion-check' }, verInactivos, ' Ver también los inactivos'), zona));
-  buscar.focus();
+        excel ? h('a', { class: 'boton', href: '#/ajustes/excel', id: 'subir-excel' }, icono('excel'), 'Subir Excel') : null,
+        puede('productos.editar') && lista.length ? h('button', { type: 'button', class: 'boton boton-principal', id: 'nuevo-producto',
+          onclick: nuevo }, icono('mas'), 'Nuevo producto') : null)),
+    // Sin productos: pantalla que enseña a empezar (solo con los botones que puede usar).
+    lista.length ? [campo('Buscar', buscar), h('label', { class: 'opcion-check' }, verInactivos, ' Ver también los inactivos'), zona]
+      : estadoVacio({ icono: 'etiqueta', color: 'dorado', titulo: 'Aún no tiene productos',
+        texto: 'Agregue lo que vende (productos o servicios) con su precio. Si ya los tiene en una lista, súbala en Excel.',
+        botones: [puede('productos.editar') ? { texto: 'Agregar el primero', onclick: nuevo, icono: 'mas', id: 'nuevo-producto' } : null,
+          excel ? { texto: 'Subir mi Excel', href: '#/ajustes/excel', icono: 'excel' } : null] })));
+  if (lista.length) buscar.focus();
 }
 
 async function volverALista(vista, ctx) { vista.replaceChildren(); await mostrar(vista, ctx); }
@@ -63,7 +74,8 @@ async function ficha(vista, ctx, id) {
   const editar = puede('productos.editar');
   vista.replaceChildren(
     h('section', { class: 'tarjeta', 'aria-labelledby': 't-pficha' },
-      h('h1', { id: 't-pficha' }, p.nombre, !p.activo ? h('span', { class: 'etiqueta' }, ' Inactivo') : null),
+      h('div', { class: 'titulo-con-total' }, titulo('h1', p.tipo === 'servicio' ? 'servicio' : 'etiqueta', p.nombre, { id: 't-pficha' }),
+        chipEstado(p.activo ? 'activo' : 'inactivo')),
       dato('Código', p.codigo), dato('Código de barras', p.codigo_barras), dato('Tipo', p.tipo === 'servicio' ? 'Servicio' : 'Bien'),
       dato('Categoría', p.categoria), dato('Unidad', p.unidad), dato('Impuesto', p.impuesto || p.tipo_impuesto),
       h('div', { class: 'fila' }, h('span', {}, 'Precio'), h('span', { class: 'monto', dataset: { dato: 'precio' } },
@@ -79,11 +91,11 @@ async function ficha(vista, ctx, id) {
           onclick: () => activar(vista, ctx, p) }, p.activo ? 'Desactivar' : 'Activar') : null,
         h('button', { type: 'button', class: 'boton', onclick: () => volverALista(vista, ctx) }, 'Volver a la lista'))),
     h('section', { class: 'tarjeta', 'aria-labelledby': 't-hist' },
-      h('h2', { id: 't-hist' }, 'Historial de precios'),
+      titulo('h2', 'reloj', 'Historial de precios', { id: 't-hist' }),
       hist.length ? h('div', { class: 'lista', id: 'historial-precios' }, hist.map((x) => h('div', { class: 'fila' },
         h('span', {}, `${x.precio_anterior_centavos === null ? 'Precio inicial' : dinero(x.precio_anterior_centavos) + ' → '}${dinero(x.precio_nuevo_centavos)}`,
           h('span', { class: 'detalle' }, `${fechaHora(x.cambiado_en)}${x.motivo ? ' · ' + x.motivo : ''}`)))))
-        : h('p', { class: 'vacio' }, 'Sin cambios de precio.')));
+        : estadoVacio({ icono: 'reloj', chico: true, texto: 'Sin cambios de precio.' })));
 }
 
 // Cambiar precio: pide el nuevo precio y el motivo (queda en el historial).
@@ -104,10 +116,10 @@ async function cambiarPrecio(vista, ctx, p) {
     const ok = await pedirMotivo({ titulo: 'Cambiar precio', textoBoton: 'Cambiar precio',
       explicacion: `${p.nombre}: de ${dinero(p.precio_venta_centavos)} a ${dinero(c)}.`,
       accion: (motivo) => rpc('cambiar_precio_producto', { p_empresa_id: E(), p_producto_id: p.producto_id, p_precio_centavos: c, p_motivo: motivo }) });
-    if (ok) { olvidarDatos('productos'); aviso('Precio cambiado. Quedó en el historial.'); ficha(vista, ctx, p.producto_id); }
+    if (ok) { olvidarDatos('productos'); aviso(`Precio cambiado · ${p.nombre} de ${dinero(p.precio_venta_centavos)} a ${dinero(c)}`); ficha(vista, ctx, p.producto_id); }
   });
   vista.replaceChildren(h('section', { class: 'tarjeta tarjeta-angosta', 'aria-labelledby': 't-cprecio' },
-    h('h1', { id: 't-cprecio' }, `Cambiar precio · ${p.nombre}`), form));
+    titulo('h1', 'etiqueta', `Cambiar precio · ${p.nombre}`, { id: 't-cprecio' }), form));
   nuevo.focus();
 }
 
@@ -116,7 +128,7 @@ async function activar(vista, ctx, p) {
     textoBoton: p.activo ? 'Desactivar' : 'Activar',
     explicacion: p.activo ? `${p.nombre} ya no saldrá para vender. No se borra nada.` : `${p.nombre} vuelve a salir para vender.`,
     accion: (motivo) => rpc('editar_producto', { p_empresa_id: E(), p_producto_id: p.producto_id, p_datos: { activo: !p.activo }, p_motivo: motivo }) });
-  if (ok) { olvidarDatos('productos'); aviso(p.activo ? 'Producto desactivado.' : 'Producto activado.'); ficha(vista, ctx, p.producto_id); }
+  if (ok) { olvidarDatos('productos'); aviso(p.activo ? `Producto desactivado · ${p.nombre} ya no sale para vender` : `Producto activado · ${p.nombre}`); ficha(vista, ctx, p.producto_id); }
 }
 
 // Crear (p = null) o editar. El precio de un producto que ya existe se cambia con "Cambiar precio".
@@ -190,7 +202,7 @@ async function formulario(vista, ctx, p) {
       if (!await confirmar({ titulo: 'Crear producto', texto: `${datos.nombre} (${datos.codigo}) a ${dinero(c)} ${incluye.checked ? 'con' : 'sin'} ISV.`, textoBoton: 'Sí, crear' })) return;
       r = await conBoton(boton, zonaError, () => escribir('crear_producto', { p_empresa_id: E(), p_datos: datos }));
       if (!r) return;
-      olvidarDatos('productos'); aviso('Producto creado.');
+      olvidarDatos('productos'); aviso(`Producto creado · ${datos.nombre} a ${dinero(c)}`);
       return ficha(vista, ctx, r.producto_id);
     }
     // Editar: cambiar "incluye ISV" pide motivo (queda en el historial de precios).
@@ -203,10 +215,10 @@ async function formulario(vista, ctx, p) {
       if (!await confirmar({ titulo: 'Guardar cambios', texto: `¿Guardar los cambios de ${datos.nombre}?` })) return;
       if (!await conBoton(boton, zonaError, () => guardar(null).then(() => true))) return;
     }
-    olvidarDatos('productos'); aviso('Cambios guardados.');
+    olvidarDatos('productos'); aviso(`Cambios guardados · ${datos.nombre}`);
     ficha(vista, ctx, p.producto_id);
   });
   vista.replaceChildren(h('section', { class: 'tarjeta tarjeta-angosta', 'aria-labelledby': 't-pform' },
-    h('h1', { id: 't-pform' }, nuevo ? 'Nuevo producto o servicio' : `Editar · ${p.nombre}`), form));
+    titulo('h1', nuevo ? 'mas' : 'editar', nuevo ? 'Nuevo producto o servicio' : `Editar · ${p.nombre}`, { id: 't-pform' }), form));
   (nuevo ? codigo : nombre).focus();
 }

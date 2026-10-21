@@ -10,10 +10,34 @@ export function marcaActual() { return actual; }
 export async function cargarMarca() {
   try { actual = await rpc('marca_empresa', { p_empresa_id: empresaId() }); } catch { actual = null; }
   aplicarMarca(actual ? actual.marca : {});
+  recordarEnEsteEquipo();
   return actual;
 }
 
-export function guardarMarcaLocal(m) { actual = m; aplicarMarca(m ? m.marca : {}); }
+export function guardarMarcaLocal(m) { actual = m; aplicarMarca(m ? m.marca : {}); recordarEnEsteEquipo(); }
+
+// La pantalla de entrar muestra el logo, el nombre y los colores del negocio que se usó la última vez
+// en ESTE equipo (antes de entrar no se puede leer la base). Es solo para que se vea bonito: si el
+// navegador no deja guardar (ventana privada), se usa la marca de siempre.
+const LLAVE = 'marca-negocio';
+function recordarEnEsteEquipo() {
+  const m = (actual && actual.marca) || {};
+  const datos = { nombre: nombreVisible(), logo: m.logo || null, color_principal: m.color_principal || null, color_acento: m.color_acento || null };
+  try { localStorage.setItem(LLAVE, JSON.stringify(datos)); } catch { /* sin almacenamiento: no pasa nada */ }
+}
+export function marcaGuardada() {
+  try {
+    const x = JSON.parse(localStorage.getItem(LLAVE) || 'null');
+    return x && typeof x === 'object' ? x : null;
+  } catch { return null; }
+}
+
+// "Ferretería El Roble" -> "FR" (para la burbuja cuando no hay logo).
+export function iniciales(nombre) {
+  const p = String(nombre || '').trim().split(/\s+/).filter(Boolean);
+  if (p.length === 0) return 'MN';
+  return ((p[0][0] || '') + (p.length > 1 ? p[p.length - 1][0] : '')).toUpperCase();
+}
 
 export function nombreVisible() {
   const p = perfilActual();
@@ -50,6 +74,7 @@ export function aplicarMarca(m = {}, raiz = document.documentElement) {
   const nombre = document.getElementById('marca-nombre');
   if (nombre) nombre.textContent = nombreVisible();
   const logo = document.getElementById('marca-logo');
+  if (logo && perfilActual()) logo.dataset.iniciales = iniciales(nombreVisible());
   if (logo) {
     if (m.logo) {
       const img = document.createElement('img');

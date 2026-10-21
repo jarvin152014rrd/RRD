@@ -377,6 +377,10 @@ const textoDe = (pagina, sel) => pagina.locator(sel).first().innerText();
     const pago = JSON.parse(sql('dueno@demo.hn', `(SELECT row_to_json(x) FROM (SELECT recibido_centavos, vuelto_centavos FROM public.v_venta_pago WHERE venta_id = '${v.venta_id}') x)`));
     afirmar(v.total_centavos === 55000 && v.impuesto_centavos === 7174 && pago.vuelto_centavos === 5000, 'base: ' + JSON.stringify([v, pago]));
     afirmar((await textoDe(p, '[data-dato=vuelto-final]')).trim() === lempiras(pago.vuelto_centavos), 'vuelto final');
+    // 0.6.0: mensaje claro con lo que pasó ("Venta T-... guardada · L 550.00 en efectivo"), con ícono verde.
+    const hecho = await textoDe(p, '.venta-lista');
+    afirmar(hecho.includes(`Venta ${v.numero_documento} guardada · L 550.00 en efectivo`), 'mensaje de la venta: ' + hecho);
+    afirmar(await p.locator('.venta-lista svg.icono').count() === 1, 'el mensaje de la venta no tiene ícono');
     const comp = await textoDe(p, '.comprobante');
     afirmar(comp.includes(v.numero_documento) && comp.includes(lempiras(v.total_centavos)) && comp.includes(lempiras(v.impuesto_centavos)), 'comprobante: ' + comp);
     afirmar(!/[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}]/u.test(comp), 'el comprobante tiene emojis');
@@ -472,6 +476,9 @@ const textoDe = (pagina, sel) => pagina.locator(sel).first().innerText();
     await p.click('form.formulario button[type=submit]');
     await p.waitForSelector('[data-dato=diferencia]', { timeout: 15000 });
     afirmar((await textoDe(p, '[data-dato=diferencia]')).trim() === '-L 10.00', 'diferencia: ' + await textoDe(p, '[data-dato=diferencia]'));
+    // 0.6.0: "Turno #N cerrado · faltante L 10.00" con ícono rojo, y la diferencia en rojo.
+    afirmar((await textoDe(p, '#avisos .mensaje-error')).includes('faltante L 10.00'), 'aviso del cierre: ' + await p.locator('#avisos').innerText());
+    afirmar(await p.locator('[data-dato=diferencia].monto-sale').count() === 1, 'el faltante no está en rojo');
     afirmar((await textoDe(p, '[data-dato=esperado]')).trim() === lempiras(saldo + 27500), 'esperado');
     const t = JSON.parse(sql('dueno@demo.hn', `(SELECT row_to_json(x) FROM (SELECT esperado_centavos, contado_centavos, diferencia_centavos
       FROM public.v_turno_caja WHERE empresa_id = '${EM}' ORDER BY numero DESC LIMIT 1) x)`));
@@ -913,6 +920,79 @@ const textoDe = (pagina, sel) => pagina.locator(sel).first().innerText();
     } finally {
       sqlEscribir('dueno@demo.hn', `SELECT public.asignar_sucursales_usuario('${EM}', '${admin}', ARRAY[]::uuid[], 'Prueba: quitar el límite')`);
     }
+  });
+
+  await prueba('ronda 2: subpestañas junto al saludo (computadora) y arriba (celular); tablas como tarjetas', async () => {
+    const { ctx, p } = await nueva();
+    await entrar(p, 'dueno@demo.hn');
+    await p.waitForSelector('.cabeza-pantalla .subpestanas');
+    const [s, n] = [await p.locator('.saludo h1').boundingBox(), await p.locator('.cabeza-pantalla .subpestanas').boundingBox()];
+    afirmar(n.x > s.x + s.width && Math.abs((n.y + n.height) - (s.y + s.height)) < 80, 'en computadora las subpestañas no están al lado del saludo');
+    await ctx.close();
+    const cel = await nueva({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
+    await entrar(cel.p, 'dueno@demo.hn');
+    await cel.p.waitForSelector('.cabeza-pantalla .subpestanas');
+    const [s2, n2] = [await cel.p.locator('.saludo h1').boundingBox(), await cel.p.locator('.cabeza-pantalla .subpestanas').boundingBox()];
+    afirmar(n2.y + n2.height <= s2.y, 'en el celular las subpestañas no están arriba del saludo');
+    await cel.p.goto(URL_APP + '/#/inventario/existencias');
+    await cel.p.waitForSelector('.tabla-celular tbody tr');
+    const forma = await cel.p.evaluate(() => {
+      const tr = document.querySelector('.tabla-celular tbody tr');
+      const td = tr.querySelector('td.celda-principal');
+      return { tr: getComputedStyle(tr).display, thead: getComputedStyle(document.querySelector('.tabla-celular thead')).display,
+        principalArriba: td === tr.firstElementChild && getComputedStyle(td).display === 'block',
+        titulos: [...tr.querySelectorAll('td:not(.celda-principal)')].every((x) => x.dataset.titulo) };
+    });
+    afirmar(forma.tr === 'block' && forma.thead === 'none' && forma.principalArriba && forma.titulos, 'la tabla no se ve como tarjetas: ' + JSON.stringify(forma));
+    afirmar(await cel.p.evaluate(() => document.documentElement.scrollWidth) <= 390, 'existencias se sale a lo ancho');
+    await cel.ctx.close();
+  });
+
+  await prueba('ronda 2: pantalla vacía que enseña (ícono, frase y solo los botones permitidos)', async () => {
+    const { ctx, p } = await nueva();
+    await entrar(p, 'dueno@demo.hn');
+    const r = await p.evaluate(async () => {
+      const ui = await import('/js/ui.js');
+      const a = ui.estadoVacio({ icono: 'etiqueta', titulo: 'Aún no tiene productos', texto: 'Agregue lo que vende.',
+        botones: [{ texto: 'Agregar el primero', onclick: () => {} }, null, { texto: 'Subir mi Excel', href: '#/ajustes/excel' }] });
+      return { svg: a.querySelectorAll('.burbuja-grande svg').length, botones: [...a.querySelectorAll('.boton')].map((b) => b.textContent),
+        principal: a.querySelector('.boton').classList.contains('boton-principal'), oculto: a.querySelector('svg').getAttribute('aria-hidden') };
+    });
+    afirmar(r.svg === 1 && r.botones.join('|') === 'Agregar el primero|Subir mi Excel' && r.principal && r.oculto === 'true', 'estado vacío: ' + JSON.stringify(r));
+    // Ventas del día sin ventas: con su botón para empezar (el dueño puede vender).
+    const v = await p.evaluate(async () => {
+      const m = await import('/js/pantallas/ventas_dia.js');
+      const { MENU } = await import('/js/menu_datos.js');
+      const el = document.createElement('div');
+      // Un día sin ventas: se pinta con una lista vacía (no toca la base).
+      const sesion = await import('/js/sesion.js');
+      const hoy = sesion.perfilActual().empresa.hoy;
+      sesion.perfilActual().empresa.hoy = '1999-01-01';
+      try { await m.mostrar(el, { menu: MENU, sigueVigente: () => true }); } finally { sesion.perfilActual().empresa.hoy = hoy; }
+      return { vacio: el.querySelectorAll('.estado-vacio').length, boton: (el.querySelector('.estado-vacio a.boton') || {}).textContent || '' };
+    });
+    afirmar(v.vacio === 1 && v.boton.includes('Hacer una venta'), 'ventas del día vacía: ' + JSON.stringify(v));
+    await ctx.close();
+  });
+
+  await prueba('ronda 2: "Alertas que recibo" guarda las preferencias de cada quien', async () => {
+    const { ctx, p } = await nueva();
+    await entrar(p, 'dueno@demo.hn');
+    await p.goto(URL_APP + '/#/ajustes/mi-cuenta');
+    await p.waitForSelector('#mis-alertas input[data-alerta=stock_minimo]');
+    const total = await p.locator('#mis-alertas input[data-alerta]').count();
+    afirmar(total === JSON.parse(sql('dueno@demo.hn', `public.mis_preferencias_alertas('${EMPRESA}')`)).length, 'no salen todos los tipos que puede ver');
+    await p.uncheck('#mis-alertas input[data-alerta=stock_minimo]');
+    await p.click('#alertas-guardar');
+    await p.waitForSelector('#avisos .mensaje-ok');
+    afirmar((await textoDe(p, '#avisos .mensaje-ok')).includes(`recibe ${total - 1} de ${total}`), 'aviso: ' + await textoDe(p, '#avisos'));
+    afirmar(sql('dueno@demo.hn', `(SELECT recibir FROM public.alerta_preferencia WHERE tipo = 'stock_minimo' AND user_id = auth.uid())`) === 'false', 'no se guardó en la base');
+    afirmar(!JSON.parse(sql('dueno@demo.hn', `public.alertas_activas('${EMPRESA}')`)).alertas.some((a) => a.tipo === 'stock_minimo'), 'la alerta apagada sigue llegando');
+    await p.check('#mis-alertas input[data-alerta=stock_minimo]');
+    await p.click('#alertas-guardar');
+    await p.waitForFunction((n) => document.querySelector('#avisos').innerText.includes(`recibe ${n} de ${n}`), total);
+    afirmar(sql('dueno@demo.hn', `(SELECT recibir FROM public.alerta_preferencia WHERE tipo = 'stock_minimo' AND user_id = auth.uid())`) === 'true', 'no se volvió a encender');
+    await ctx.close();
   });
 
   await prueba('sin errores de JavaScript en las páginas', async () => {

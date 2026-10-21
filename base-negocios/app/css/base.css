@@ -81,10 +81,7 @@ h2 { font-size: 18px; margin: 0 0 8px; }
 .atajos { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; }
 .en-construccion { padding: 40px 20px; }
 
-/* Entrar */
-.entrar { min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 16px; }
-.entrar .tarjeta { width: 100%; max-width: 400px; display: flex; flex-direction: column; gap: 16px; padding: 28px 24px; }
-.entrar-marca { display: flex; align-items: center; gap: 12px; }
+/* Entrar: ver "Entrar (0.6.0)" más abajo. */
 
 /* Más (celular) */
 .mas-grupo h2 { margin-top: 4px; }
@@ -250,12 +247,7 @@ h2 { font-size: 18px; margin: 0 0 8px; }
 .permisos-tabla input { width: 22px; height: 22px; }
 .conteo-fila { display: grid; grid-template-columns: minmax(0, 1fr) 130px; gap: 12px; align-items: center; padding: 8px 0; border-bottom: 1px solid var(--color-linea); }
 .conteo-fila input { font: inherit; font-size: 16px; min-height: 44px; padding: 8px 10px; border: 1px solid #8a8780; border-radius: 8px; width: 100%; }
-@media (max-width: 699px) {
-  .tabla-celular thead { display: none; }
-  .tabla-celular tr { display: block; border-bottom: 1px solid var(--color-linea); padding: 8px 0; }
-  .tabla-celular td { display: flex; justify-content: space-between; gap: 12px; border: none; padding: 4px 0; text-align: right; }
-  .tabla-celular td::before { content: attr(data-titulo); color: var(--color-suave); font-weight: 600; text-align: left; }
-}
+/* Tablas en el celular: ver "Tablas como tarjetas" (app 0.6.0) al final. */
 .buscar-fila { align-items: flex-end; }
 .buscar-fila .campo { flex: 1; min-width: 0; }
 
@@ -420,4 +412,116 @@ a.fila-icono:hover .fila-icono-titulo { text-decoration: underline; }
   .inicio-columnas > * > #inicio-pendientes { order: 4; }
   .inicio-columnas > * > #grafica-ventas { order: 5; }
   .inicio-columnas > * > #mas-vendido { order: 6; }
+}
+
+/* ===================== App 0.6.0: el estilo de Inicio en todas las pantallas ===================== */
+/* Montos con significado: verde = entra dinero, rojo = sale dinero o falta. */
+.monto-entra { color: var(--color-verde); }
+.monto-sale { color: var(--color-rojo); }
+.peligro.monto { color: var(--color-rojo); }
+
+/* Estado vacío chico (dentro de una tarjeta con más cosas) y sus botones */
+.estado-vacio-chico { padding: 12px 8px; gap: 8px; }
+.estado-vacio-chico .estado-vacio-titulo { font-size: 17px; }
+.estado-vacio-botones { justify-content: center; }
+.estado-vacio-botones .boton { flex: 0 1 auto; }
+
+/* Encabezado de pantalla: título (o saludo) a la izquierda y subpestañas a la derecha (computadora). */
+.cabeza-pantalla { display: flex; justify-content: space-between; align-items: flex-end; gap: 16px; flex-wrap: wrap; }
+.cabeza-pantalla > .subpestanas { margin-left: auto; }
+.titulo-pantalla { font-size: 24px; margin: 0; }
+
+/* Listas de filas con burbuja dentro de una tarjeta: el monto arriba a la derecha y su chip */
+.fila-icono-derecha .monto { font-size: 16px; font-weight: 600; }
+.fila-icono .chips { margin: 6px 0 0; gap: 6px; }
+
+/* Datos de una ficha (Código, RTN...) */
+.fila .dato-valor { text-align: right; overflow-wrap: anywhere; }
+
+/* Resultado de una acción (venta lista, turno cerrado...) */
+.resultado-cifras { display: flex; flex-direction: column; }
+.mensaje.resultado { font-size: 16px; }
+
+@media (max-width: 699px) {
+  /* Subpestañas siempre arriba en el celular */
+  .cabeza-pantalla { flex-direction: column; align-items: stretch; gap: 12px; }
+  .cabeza-pantalla > .subpestanas { order: -1; margin-left: 0; align-self: flex-start; }
+  .titulo-pantalla { font-size: 22px; }
+
+  /* Tablas como tarjetas (todas las que usan ui.tabla o la clase tabla-celular) */
+  .tabla-celular, .tabla-celular tbody { display: block; width: 100%; }
+  .tabla-celular thead { display: none; }
+  .tabla-celular tr {
+    display: block; background: var(--color-tarjeta); border: 1px solid var(--color-linea); border-radius: 12px;
+    padding: 10px 14px; margin: 0 0 10px; box-shadow: 0 1px 2px rgba(15,31,61,.06);
+  }
+  .tabla-celular td { display: flex; justify-content: space-between; align-items: center; gap: 12px; border: none; padding: 5px 0; text-align: right; min-width: 0; }
+  .tabla-celular td::before { content: attr(data-titulo); color: var(--color-suave); font-weight: 600; text-align: left; flex: none; max-width: 55%; }
+  .tabla-celular td:empty { display: none; }
+  .tabla-celular td.celda-principal {
+    display: block; text-align: left; font-size: 16px; padding: 2px 0 8px; margin-bottom: 4px; border-bottom: 1px solid var(--color-linea);
+  }
+  .tabla-celular td.celda-principal::before, .tabla-celular td.celda-acciones::before { content: none; }
+  .tabla-celular td.celda-acciones { display: flex; flex-wrap: wrap; gap: 8px; padding-top: 8px; }
+  .tabla-celular td.celda-acciones .boton { flex: 1 1 100%; min-height: 48px; }
+  .tabla-celular td input:not([type=checkbox]):not([type=radio]) { max-width: 55%; }
+  .tabla-celular tr.fila-error { background: var(--color-peligro-fondo); }
+  .tabla-celular tr.fila-error td { background: none; }
+
+  /* Botones de las filas: grandes y a lo ancho */
+  .fila-icono .botones .boton, .venta-fila .botones .boton { min-height: 48px; flex: 1 1 100%; }
+  .fila-icono-derecha { max-width: 45%; white-space: normal; }
+}
+.con-icono-linea { display: flex; align-items: center; gap: 6px; }
+.con-icono-linea .icono { color: var(--color-verde); }
+.vender .chip-color { font-size: 15px; }
+/* Alertas que recibo */
+.lista-alertas { display: flex; flex-direction: column; margin: 8px 0; }
+.opcion-alerta { display: flex; align-items: flex-start; gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--color-linea); cursor: pointer; min-height: 44px; }
+.opcion-alerta:last-child { border-bottom: none; }
+.opcion-alerta input { width: 22px; height: 22px; flex: none; margin-top: 2px; }
+.opcion-alerta .detalle { display: block; font-size: 15px; color: var(--color-suave); }
+
+/* Entrar (0.6.0): cálida, con el logo y el nombre del negocio grandes. Arriba el color del negocio. */
+.entrar {
+  min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 20px; padding: 32px 16px;
+  background: linear-gradient(180deg, var(--color-principal) 0, var(--color-principal) 300px, var(--color-fondo) 300px);
+}
+.entrar-marca { display: flex; flex-direction: column; align-items: center; gap: 10px; text-align: center; max-width: 440px; }
+.entrar-logo {
+  width: 96px; height: 96px; border-radius: 24px; background: var(--color-acento); color: var(--color-en-acento, var(--color-principal));
+  display: flex; align-items: center; justify-content: center; font-size: 38px; font-weight: 700; box-shadow: 0 6px 20px rgba(0,0,0,.25); overflow: hidden;
+}
+.entrar-logo img { width: 100%; height: 100%; object-fit: contain; background: #ffffff; }
+.entrar-nombre { color: var(--color-en-principal); font-size: 30px; margin: 4px 0 0; overflow-wrap: anywhere; }
+.entrar-saludo { color: var(--color-en-principal-suave); margin: 0; font-size: 17px; }
+.entrar .entrar-tarjeta { width: 100%; max-width: 420px; display: flex; flex-direction: column; gap: 16px; padding: 28px 24px; box-shadow: 0 8px 30px rgba(15,31,61,.15); }
+.entrar-tarjeta h2 { margin: 0; font-size: 20px; }
+@media (max-width: 699px) {
+  .entrar { justify-content: flex-start; padding-top: 40px; background: linear-gradient(180deg, var(--color-principal) 0, var(--color-principal) 270px, var(--color-fondo) 270px); }
+  .entrar-logo { width: 80px; height: 80px; font-size: 32px; border-radius: 20px; }
+  .entrar-nombre { font-size: 26px; }
+}
+/* Entrar: la banda de color es el bloque de la marca (de lado a lado) y la tarjeta se monta encima. */
+.entrar { justify-content: flex-start; gap: 0; padding: 0 0 32px; background: var(--color-fondo); }
+.entrar-marca { width: 100%; max-width: none; background: var(--color-principal); padding: 56px 16px 84px; }
+.entrar .entrar-tarjeta { margin: -56px 16px 0; width: calc(100% - 32px); }
+@media (max-width: 699px) {
+  .entrar { padding: 0 0 24px; background: var(--color-fondo); }
+  .entrar-marca { padding: 40px 16px 76px; }
+}
+/* Botones de las filas en la computadora: de su tamaño, no estirados (menos Aprobar/Rechazar). */
+@media (min-width: 700px) {
+  .fila-icono:not(.solicitud) .botones .boton { flex: 0 1 auto; min-width: 140px; }
+}
+/* Filas con botones: los botones en su propia línea, alineados con el texto (después de la burbuja). */
+.fila-icono.con-abajo { flex-wrap: wrap; align-items: flex-start; }
+.fila-icono-abajo { flex: 1 1 100%; padding-left: 56px; min-width: 0; }
+.fila-icono-abajo > .botones { margin-top: 2px; }
+.fila-icono-abajo > .ayuda { margin: 0; }
+@media (max-width: 699px) {
+  .fila-icono.con-abajo .fila-icono-texto { flex: 1 1 calc(100% - 56px); }
+  .fila-icono.con-abajo .fila-icono-derecha { flex: 1 1 100%; max-width: none; padding-left: 56px; flex-direction: row; flex-wrap: wrap;
+    align-items: center; justify-content: flex-start; gap: 6px 10px; text-align: left; }
+  .fila-icono.con-abajo .fila-icono-derecha .monto { font-size: 18px; }
 }

@@ -3,26 +3,32 @@
 import { leer, escribir, nuevoId } from '../api.js';
 import { empresaId } from '../sesion.js';
 import { dinero, fecha, aCentavos, cantidad as fCantidad } from '../formato.js';
-import { h, cajaError, errorSimple, campo, conBoton } from '../ui.js';
+import { h, aviso, cajaError, errorSimple, campo, conBoton, titulo, filaIcono, chipEstado, monto, estadoVacio, mensaje } from '../ui.js';
 import { armarCarrito, puedeCobrar } from './vender.js';
 import { vistaComprobante, nombreForma } from '../comprobante.js';
 
 export async function mostrar(vista, ctx) {
   const lista = await leer('v_cotizacion', { empresa_id: empresaId(), estado: 'vigente' }, { orden: 'registrado_en.desc', limite: 200 });
   if (!ctx.sigueVigente()) return;
-  const nueva = h('button', { type: 'button', class: 'boton boton-principal', id: 'nueva-cotizacion', onclick: () => {
+  const empezar = () => {
     vista.replaceChildren();
     armarCarrito(vista, ctx, { modo: 'cotizacion', alTerminar: () => { vista.replaceChildren(); mostrar(vista, ctx); } });
-  } }, 'Nueva cotización');
+  };
+  const nueva = h('button', { type: 'button', class: 'boton boton-principal', id: 'nueva-cotizacion', onclick: empezar }, 'Nueva cotización');
   vista.append(h('section', { class: 'tarjeta', 'aria-labelledby': 't-cot' },
-    h('div', { class: 'titulo-con-boton' }, h('h1', { id: 't-cot' }, 'Cotizaciones vigentes'), nueva),
-    lista.length ? h('div', { class: 'lista' }, lista.map((c) => h('article', { class: 'venta-fila', dataset: { cotizacion: c.cotizacion_id } },
-      h('div', {}, h('strong', {}, `Cotización #${c.numero}`),
-        h('span', { class: 'detalle' }, `${c.cliente_nombre || 'Consumidor final'} · vence ${fecha(c.vigente_hasta)} · ${c.vendedor || ''}`),
-        h('span', { class: 'detalle' }, (c.lineas || []).map((l) => `${fCantidad(l.cantidad)} ${l.descripcion}`).join(', '))),
-      h('span', { class: 'monto' }, dinero(c.total_centavos)),
-      h('div', { class: 'botones' }, h('button', { type: 'button', class: 'boton', onclick: () => convertir(vista, ctx, c) }, 'Convertir en venta')))))
-      : h('p', { class: 'vacio' }, 'No hay cotizaciones vigentes.')));
+    h('div', { class: 'titulo-con-boton' }, titulo('h1', 'documento', 'Cotizaciones vigentes', { id: 't-cot' }), lista.length ? nueva : null),
+    lista.length ? h('div', { class: 'lista-filas' }, lista.map((c) => filaIcono({
+      icono: 'documento', color: 'azul',
+      titulo: h('strong', {}, `Cotización #${c.numero}`),
+      detalle: [`${c.cliente_nombre || 'Consumidor final'} · vence ${fecha(c.vigente_hasta)}${c.vendedor ? ' · ' + c.vendedor : ''}`, h('br'),
+        (c.lineas || []).map((l) => `${fCantidad(l.cantidad)} ${l.descripcion}`).join(', ')],
+      derecha: [monto(dinero(c.total_centavos)), chipEstado('vigente')],
+      abajo: h('div', { class: 'botones' }, h('button', { type: 'button', class: 'boton boton-principal', onclick: () => convertir(vista, ctx, c) }, 'Convertir en venta')),
+      props: { dataset: { cotizacion: c.cotizacion_id } },
+    })))
+      : estadoVacio({ icono: 'documento', titulo: 'No hay cotizaciones vigentes',
+        texto: 'Una cotización le dice al cliente cuánto le sale, sin cobrar ni sacar mercadería. Luego la convierte en venta con un toque.',
+        boton: { texto: 'Hacer la primera', onclick: empezar, icono: 'mas', id: 'nueva-cotizacion' } })));
 }
 
 function convertir(vista, ctx, c) {
@@ -51,12 +57,16 @@ function convertir(vista, ctx, c) {
       p_datos: { pagos: [pago] }, p_id_operacion: id }), 'Cobrando…');
     if (!r) return;
     if (r.estado === 'pendiente_aprobacion') {
-      vista.replaceChildren(h('p', { class: 'mensaje mensaje-info' }, `La venta #${r.numero} quedó esperando aprobación.`));
+      aviso(`Venta #${r.numero} en espera de aprobación · ${dinero(c.total_centavos)}`, 'info');
+      vista.replaceChildren(mensaje('info', `La venta #${r.numero} quedó esperando aprobación.`, 'Todavía no se cobró ni salió mercadería.'));
       return;
     }
-    try { vista.replaceChildren(await vistaComprobante(r.venta_id)); } catch (err) { vista.replaceChildren(await cajaError(err)); }
+    const hecho = `Venta ${r.numero_documento || '#' + r.numero} guardada · ${dinero(c.total_centavos)} ${sel.value === 'credito' ? 'al crédito' : 'en ' + nombreForma(sel.value).toLowerCase()}`;
+    aviso(hecho);
+    const cabeza = mensaje('ok', hecho, r.vuelto_centavos ? `Vuelto: ${dinero(r.vuelto_centavos)}` : null, { class: 'resultado' });
+    try { vista.replaceChildren(cabeza, await vistaComprobante(r.venta_id)); } catch (err) { vista.replaceChildren(cabeza, await cajaError(err)); }
   });
   vista.replaceChildren(h('section', { class: 'tarjeta tarjeta-angosta', 'aria-labelledby': 't-conv' },
-    h('h1', { id: 't-conv' }, `Convertir cotización #${c.numero}`),
+    titulo('h1', 'vender', `Convertir cotización #${c.numero}`, { id: 't-conv' }),
     h('p', {}, `${c.cliente_nombre || 'Consumidor final'} · Total ${dinero(c.total_centavos)}`), form));
 }

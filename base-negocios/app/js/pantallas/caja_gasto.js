@@ -5,10 +5,11 @@
 import { escribir, leer, subirComprobante, config } from '../api.js';
 import { empresaId } from '../sesion.js';
 import { dinero, aCentavos } from '../formato.js';
-import { h, aviso, cajaError, errorSimple, campo, conBoton } from '../ui.js';
+import { h, aviso, cajaError, errorSimple, campo, conBoton, titulo, estadoVacio } from '../ui.js';
+import { hayEnMenu } from '../menu.js';
 import { cuentasDinero, olvidarDatos } from '../datos.js';
 
-export async function mostrar(vista) {
+export async function mostrar(vista, ctx = {}) {
   let cuentas, categorias;
   try {
     [cuentas, categorias] = await Promise.all([cuentasDinero(true),
@@ -44,13 +45,16 @@ export async function mostrar(vista) {
     });
     if (r) {
       olvidarDatos('cuentas');
-      aviso(r.estado === 'pendiente_aprobacion' ? 'El gasto pasa su tope: quedó esperando aprobación.' : `Gasto de ${dinero(m)} guardado.`,
-        r.estado === 'pendiente_aprobacion' ? 'info' : 'ok');
+      const caja = selCuenta.selectedOptions[0] ? selCuenta.selectedOptions[0].textContent.split(' · ')[0] : 'la caja chica';
+      aviso(r.estado === 'pendiente_aprobacion' ? `Gasto de ${dinero(m)} en espera de aprobación · pasa su tope, todavía no sale dinero`
+        : `Gasto de ${dinero(m)} guardado · sale de ${caja}`, r.estado === 'pendiente_aprobacion' ? 'info' : 'ok', 7000);
       vista.replaceChildren();
-      mostrar(vista);
+      mostrar(vista, ctx);
     }
   });
   vista.append(h('section', { class: 'tarjeta tarjeta-angosta', 'aria-labelledby': 't-gasto' },
-    h('h1', { id: 't-gasto' }, 'Gasto de caja chica'),
-    chicas.length ? form : h('p', { class: 'mensaje mensaje-info' }, 'No hay una caja chica guardada.')));
+    titulo('h1', 'recibo', 'Gasto de caja chica', { id: 't-gasto' }),
+    chicas.length ? form : estadoVacio({ icono: 'billetes', titulo: 'Aún no tiene caja chica',
+      texto: 'La caja chica es el dinero para gastos pequeños (agua, pasajes, limpieza). Créela una vez y aquí anota cada gasto.',
+      boton: hayEnMenu(ctx.menu || [], 'ajustes', 'cajas') ? { texto: 'Crear la caja chica', href: '#/ajustes/cajas', icono: 'mas' } : null })));
 }

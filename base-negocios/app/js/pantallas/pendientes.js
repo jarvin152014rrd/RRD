@@ -2,7 +2,7 @@
 // (alertas_activas: cada quien ve lo que sus permisos le dejan). El número sale en la
 // campanita del encabezado y en la subpestaña.
 import { puede } from '../sesion.js';
-import { h, icono, cajaError, estadoVacio } from '../ui.js';
+import { h, icono, cajaError, estadoVacio, titulo, cabezaPantalla } from '../ui.js';
 import { tarjetaAlerta, leerAlertas } from './alertas.js';
 import { pendientes, listaAprobaciones } from './aprobaciones.js';
 
@@ -18,7 +18,8 @@ export async function mostrar(vista, ctx) {
     window.dispatchEvent(new CustomEvent('pendientes-conteo', { detail: alertas.ok.length + (aprob ? aprob.ok.length : 0) }));
   }
 
-  vista.append(h('h1', { class: 'titulo-icono' }, icono('pendientes'), 'Pendientes'));
+  vista.append(cabezaPantalla(ctx, titulo('h1', 'pendientes', 'Pendientes', { class: 'titulo-pantalla' }),
+    h('p', { class: 'ayuda' }, 'Lo que espera su decisión y los avisos del negocio.')));
   if (aprob) {
     const tarjeta = h('section', { class: 'tarjeta', 'aria-labelledby': 't-aprob' },
       h('h2', { id: 't-aprob', class: 'titulo-icono' }, icono('check_circulo'), 'Aprobaciones pendientes'));

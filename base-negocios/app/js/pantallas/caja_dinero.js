@@ -3,12 +3,13 @@
 import { escribir } from '../api.js';
 import { empresaId } from '../sesion.js';
 import { dinero, aCentavos } from '../formato.js';
-import { h, aviso, cajaError, errorSimple, campo, conBoton } from '../ui.js';
+import { h, aviso, cajaError, errorSimple, campo, conBoton, titulo, estadoVacio } from '../ui.js';
+import { hayEnMenu } from '../menu.js';
 import { cuentasDinero, olvidarDatos } from '../datos.js';
 
 const ES_CAJA = (c) => c.tipo === 'efectivo_caja' || c.tipo === 'caja_chica';
 
-export async function mostrar(vista) {
+export async function mostrar(vista, ctx = {}) {
   let cuentas;
   try { cuentas = await cuentasDinero(true); } catch (err) { vista.append(await cajaError(err)); return; }
   const cajas = cuentas.filter(ES_CAJA);
@@ -57,13 +58,17 @@ export async function mostrar(vista) {
     const r = await conBoton(boton, zonaError, () => escribir('trasladar_dinero', { p_empresa_id: empresaId(), p_datos: datos }));
     if (r) {
       olvidarDatos('cuentas');
-      aviso(dep ? `Depósito de ${dinero(m)} registrado. Queda en tránsito hasta confirmarlo.` : `Retiro de ${dinero(m)} registrado.`);
+      const de = (sel) => (sel.selectedOptions[0] ? sel.selectedOptions[0].textContent.split(' · ')[0] : '');
+      aviso(dep ? `Depósito de ${dinero(m)} registrado · sale de ${de(selCaja)} · queda en tránsito hasta confirmarlo`
+        : `Retiro de ${dinero(m)} registrado · entra a ${de(selCaja)}`, 'ok', 7000);
       vista.replaceChildren();
-      mostrar(vista);
+      mostrar(vista, ctx);
     }
   });
   pintarTipo();
   vista.append(h('section', { class: 'tarjeta tarjeta-angosta', 'aria-labelledby': 't-mov' },
-    h('h1', { id: 't-mov' }, 'Depósito o retiro'),
-    !cajas.length || !bancos.length ? h('p', { class: 'mensaje mensaje-info' }, 'Necesita al menos una caja y una cuenta de banco guardadas.') : form));
+    titulo('h1', 'billetes', 'Depósito o retiro', { id: 't-mov' }),
+    !cajas.length || !bancos.length ? estadoVacio({ icono: 'banco', titulo: 'Primero guarde sus cajas y bancos',
+      texto: 'Para meter o sacar efectivo necesita al menos una caja y una cuenta de banco.',
+      boton: hayEnMenu(ctx.menu || [], 'ajustes', 'cajas') ? { texto: 'Agregar caja o banco', href: '#/ajustes/cajas', icono: 'mas' } : null }) : form));
 }

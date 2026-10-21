@@ -5,7 +5,7 @@
 import { leer, escribir } from '../api.js';
 import { empresaId, puede } from '../sesion.js';
 import { dinero, cantidad as fCantidad } from '../formato.js';
-import { h, cajaError, errorSimple, campo, conBoton } from '../ui.js';
+import { h, aviso, cajaError, errorSimple, campo, conBoton, titulo, mensaje, monto } from '../ui.js';
 import { cuentasDinero, miTurno } from '../datos.js';
 
 let ventaElegida = null;
@@ -31,7 +31,8 @@ export async function mostrar(vista, ctx) {
     vista.replaceChildren();
     formulario(vista, ctx, r[0].venta_id);
   });
-  vista.append(h('section', { class: 'tarjeta tarjeta-angosta', 'aria-labelledby': 't-dev' }, h('h1', { id: 't-dev' }, 'Devolución'), form));
+  vista.append(h('section', { class: 'tarjeta tarjeta-angosta', 'aria-labelledby': 't-dev' }, titulo('h1', 'devolucion', 'Devolución', { id: 't-dev' }),
+    h('p', { class: 'ayuda' }, 'Busque la venta por su número para devolver uno o varios productos.'), form));
 }
 
 async function formulario(vista, ctx, ventaId) {
@@ -100,18 +101,21 @@ async function formulario(vista, ctx, ventaId) {
 
   function listo(r) {
     const pend = r.estado === 'pendiente_aprobacion';
+    const hecho = pend ? `Devolución en espera de aprobación · ${dinero(r.total_centavos)}`
+      : `Devolución ${r.numero_documento || ''} guardada · ${dinero(r.total_centavos)}${r.dinero_centavos ? ' · sale ' + dinero(r.dinero_centavos) + ' de la caja' : ''}`;
+    aviso(hecho, pend ? 'info' : 'ok');
     vista.replaceChildren(h('section', { class: 'tarjeta tarjeta-angosta', 'aria-labelledby': 't-devok' },
-      h('h1', { id: 't-devok' }, pend ? 'Devolución esperando aprobación' : `Devolución ${r.numero_documento}`),
-      h('div', { class: 'fila' }, h('span', {}, 'Total devuelto'), h('span', { class: 'monto', dataset: { dato: 'total-devolucion' } }, dinero(r.total_centavos))),
-      r.cxc_centavos ? h('div', { class: 'fila' }, h('span', {}, 'Rebaja de lo que debe'), h('span', { class: 'monto' }, dinero(r.cxc_centavos))) : null,
-      r.dinero_centavos ? h('div', { class: 'fila' }, h('span', {}, 'Dinero devuelto'), h('span', { class: 'monto' }, dinero(r.dinero_centavos))) : null,
-      r.saldo_favor_centavos ? h('div', { class: 'fila' }, h('span', {}, 'Saldo a favor'), h('span', { class: 'monto' }, dinero(r.saldo_favor_centavos))) : null,
-      r.saldo_favor && r.saldo_favor.codigo ? h('p', { class: 'mensaje mensaje-ok' }, `Código del vale: ${r.saldo_favor.codigo}. Entrégueselo al cliente.`) : null,
-      pend ? h('p', { class: 'mensaje mensaje-info' }, 'No se movió nada todavía: el administrador o el dueño debe aprobarla.') : null,
+      titulo('h1', 'devolucion', pend ? 'Devolución esperando aprobación' : `Devolución ${r.numero_documento}`, { id: 't-devok' }),
+      pend ? mensaje('info', 'No se movió nada todavía.', 'El administrador o el dueño debe aprobarla.') : mensaje('ok', hecho, null, { class: 'resultado' }),
+      h('div', { class: 'fila' }, h('span', {}, 'Total devuelto'), monto(dinero(r.total_centavos), { dato: 'total-devolucion' })),
+      r.cxc_centavos ? h('div', { class: 'fila' }, h('span', {}, 'Rebaja de lo que debe'), monto(dinero(r.cxc_centavos))) : null,
+      r.dinero_centavos ? h('div', { class: 'fila' }, h('span', {}, 'Dinero devuelto (sale)'), monto(dinero(r.dinero_centavos), { sentido: 'sale' })) : null,
+      r.saldo_favor_centavos ? h('div', { class: 'fila' }, h('span', {}, 'Saldo a favor'), monto(dinero(r.saldo_favor_centavos))) : null,
+      r.saldo_favor && r.saldo_favor.codigo ? mensaje('info', `Código del vale: ${r.saldo_favor.codigo}`, 'Entrégueselo al cliente.') : null,
       h('div', { class: 'botones' }, h('a', { class: 'boton', href: '#/vender/ventas' }, 'Volver a ventas del día'))));
   }
 
   vista.append(h('section', { class: 'tarjeta', 'aria-labelledby': 't-devf' },
-    h('h1', { id: 't-devf' }, `Devolución de ${v.numero_documento || 'la venta #' + v.numero}`),
+    titulo('h1', 'devolucion', `Devolución de ${v.numero_documento || 'la venta #' + v.numero}`, { id: 't-devf' }),
     h('p', { class: 'ayuda' }, `${v.cliente_nombre || 'Consumidor final'} · Total ${dinero(v.total_centavos)}`), form));
 }

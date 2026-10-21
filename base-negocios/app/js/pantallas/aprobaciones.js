@@ -38,7 +38,7 @@ export function listaAprobaciones(filas, alCambiar) {
       accion: (motivo) => escribir('resolver_aprobacion', { p_aprobacion_id: a.aprobacion_id, p_aprobar: aprobar, p_motivo: motivo }),
     }).then((hecho) => {
       if (hecho) {
-        aviso(aprobar ? 'Solicitud aprobada.' : 'Solicitud rechazada.');
+        aviso(`${aprobar ? 'Solicitud aprobada' : 'Solicitud rechazada'} · ${TIPO[a.tipo] || a.tipo} ${dinero(a.monto_centavos)}`);
         window.dispatchEvent(new Event('pendientes-cambiaron'));
         alCambiar();
       }

@@ -3,7 +3,7 @@
 // tasa vale para lo que se registre después; el código nunca cambia.
 import { rpc, leer } from '../api.js';
 import { empresaId, puede } from '../sesion.js';
-import { h, aviso, errorSimple, campo, pedirMotivo } from '../ui.js';
+import { h, icono, aviso, errorSimple, campo, pedirMotivo, titulo, tabla, chipEstado, chip } from '../ui.js';
 
 const CLASES = { gravado: 'Gravado', exento: 'Exento', exonerado: 'Exonerado' };
 
@@ -13,13 +13,13 @@ export async function mostrar(vista, ctx) {
   if (!ctx.sigueVigente()) return;
   const editar = puede('impuestos.configurar');
   const recargar = async () => { vista.replaceChildren(); await mostrar(vista, ctx); };
-  const tabla = h('table', { class: 'tabla tabla-celular', id: 'tabla-impuestos' },
-    h('thead', {}, h('tr', {}, ['Código', 'Nombre', 'Tasa', 'Clase', 'Predeterminado', 'Activo', ''].map((t) => h('th', {}, t)))),
-    h('tbody', {}, lista.map((i) => h('tr', {},
-      h('td', { 'data-titulo': 'Código' }, i.codigo), h('td', { 'data-titulo': 'Nombre' }, i.nombre),
-      h('td', { 'data-titulo': 'Tasa' }, `${Number(i.porcentaje)} %`), h('td', { 'data-titulo': 'Clase' }, CLASES[i.clase] || i.clase),
-      h('td', { 'data-titulo': 'Predeterminado' }, i.predeterminado ? 'Sí' : 'No'), h('td', { 'data-titulo': 'Activo' }, i.activo ? 'Sí' : 'No'),
-      h('td', {}, editar ? h('button', { type: 'button', class: 'boton', onclick: () => formulario(i) }, 'Cambiar') : null)))));
+  // En el celular cada impuesto es una tarjeta: arriba el nombre y su código.
+  const tablaImp = tabla({ props: { id: 'tabla-impuestos' },
+    columnas: [{ titulo: 'Nombre' }, { titulo: 'Código' }, { titulo: 'Tasa', num: true }, { titulo: 'Clase' }, { titulo: 'Predeterminado' }, { titulo: 'Activo' }]
+      .concat(editar ? [{ titulo: '', acciones: true }] : []),
+    filas: lista.map((i) => [h('strong', {}, i.nombre), i.codigo, `${Number(i.porcentaje)} %`, CLASES[i.clase] || i.clase,
+      i.predeterminado ? chip('Sí', 'azul') : 'No', chipEstado(i.activo ? 'activo' : 'inactivo')]
+      .concat(editar ? [h('button', { type: 'button', class: 'boton', onclick: () => formulario(i) }, icono('editar'), 'Cambiar')] : [])) });
 
   function formulario(i) {
     const nuevo = !i;
@@ -45,14 +45,14 @@ export async function mostrar(vista, ctx) {
       const ok = await pedirMotivo({ titulo: nuevo ? 'Crear impuesto' : `Cambiar ${datos.codigo}`, textoBoton: 'Guardar',
         explicacion: 'Vale para lo que se registre desde ahora. Lo ya vendido queda con la tasa que usó.',
         accion: (motivo) => rpc('configurar_impuesto', { p_empresa_id: E, p_datos: datos, p_motivo: motivo }) });
-      if (ok) { aviso('Impuesto guardado.'); recargar(); }
+      if (ok) { aviso(`Impuesto guardado · ${datos.nombre} al ${datos.porcentaje} %`); recargar(); }
     });
-    vista.replaceChildren(h('section', { class: 'tarjeta tarjeta-angosta' }, h('h1', {}, nuevo ? 'Nuevo impuesto' : `Impuesto ${i.codigo}`), form));
+    vista.replaceChildren(h('section', { class: 'tarjeta tarjeta-angosta' }, titulo('h1', 'impuestos', nuevo ? 'Nuevo impuesto' : `Impuesto ${i.codigo}`), form));
   }
 
   vista.append(h('section', { class: 'tarjeta', 'aria-labelledby': 't-imp' },
-    h('div', { class: 'titulo-con-boton' }, h('h1', { id: 't-imp' }, 'Impuestos'),
-      editar ? h('button', { type: 'button', class: 'boton boton-principal', onclick: () => formulario(null) }, 'Nuevo impuesto') : null),
+    h('div', { class: 'titulo-con-boton' }, titulo('h1', 'impuestos', 'Impuestos', { id: 't-imp' }),
+      editar ? h('button', { type: 'button', class: 'boton boton-principal', onclick: () => formulario(null) }, icono('mas'), 'Nuevo impuesto') : null),
     editar ? null : h('p', { class: 'ayuda' }, 'Solo el dueño cambia esta tabla.'),
-    h('div', { class: 'tabla-envoltura' }, tabla)));
+    tablaImp));
 }

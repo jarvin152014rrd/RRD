@@ -35,3 +35,5 @@
   --letra: 'IBM Plex Sans', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
   --letra-mono: 'IBM Plex Mono', ui-monospace, 'SFMono-Regular', Menlo, Consolas, monospace;
 }
+/* Texto encima del color de acento (burbujas, número de la campanita). La marca lo recalcula. */
+:root { --color-en-acento: #0f1f3d; }

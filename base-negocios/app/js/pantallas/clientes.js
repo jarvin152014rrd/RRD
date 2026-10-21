@@ -4,7 +4,8 @@
 import { rpc, leer, escribir, nuevoId } from '../api.js';
 import { empresaId, perfilActual, puede, tieneModulo } from '../sesion.js';
 import { dinero, fecha, aCentavos, paraCampo } from '../formato.js';
-import { h, aviso, cajaError, errorSimple, campo, conBoton, enlaceWhatsApp } from '../ui.js';
+import { h, icono, aviso, cajaError, errorSimple, campo, conBoton, enlaceWhatsApp, titulo, filaIcono, chip, chipEstado, monto as cifra, estadoVacio, mensaje } from '../ui.js';
+import { hayEnMenu } from '../menu.js';
 import { clientes, filtrar, olvidarDatos } from '../datos.js';
 import { nombreForma } from '../comprobante.js';
 
@@ -25,20 +26,30 @@ export async function mostrar(vista, ctx) {
     const vistos = filtrar(lista, buscar.value, ['nombre', 'rtn', 'telefono', 'codigo']);
     zona.replaceChildren(...(vistos.length ? vistos.slice(0, 200).map((c) => {
       const s = porId.get(c.id);
-      return h('article', { class: 'venta-fila', dataset: { cliente: c.id } },
-        h('div', {}, h('strong', {}, c.nombre), !c.activo ? h('span', { class: 'etiqueta' }, 'Inactivo') : null,
-          h('span', { class: 'detalle' }, [c.rtn ? 'RTN ' + c.rtn : null, c.telefono].filter(Boolean).join(' · ') || 'Sin RTN ni teléfono')),
-        s && s.saldo_centavos ? h('span', { class: 'monto' + (s.vencido_centavos ? ' peligro' : '') }, dinero(s.saldo_centavos)) : h('span', {}, ''),
-        h('div', { class: 'botones' }, h('button', { type: 'button', class: 'boton', onclick: () => abrirFicha(vista, ctx, c.id) }, 'Ver')));
-    }) : [h('p', { class: 'vacio' }, 'No hay clientes con ese nombre.')]));
+      return filaIcono({
+        icono: 'usuario', color: c.activo ? 'azul' : 'neutro',
+        titulo: [h('strong', {}, c.nombre), !c.activo ? [' ', chipEstado('inactivo')] : null],
+        detalle: [c.rtn ? 'RTN ' + c.rtn : null, c.telefono].filter(Boolean).join(' · ') || 'Sin RTN ni teléfono',
+        derecha: s && s.saldo_centavos ? [cifra(dinero(s.saldo_centavos), { negativo: Boolean(s.vencido_centavos) }),
+          chip(s.vencido_centavos ? 'Con atraso' : 'Debe', s.vencido_centavos ? 'rojo' : 'dorado')] : null,
+        abajo: h('div', { class: 'botones' }, h('button', { type: 'button', class: 'boton', onclick: () => abrirFicha(vista, ctx, c.id) }, 'Ver')),
+        props: { dataset: { cliente: c.id } },
+      });
+    }) : [estadoVacio({ icono: 'buscar', chico: true, texto: 'No hay clientes con ese nombre.' })]));
   };
   buscar.addEventListener('input', pintar);
   pintar();
+  const nuevo = () => formularioCliente(vista, ctx, null);
   vista.append(h('section', { class: 'tarjeta', 'aria-labelledby': 't-cli' },
-    h('div', { class: 'titulo-con-boton' }, h('h1', { id: 't-cli' }, 'Clientes'),
-      puede('terceros.editar') ? h('button', { type: 'button', class: 'boton boton-principal', id: 'nuevo-cliente',
-        onclick: () => formularioCliente(vista, ctx, null) }, 'Nuevo cliente') : null),
-    campo('Buscar', buscar), zona));
+    h('div', { class: 'titulo-con-boton' }, titulo('h1', 'clientes', 'Clientes', { id: 't-cli' }),
+      puede('terceros.editar') && lista.length ? h('button', { type: 'button', class: 'boton boton-principal', id: 'nuevo-cliente',
+        onclick: nuevo }, icono('mas'), 'Nuevo cliente') : null),
+    // Sin clientes: enseña cómo empezar (solo con los botones que puede usar).
+    lista.length ? [campo('Buscar', buscar), zona]
+      : estadoVacio({ icono: 'clientes', titulo: 'Aún no tiene clientes',
+        texto: 'Guarde a sus clientes para venderles al crédito, cobrarles y mandarles su comprobante por WhatsApp.',
+        botones: [puede('terceros.editar') ? { texto: 'Agregar el primero', onclick: nuevo, icono: 'mas', id: 'nuevo-cliente' } : null,
+          hayEnMenu(ctx.menu || [], 'ajustes', 'excel') ? { texto: 'Subir mi Excel', href: '#/ajustes/excel', icono: 'excel' } : null] })));
 }
 
 // Ficha del cliente. Con opciones.cobrar abre directo el cobro.
@@ -53,43 +64,42 @@ export async function abrirFicha(vista, ctx, clienteId, opciones = {}) {
     if (!ctx.sigueVigente()) return;
     if (opciones.cobrar) return formularioCobro(vista, ctx, cli, cxc);
     const volver = h('button', { type: 'button', class: 'boton', onclick: () => { vista.replaceChildren(); mostrar(vista, ctx); } }, 'Volver a la lista');
-    const dato = (t, v) => (v || v === 0 ? h('div', { class: 'fila' }, h('span', {}, t), h('span', {}, v)) : null);
+    const dato = (t, v) => (v || v === 0 ? h('div', { class: 'fila' }, h('span', {}, t), h('span', { class: 'dato-valor' }, v)) : null);
     const saldo = ec ? ec.saldo_actual_centavos : 0;
     vista.replaceChildren(...[
       h('section', { class: 'tarjeta', 'aria-labelledby': 't-ficha' },
-        h('h1', { id: 't-ficha' }, cli.nombre),
+        h('div', { class: 'titulo-con-total' }, titulo('h1', 'usuario', cli.nombre, { id: 't-ficha' }), cli.activo === false ? chipEstado('inactivo') : null),
         dato('Código', cli.codigo), dato('RTN', cli.rtn), dato('Teléfono', cli.telefono), dato('Correo', cli.correo), dato('Dirección', cli.direccion),
         dato('Límite de crédito', dinero(cli.limite_credito_centavos)), dato('Plazo', `${cli.plazo_dias || 0} días`),
         h('div', { class: 'botones' },
           puede('terceros.editar') ? h('button', { type: 'button', class: 'boton', onclick: () => formularioCliente(vista, ctx, cli) }, 'Editar') : null,
           pendiente ? h('button', { type: 'button', class: 'boton boton-principal', id: 'cobrar-abono',
-            onclick: () => formularioCobro(vista, ctx, cli, cxc) }, 'Cobrar abono') : null,
+            onclick: () => formularioCobro(vista, ctx, cli, cxc) }, icono('cobrar'), 'Cobrar abono') : null,
           volver)),
       // Sin ventas.ver (cajero): solo lo que debe, factura por factura, para cobrar.
       !ec && cxc ? h('section', { class: 'tarjeta', 'aria-labelledby': 't-pend' },
-        h('h2', { id: 't-pend' }, 'Lo que debe'),
-        h('div', { class: 'fila fila-total' }, h('span', {}, 'Debe'), h('span', { class: 'monto', dataset: { dato: 'saldo-cliente' } }, dinero(pendiente ? pendiente.saldo_centavos : 0))),
-        pendiente ? pendiente.facturas.map((p) => h('div', { class: 'fila' },
-          h('span', {}, p.numero_documento, h('span', { class: 'detalle' }, `${fecha(p.fecha_documento)} · vence ${fecha(p.vence_el)}${p.dias_vencido > 0 ? ` · ${p.dias_vencido} días vencida` : ''}`)),
-          h('span', { class: 'monto' + (p.dias_vencido > 0 ? ' peligro' : '') }, dinero(p.saldo_centavos)))) : h('p', { class: 'vacio' }, 'No debe nada.'),
+        titulo('h2', 'cobrar', 'Lo que debe', { id: 't-pend' }),
+        h('div', { class: 'fila fila-total' }, h('span', {}, 'Debe'), cifra(dinero(pendiente ? pendiente.saldo_centavos : 0), { dato: 'saldo-cliente' })),
+        pendiente ? pendiente.facturas.map((p) => filaFactura(p.numero_documento, p.fecha_documento, p.vence_el, p.dias_vencido, p.saldo_centavos))
+          : estadoVacio({ icono: 'check_circulo', color: 'verde', chico: true, texto: 'No debe nada.' }),
         cxc.todas_las_sucursales ? null : h('p', { class: 'ayuda' }, 'Solo se ven las facturas de su sucursal.')) : null,
       ec ? h('section', { class: 'tarjeta', 'aria-labelledby': 't-ec' },
-        h('h2', { id: 't-ec' }, 'Estado de cuenta'),
+        titulo('h2', 'documento', 'Estado de cuenta', { id: 't-ec' }),
         h('div', { class: 'cifras' },
           h('div', { class: 'cifra-chica' }, h('p', { class: 'cifra-titulo' }, 'Debe'), h('p', { class: 'cifra-valor', dataset: { dato: 'saldo-cliente' } }, dinero(saldo))),
-          h('div', { class: 'cifra-chica' }, h('p', { class: 'cifra-titulo' }, 'Vencido'), h('p', { class: 'cifra-valor' + (s && s.vencido_centavos ? ' peligro' : '') }, dinero(s ? s.vencido_centavos : 0))),
-          h('div', { class: 'cifra-chica' }, h('p', { class: 'cifra-titulo' }, 'Saldo a favor'), h('p', { class: 'cifra-valor', dataset: { dato: 'saldo-favor' } }, dinero(ec.saldo_favor_centavos)))),
+          h('div', { class: 'cifra-chica' }, h('p', { class: 'cifra-titulo' }, 'Vencido'), h('p', { class: 'cifra-valor' + (s && s.vencido_centavos ? ' monto-sale' : '') }, dinero(s ? s.vencido_centavos : 0))),
+          h('div', { class: 'cifra-chica' }, h('p', { class: 'cifra-titulo' }, 'Saldo a favor'), h('p', { class: 'cifra-valor' + (ec.saldo_favor_centavos ? ' monto-entra' : ''), dataset: { dato: 'saldo-favor' } }, dinero(ec.saldo_favor_centavos)))),
         s ? h('div', { class: 'antiguedad' }, [['0 a 30 días', s.de_0_a_30], ['31 a 60', s.de_31_a_60], ['61 a 90', s.de_61_a_90], ['Más de 90', s.mas_de_90]]
           .map(([t, v]) => h('div', {}, h('span', { class: 'detalle' }, t), h('span', { class: 'monto' }, dinero(v))))) : null,
         h('h3', { class: 'titulo-chico' }, 'Facturas pendientes'),
-        ec.pendientes.length ? ec.pendientes.map((p) => h('div', { class: 'fila' },
-          h('span', {}, p.documento, h('span', { class: 'detalle' }, `${fecha(p.fecha)} · vence ${fecha(p.vence_el)}${p.dias_vencido > 0 ? ` · ${p.dias_vencido} días vencida` : ''}`)),
-          h('span', { class: 'monto' + (p.dias_vencido > 0 ? ' peligro' : '') }, dinero(p.saldo_centavos))))
-          : h('p', { class: 'vacio' }, 'No debe nada.'),
+        ec.pendientes.length ? ec.pendientes.map((p) => filaFactura(p.documento, p.fecha, p.vence_el, p.dias_vencido, p.saldo_centavos))
+          : estadoVacio({ icono: 'check_circulo', color: 'verde', chico: true, texto: 'No debe nada.' }),
         h('h3', { class: 'titulo-chico' }, 'Movimientos'),
-        ec.movimientos.slice(-30).reverse().map((m) => h('div', { class: 'fila' },
+        // Abono = entra dinero (verde). Cargo = vendió al crédito (lo que debe sube).
+        ec.movimientos.length ? ec.movimientos.slice(-30).reverse().map((m) => h('div', { class: 'fila' },
           h('span', {}, `${m.documento || ''} ${m.referencia ? '· ' + m.referencia : ''}`, h('span', { class: 'detalle' }, fecha(m.fecha))),
-          h('span', { class: 'monto' }, m.cargo_centavos ? '+' + dinero(m.cargo_centavos) : '-' + dinero(m.abono_centavos))))) : null].filter(Boolean));
+          m.cargo_centavos ? cifra(dinero(m.cargo_centavos), { signo: '+' }) : cifra(dinero(m.abono_centavos), { signo: '-', sentido: 'entra' })))
+          : h('p', { class: 'vacio' }, 'Sin movimientos todavía.')) : null].filter(Boolean));
   } catch (err) {
     vista.replaceChildren(await cajaError(err));
   }
@@ -167,10 +177,12 @@ function formularioCobro(vista, ctx, cli, cxc) {
     }
     const r = await conBoton(boton, zonaError, () => escribir('registrar_cobro', { p_empresa_id: empresaId(), p_datos: datos, p_id_operacion: id }), 'Cobrando…');
     if (!r) return;
-    aviso(`Cobro #${r.numero} registrado por ${dinero(r.monto_centavos)}.`);
+    const hecho = `Cobro #${r.numero} guardado · ${dinero(r.monto_centavos)} en ${nombreForma(selForma.value).toLowerCase()}`;
+    aviso(hecho);
     vista.replaceChildren(h('section', { class: 'tarjeta tarjeta-angosta', 'aria-labelledby': 't-cobok' },
-      h('h1', { id: 't-cobok' }, `Cobro #${r.numero} de ${cli.nombre}`),
-      h('div', { class: 'fila' }, h('span', {}, 'Recibido'), h('span', { class: 'monto' }, dinero(r.monto_centavos))),
+      titulo('h1', 'cobrar', `Cobro #${r.numero} de ${cli.nombre}`, { id: 't-cobok' }),
+      mensaje('ok', hecho, r.saldo_cliente_centavos ? `Todavía debe ${dinero(r.saldo_cliente_centavos)}.` : 'Ya no debe nada.', { class: 'resultado' }),
+      h('div', { class: 'fila' }, h('span', {}, 'Recibido'), cifra(dinero(r.monto_centavos), { sentido: 'entra' })),
       h('div', { class: 'fila' }, h('span', {}, 'Aplicado a facturas'), h('span', { class: 'monto', dataset: { dato: 'aplicado' } }, dinero(r.aplicado_centavos))),
       (r.aplicaciones || []).map((a) => h('div', { class: 'fila' }, h('span', { class: 'detalle' }, a.documento), h('span', { class: 'monto' }, dinero(a.monto_centavos)))),
       r.excedente_centavos ? h('div', { class: 'fila' }, h('span', {}, 'Queda a su favor'), h('span', { class: 'monto', dataset: { dato: 'excedente' } }, dinero(r.excedente_centavos))) : null,
@@ -180,7 +192,7 @@ function formularioCobro(vista, ctx, cli, cxc) {
   });
   revisar();
   vista.replaceChildren(h('section', { class: 'tarjeta tarjeta-angosta', 'aria-labelledby': 't-abono' },
-    h('h1', { id: 't-abono' }, `Cobrar a ${cli.nombre}`), form));
+    titulo('h1', 'cobrar', `Cobrar a ${cli.nombre}`, { id: 't-abono' }), form));
 }
 
 // Crear (cli = null) o editar un cliente.
@@ -241,12 +253,21 @@ function formularioCliente(vista, ctx, cli) {
       : escribir('crear_tercero', { p_empresa_id: empresaId(), p_datos: { ...datos, es_cliente: true }, p_id_operacion: id })));
     if (!r) return;
     olvidarDatos('clientes');
-    aviso(cli ? 'Cliente actualizado.' : 'Cliente creado.');
+    aviso(cli ? `Cliente guardado · ${nombre}` : `Cliente creado · ${nombre}`);
     abrirFicha(vista, ctx, cli ? cli.id : r.tercero_id);
   });
   vista.replaceChildren(h('section', { class: 'tarjeta tarjeta-angosta', 'aria-labelledby': 't-fcli' },
-    h('h1', { id: 't-fcli' }, cli ? `Editar ${cli.nombre}` : 'Nuevo cliente'), form));
+    titulo('h1', cli ? 'editar' : 'cliente_mas', cli ? `Editar ${cli.nombre}` : 'Nuevo cliente', { id: 't-fcli' }), form));
   f.nombre.focus();
+}
+
+// Una factura pendiente: número, fechas, chip "Vencida" (rojo) o "Pendiente" (dorado) y su saldo.
+function filaFactura(numero, fechaDoc, vence, diasVencido, saldo) {
+  const vencida = diasVencido > 0;
+  return h('div', { class: 'fila' },
+    h('span', {}, numero, ' ', vencida ? chipEstado('vencida', `Vencida hace ${diasVencido} días`) : chipEstado('pendiente'),
+      h('span', { class: 'detalle' }, `${fecha(fechaDoc)} · vence ${fecha(vence)}`)),
+    cifra(dinero(saldo), { negativo: vencida }));
 }
 
 // Mensaje amable para cobrar por WhatsApp.

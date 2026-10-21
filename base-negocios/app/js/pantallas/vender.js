@@ -6,7 +6,8 @@
 import { rpc, escribir, nuevoId } from '../api.js';
 import { empresaId, perfilActual, puede, tieneModulo } from '../sesion.js';
 import { dinero, cantidad as fCantidad, aCentavos, paraCampo } from '../formato.js';
-import { h, aviso, cajaError, errorSimple, campo, dialogo } from '../ui.js';
+import { h, icono, aviso, cajaError, errorSimple, campo, dialogo, titulo, estadoVacio, mensaje, chip } from '../ui.js';
+import { hayEnMenu } from '../menu.js';
 import { productos, clientes, miTurno, filtrar, olvidarDatos } from '../datos.js';
 import { vistaComprobante, nombreForma } from '../comprobante.js';
 import { abrirTurnoDialogo } from './caja_turno.js';
@@ -76,7 +77,7 @@ export async function armarCarrito(vista, ctx, { modo, alTerminar = null }) {
     placeholder: 'Nombre, código o código de barras', 'aria-describedby': 'ayuda-buscar' });
   const resultados = h('div', { class: 'resultados', role: 'list' });
   const zonaBuscar = h('div', { 'aria-live': 'polite' });
-  const botonCamara = h('button', { type: 'button', class: 'boton', onclick: () => escanear(porCodigo, buscar) }, 'Cámara');
+  const botonCamara = h('button', { type: 'button', class: 'boton', onclick: () => escanear(porCodigo, buscar) }, icono('foto'), 'Cámara');
 
   function pintarResultados() {
     const q = buscar.value.trim();
@@ -125,7 +126,13 @@ export async function armarCarrito(vista, ctx, { modo, alTerminar = null }) {
 
   function pintarCarrito() {
     if (!estado.lineas.length) {
-      carrito.replaceChildren(h('p', { class: 'vacio' }, 'Busque un producto o servicio para empezar.'));
+      carrito.replaceChildren(lista.length
+        ? estadoVacio({ icono: 'buscar', chico: true, texto: 'Busque un producto o servicio arriba para empezar.' })
+        // Sin productos no se puede vender: enseña dónde agregarlos (solo si puede entrar ahí).
+        : estadoVacio({ icono: 'etiqueta', color: 'dorado', titulo: 'Aún no tiene productos para vender',
+          texto: 'Agregue sus productos o servicios y aquí podrá venderlos.',
+          botones: [hayEnMenu(ctx.menu || [], 'inventario', 'productos') ? { texto: 'Agregar productos', href: '#/inventario/productos', icono: 'mas' } : null,
+            hayEnMenu(ctx.menu || [], 'ajustes', 'excel') ? { texto: 'Subir mi Excel', href: '#/ajustes/excel', icono: 'excel' } : null] }));
       return;
     }
     const previa = estado.previa;
@@ -166,7 +173,7 @@ export async function armarCarrito(vista, ctx, { modo, alTerminar = null }) {
             const radio = h('input', { type: 'radio', name: nombreGrupo, value: x.promocion_id, checked: x.promocion_id === elegida });
             radio.addEventListener('change', () => { l.promocionId = x.promocion_id; l.elegida = true; cambio(); });
             return h('label', { class: 'promo-opcion' }, radio, ` ${x.nombre} (−${dinero(x.descuento_centavos)})`,
-              k === 0 ? h('span', { class: 'etiqueta etiqueta-ok' }, 'Sugerida: la que más descuenta') : null);
+              k === 0 ? chip('Sugerida: la que más descuenta', 'verde') : null);
           })));
       }
       return h('article', { class: 'linea-carrito', dataset: { producto: p.producto_id } }, ...partes);
@@ -201,8 +208,8 @@ export async function armarCarrito(vista, ctx, { modo, alTerminar = null }) {
         (pv.desglose_impuestos || []).filter((d) => d.clase === 'gravado').map((d) =>
           h('div', { class: 'suma suma-nota' }, h('span', {}, `${d.nombre} incluido`), h('span', { class: 'monto', dataset: { dato: 'isv-' + d.codigo } }, dinero(d.impuesto_centavos)))),
         pv.exento_centavos ? h('div', { class: 'suma suma-nota' }, h('span', {}, 'Exento'), h('span', { class: 'monto' }, dinero(pv.exento_centavos))) : null,
-        pv.descuento_pide_aprobacion ? h('p', { class: 'mensaje mensaje-info aviso-tope', role: 'status' },
-          `El descuento pasa su tope (${pv.tope_descuento_porcentaje} %). Puede seguir: la venta quedará esperando la aprobación del administrador o del dueño.`) : null].flat().filter(Boolean));
+        pv.descuento_pide_aprobacion ? mensaje('info', `El descuento pasa su tope (${pv.tope_descuento_porcentaje} %).`,
+          'Puede seguir: la venta quedará esperando la aprobación del administrador o del dueño.', { class: 'aviso-tope' }) : null].flat().filter(Boolean));
     }
     botonCobrar.textContent = modo === 'venta' ? `Cobrar ${pv ? dinero(pv.total_centavos) : ''}`.trim() : 'Guardar cotización';
   }
@@ -255,7 +262,7 @@ export async function armarCarrito(vista, ctx, { modo, alTerminar = null }) {
       detalle.append(falta);
       pintarFalta();
     }
-    zonaPago.replaceChildren(h('h3', { class: 'titulo-chico' }, 'Forma de pago'), botones, detalle);
+    zonaPago.replaceChildren(titulo('h3', 'billetes', 'Forma de pago', { class: 'titulo-chico' }), botones, detalle);
   }
 
   async function pintarTurno() {
@@ -263,12 +270,10 @@ export async function armarCarrito(vista, ctx, { modo, alTerminar = null }) {
     if (!cobra || !puede('caja.turno')) return;
     try { turno = await miTurno(); } catch { turno = null; }
     if (turno) {
-      zonaTurno.append(h('p', { class: 'ayuda', dataset: { dato: 'turno' } }, `Turno ${turno.numero} abierto · ${turno.caja}`));
+      zonaTurno.append(h('p', { class: 'ayuda con-icono-linea', dataset: { dato: 'turno' } }, icono('candado_abierto'), ` Turno ${turno.numero} abierto · ${turno.caja}`));
     } else if (perfil.empresa.turnos_obligatorios) {
-      zonaTurno.append(h('div', { class: 'mensaje mensaje-info' },
-        h('p', {}, h('strong', {}, 'No tiene turno de caja abierto.')),
-        h('p', {}, 'Para cobrar en efectivo abra su turno (cuente el fondo de la caja).'),
-        h('button', { type: 'button', class: 'boton', onclick: async () => { if (await abrirTurnoDialogo()) pintarTurno(); } }, 'Abrir turno')));
+      zonaTurno.append(mensaje('info', 'No tiene turno de caja abierto.', 'Para cobrar en efectivo abra su turno (cuente el fondo de la caja).'),
+        h('button', { type: 'button', class: 'boton boton-ancho', onclick: async () => { if (await abrirTurnoDialogo()) pintarTurno(); } }, icono('candado_abierto'), 'Abrir turno'));
     }
   }
 
@@ -386,7 +391,7 @@ export async function armarCarrito(vista, ctx, { modo, alTerminar = null }) {
       } else {
         const r = await escribir('crear_cotizacion', { p_empresa_id: empresaId(), p_datos: datos, p_id_operacion: estado.idOperacion });
         listo = true;
-        aviso(`Cotización #${r.numero} guardada por ${dinero(r.total_centavos)}.`);
+        aviso(`Cotización #${r.numero} guardada · ${dinero(r.total_centavos)}`);
         if (alTerminar) alTerminar(r);
       }
     } catch (err) {
@@ -400,17 +405,22 @@ export async function armarCarrito(vista, ctx, { modo, alTerminar = null }) {
     const cli = listaClientes.find((c) => c.id === r.cliente_id);
     const nueva = h('a', { class: 'boton', href: '#/vender/nueva', onclick: (ev) => { ev.preventDefault(); reiniciar(); } }, 'Nueva venta');
     if (r.estado === 'pendiente_aprobacion') {
-      vista.replaceChildren(h('section', { class: 'tarjeta', 'aria-labelledby': 't-pend' },
-        h('h1', { id: 't-pend' }, `Venta #${r.numero} esperando aprobación`),
-        h('div', { class: 'mensaje mensaje-info', dataset: { dato: 'pendiente' } },
-          h('p', {}, h('strong', {}, 'La venta quedó pendiente de aprobación.')),
-          h('p', {}, `Total ${dinero(r.total_centavos)}. Todavía no se cobró ni salió mercadería. Cuando el administrador o el dueño la apruebe, se emite sola con estas formas de pago.`)),
+      aviso(`Venta #${r.numero} en espera de aprobación · ${dinero(r.total_centavos)}`, 'info');
+      vista.replaceChildren(h('section', { class: 'tarjeta tarjeta-angosta', 'aria-labelledby': 't-pend' },
+        titulo('h1', 'reloj', `Venta #${r.numero} esperando aprobación`, { id: 't-pend' }),
+        mensaje('info', 'La venta quedó pendiente de aprobación.',
+          `Total ${dinero(r.total_centavos)}. Todavía no se cobró ni salió mercadería. Cuando el administrador o el dueño la apruebe, se emite sola con estas formas de pago.`,
+          { dataset: { dato: 'pendiente' } }),
         h('div', { class: 'botones' }, nueva)));
       return;
     }
-    const cabeza = h('div', { class: 'mensaje mensaje-ok venta-lista', role: 'status' },
-      h('p', {}, h('strong', {}, `Venta lista: ${r.numero_documento}`)),
-      r.vuelto_centavos ? h('p', { class: 'vuelto-grande' }, 'Vuelto: ', h('strong', { class: 'monto', dataset: { dato: 'vuelto-final' } }, dinero(r.vuelto_centavos))) : null);
+    // "Venta T-001-001-00000015 guardada · L 850.00 en efectivo" (datos que devuelve el servidor).
+    const como = estado.forma === 'credito' ? 'al crédito' : estado.forma === 'mixto' ? 'con pago mixto' : `en ${nombreForma(estado.forma).toLowerCase()}`;
+    const hecho = `Venta ${r.numero_documento || '#' + r.numero} guardada · ${dinero(r.total_centavos)} ${como}`;
+    aviso(hecho);
+    const cabeza = h('div', { class: 'mensaje mensaje-ok con-icono venta-lista resultado', role: 'status' }, icono('check_circulo'),
+      h('div', {}, h('p', {}, h('strong', {}, hecho)),
+        r.vuelto_centavos ? h('p', { class: 'vuelto-grande' }, 'Vuelto: ', h('strong', { class: 'monto', dataset: { dato: 'vuelto-final' } }, dinero(r.vuelto_centavos))) : null));
     vista.replaceChildren(cabeza, h('p', { class: 'cargando' }, 'Preparando el comprobante…'));
     try {
       const comp = await vistaComprobante(r.venta_id, { telefono: cli && cli.telefono, extra: [nueva] });
@@ -429,20 +439,20 @@ export async function armarCarrito(vista, ctx, { modo, alTerminar = null }) {
   raiz.append(
     h('div', { class: 'vender-izq' },
       h('section', { class: 'tarjeta', 'aria-label': 'Buscar' },
-        h('label', { for: 'buscar-producto', class: 'etiqueta-grande' }, 'Buscar producto o servicio'),
+        h('label', { for: 'buscar-producto', class: 'etiqueta-grande titulo-icono' }, icono('buscar'), 'Buscar producto o servicio'),
         h('div', { class: 'buscar-fila' }, buscar, botonCamara),
         h('p', { class: 'ayuda', id: 'ayuda-buscar' }, 'Con lector de códigos: apunte y listo (escribe el código y Enter).'),
         zonaBuscar, resultados),
       h('section', { class: 'tarjeta', 'aria-labelledby': 't-carrito' },
-        h('h2', { id: 't-carrito' }, modo === 'venta' ? 'Artículos' : 'Artículos de la cotización'), carrito)),
+        titulo('h2', 'bolsa', modo === 'venta' ? 'Artículos' : 'Artículos de la cotización', { id: 't-carrito' }), carrito)),
     h('aside', { class: 'vender-der tarjeta', 'aria-label': 'Cobro' },
       zonaTurno,
       campo('Cliente', selCliente, modo === 'venta' ? 'Opcional. El crédito necesita cliente.' : null),
       totales,
       campo('Descuento a toda la factura (%)', descFactura, 'Solo va a las líneas sin promoción ni otro descuento.'),
       zonaPago,
-      !cobra && modo === 'venta' ? h('p', { class: 'mensaje mensaje-info' },
-        'Usted puede vender al crédito o hacer una cotización. El cobro en efectivo, tarjeta o transferencia lo hace el cajero.') : null,
+      !cobra && modo === 'venta' ? mensaje('info', 'Usted puede vender al crédito o hacer una cotización.',
+        'El cobro en efectivo, tarjeta o transferencia lo hace el cajero.') : null,
       zonaError, botonCobrar));
   vista.append(raiz);
   pintarTodo();

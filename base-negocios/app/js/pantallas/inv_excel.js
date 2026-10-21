@@ -4,7 +4,7 @@
 // mientras haya un solo error. El archivo se lee y se arma en el navegador (js/excel.js).
 import { rpc, escribir } from '../api.js';
 import { empresaId, perfilActual, puede } from '../sesion.js';
-import { h, icono, aviso, campo, conBoton, pedirMotivo, errorSimple, cajaError } from '../ui.js';
+import { h, icono, aviso, campo, conBoton, pedirMotivo, errorSimple, cajaError, titulo, tabla, chip, mensaje } from '../ui.js';
 import { tarjetaCopiaDatos } from './aj_datos.js';
 import { descargarExcel, leerHoja, nombreHoja } from '../excel.js';
 import { olvidarDatos } from '../datos.js';
@@ -18,7 +18,7 @@ const HOJAS = [
   { hoja: 'saldos_iniciales', permisos: ['ventas.saldo_inicial', 'compras.saldo_inicial'] },
 ];
 const ACCION = { crear: 'Se crea', actualizar: 'Se actualiza', sin_cambios: 'Sin cambios', error: 'Error' };
-const CLASE = { crear: 'etiqueta-ok', actualizar: '', sin_cambios: '', error: 'etiqueta-peligro' };
+const COLOR = { crear: 'verde', actualizar: 'azul', sin_cambios: 'neutro', error: 'rojo' };
 
 export async function mostrar(vista) {
   const E = empresaId();
@@ -43,7 +43,7 @@ export async function mostrar(vista) {
     const p = await traerPlantilla();
     const nombre = `${perfilActual().empresa.nombre}_${p.hoja}_${perfilActual().empresa.hoy}.xlsx`.replace(/[^\p{L}\p{N}_.-]+/gu, '_');
     await descargarExcel(nombre, [p]);
-    aviso(`Excel descargado: ${p.filas.length} fila(s).`);
+    aviso(`Excel descargado · ${p.filas.length} fila(s) de ${nombreHoja(p.hoja)}`);
   }, 'Preparando…'));
 
   archivo.addEventListener('change', async () => {
@@ -74,26 +74,26 @@ export async function mostrar(vista) {
     zonaPrevia.replaceChildren(
       h('p', { class: 'ayuda' }, `Archivo: ${nombreArchivo} · hoja ${hojaArchivo} · todavía no se guardó nada`),
       h('div', { class: 'chips', id: 'excel-resumen' },
-        h('span', { class: 'etiqueta etiqueta-ok' }, `${res.crear} nuevo(s)`),
-        h('span', { class: 'etiqueta' }, `${res.actualizar} con cambios`),
-        h('span', { class: 'etiqueta' }, `${res.sin_cambios} sin cambios`),
-        h('span', { class: 'etiqueta ' + (res.error ? 'etiqueta-peligro' : 'etiqueta-ok'), dataset: { dato: 'errores' } }, `${res.error} error(es) por corregir`)),
-      h('div', { class: 'tabla-envoltura' }, h('table', { class: 'tabla tabla-celular' },
-        h('thead', {}, h('tr', {}, h('th', {}, 'Fila'), h('th', {}, 'Registro'), h('th', {}, 'Qué pasará'), h('th', {}, 'Detalle'))),
-        h('tbody', {}, numeros.filter((n) => errores.has(n) || (porFila.get(n) || {}).accion !== 'sin_cambios').map((n) => {
+        chip(`${res.crear} nuevo(s)`, 'verde'),
+        chip(`${res.actualizar} con cambios`, 'azul'),
+        chip(`${res.sin_cambios} sin cambios`, 'neutro'),
+        chip(`${res.error} error(es) por corregir`, res.error ? 'rojo' : 'verde', { dataset: { dato: 'errores' } })),
+      (() => {
+        const lista = numeros.filter((n) => errores.has(n) || (porFila.get(n) || {}).accion !== 'sin_cambios');
+        const datos = lista.map((n) => {
           const x = porFila.get(n) || { accion: 'error' };
-          const acc = errores.has(n) ? 'error' : x.accion;
-          const env = enviadas.get(n) || {};
-          return h('tr', { class: acc === 'error' ? 'fila-error' : null, dataset: { fila: n } },
-            h('td', { 'data-titulo': 'Fila' }, String(n)),
-            h('td', { 'data-titulo': 'Registro' }, env.nombre || x.llave || env.codigo || ''),
-            h('td', { 'data-titulo': 'Qué pasará' }, h('span', { class: 'etiqueta ' + CLASE[acc] }, ACCION[acc] || acc)),
-            h('td', { 'data-titulo': 'Detalle' }, errores.has(n) ? errores.get(n).join(' ')
-              : acc === 'crear' ? 'Registro nuevo.' : `Cambia: ${(x.cambios || []).join(', ')}.`));
-        })))),
-      res.error ? h('p', { class: 'mensaje mensaje-error', role: 'alert' }, `Hay ${res.error} error(es). Corríjalos en su Excel y vuelva a subirlo. Mientras haya errores no se guarda nada, así sus datos nunca quedan a medias.`)
-        : !res.crear && !res.actualizar ? h('p', { class: 'mensaje mensaje-info' }, 'No hay nada que cambiar.')
-          : h('p', { class: 'mensaje mensaje-ok' }, 'Todo está bien. Revise y toque "Guardar cambios".'));
+          return { n, x, acc: errores.has(n) ? 'error' : x.accion, env: enviadas.get(n) || {} };
+        });
+        // En el celular cada fila es una tarjeta: arriba el registro y qué pasará con él.
+        return tabla({ columnas: [{ titulo: 'Registro' }, { titulo: 'Fila' }, { titulo: 'Qué pasará' }, { titulo: 'Detalle' }],
+          filaProps: (i) => ({ class: datos[i].acc === 'error' ? 'fila-error' : null, dataset: { fila: datos[i].n } }),
+          filas: datos.map(({ n, x, acc, env }) => [env.nombre || x.llave || env.codigo || '', String(n),
+            chip(ACCION[acc] || acc, COLOR[acc] || 'neutro'),
+            errores.has(n) ? errores.get(n).join(' ') : acc === 'crear' ? 'Registro nuevo.' : `Cambia: ${(x.cambios || []).join(', ')}.`]) });
+      })(),
+      res.error ? mensaje('error', `Hay ${res.error} error(es). Corríjalos en su Excel y vuelva a subirlo.`, 'Mientras haya errores no se guarda nada, así sus datos nunca quedan a medias.')
+        : !res.crear && !res.actualizar ? mensaje('info', 'No hay nada que cambiar.')
+          : mensaje('ok', 'Todo está bien.', 'Revise y toque "Guardar cambios".'));
   }
 
   botonGuardar.addEventListener('click', async () => {
@@ -106,22 +106,22 @@ export async function mostrar(vista) {
     if (!ok || !r) return;
     pendiente = null; botonGuardar.disabled = true; archivo.value = '';
     olvidarDatos('productos'); olvidarDatos('clientes');
-    zonaPrevia.replaceChildren(h('p', { class: 'mensaje mensaje-ok', dataset: { dato: 'excel-guardado' } },
-      `Guardado (importación #${r.numero}): ${r.resumen.crear} nuevo(s), ${r.resumen.actualizar} actualizado(s).` +
-      ((r.documentos || []).length ? ` ${r.documentos.length} documento(s) creados.` : '')));
-    aviso('Cambios del Excel guardados.');
+    const hecho = `Excel guardado · ${r.resumen.crear} nuevo(s) y ${r.resumen.actualizar} actualizado(s)`;
+    zonaPrevia.replaceChildren(mensaje('ok', hecho, `Importación #${r.numero}.` +
+      ((r.documentos || []).length ? ` ${r.documentos.length} documento(s) creados.` : ''), { dataset: { dato: 'excel-guardado' } }));
+    aviso(hecho);
   });
 
-  vista.append(
+  vista.append(...[
     h('h1', { class: 'titulo-icono' }, icono('excel'), 'Excel y copia de mis datos'),
     h('section', { class: 'tarjeta', 'aria-labelledby': 't-xl1' },
-      h('h2', { id: 't-xl1', class: 'paso-titulo' }, '1. Descargue su Excel'),
+      titulo('h2', 'descargar', '1. Descargue su Excel', { id: 't-xl1', class: 'paso-titulo' }),
       h('p', { class: 'ayuda' }, 'Trae sus datos de hoy. Cambie las columnas azules (las grises son solo para que vea) y súbalo de nuevo.'),
       h('div', { class: 'dos-columnas' }, campo('Hoja', selHoja), h('div', {}, botonDesc)), zonaDesc),
     h('section', { class: 'tarjeta', 'aria-labelledby': 't-xl2' },
-      h('h2', { id: 't-xl2', class: 'paso-titulo' }, '2. Súbalo y revise antes de guardar'),
+      titulo('h2', 'subir', '2. Súbalo y revise antes de guardar', { id: 't-xl2', class: 'paso-titulo' }),
       campo('Archivo de Excel', archivo, 'No se guarda nada hasta que toque "Guardar cambios".'), zonaPrevia),
     h('section', { class: 'tarjeta', 'aria-labelledby': 't-xl3' },
-      h('h2', { id: 't-xl3', class: 'paso-titulo' }, '3. Guardar cambios'), zonaGuardar, botonGuardar),
-    tarjetaCopiaDatos());
+      titulo('h2', 'check_circulo', '3. Guardar cambios', { id: 't-xl3', class: 'paso-titulo' }), zonaGuardar, botonGuardar),
+    tarjetaCopiaDatos()].filter(Boolean)); // sin permiso de copia = null (no se muestra)
 }

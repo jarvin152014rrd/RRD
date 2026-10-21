@@ -5,7 +5,7 @@
 import { rpc, leer } from '../api.js';
 import { empresaId } from '../sesion.js';
 import { dinero, aCentavos, paraCampo } from '../formato.js';
-import { h, aviso, errorSimple, campo, pedirMotivo } from '../ui.js';
+import { h, aviso, errorSimple, campo, pedirMotivo, titulo, tabla } from '../ui.js';
 
 const PUESTOS = { admin: 'Administrador', cajero: 'Cajero', vendedor: 'Vendedor' };
 const DEFECTO = { admin: [10, 20], cajero: [5, 0], vendedor: [5, 0] }; // núcleo 0.8.0
@@ -45,7 +45,7 @@ export async function mostrar(vista, ctx) {
     if (!Object.keys(cambios).length) { zona1.append(errorSimple('No cambió nada.')); return; }
     const ok = await pedirMotivo({ titulo: 'Guardar reglas', textoBoton: 'Guardar', explicacion: `${Object.keys(cambios).length} cambio(s). Valen desde ahora.`,
       accion: (motivo) => rpc('configurar_empresa', { p_empresa_id: E, p_datos: cambios, p_motivo: motivo }) });
-    if (ok) { aviso('Reglas guardadas.'); recargar(); }
+    if (ok) { aviso(`Reglas guardadas · ${Object.keys(cambios).length} cambio(s), valen desde ahora`); recargar(); }
   });
 
   // 2) Topes por puesto
@@ -62,11 +62,8 @@ export async function mostrar(vista, ctx) {
   });
   const zona2 = h('div', { 'aria-live': 'assertive' });
   const f2 = h('form', { class: 'formulario', novalidate: true },
-    h('div', { class: 'tabla-envoltura' }, h('table', { class: 'tabla tabla-celular' },
-      h('thead', {}, h('tr', {}, ['Puesto', 'Descuento sin aprobación (%)', 'Aprueba descuentos hasta (%)', 'Gasto sin aprobación (L)'].map((t) => h('th', {}, t)))),
-      h('tbody', {}, filas.map((f) => h('tr', {}, h('td', { 'data-titulo': 'Puesto' }, PUESTOS[f.rol]),
-        h('td', { 'data-titulo': 'Descuento sin aprobación (%)' }, f.sin), h('td', { 'data-titulo': 'Aprueba hasta (%)' }, f.aprueba),
-        h('td', { 'data-titulo': 'Gasto sin aprobación (L)' }, f.gasto)))))),
+    tabla({ columnas: [{ titulo: 'Puesto' }, { titulo: 'Descuento sin aprobación (%)' }, { titulo: 'Aprueba descuentos hasta (%)' }, { titulo: 'Gasto sin aprobación (L)' }],
+      filas: filas.map((f) => [h('strong', {}, PUESTOS[f.rol]), f.sin, f.aprueba, f.gasto]) }),
     h('p', { class: 'ayuda' }, 'El dueño no tiene tope. Lo que pase el tope queda esperando aprobación.'),
     zona2, h('button', { type: 'submit', class: 'boton boton-principal boton-ancho', id: 'topes-guardar' }, 'Guardar topes'));
   f2.addEventListener('submit', async (ev) => {
@@ -91,11 +88,11 @@ export async function mostrar(vista, ctx) {
     if (!llamadas.length) { zona2.append(errorSimple('No cambió nada.')); return; }
     const ok = await pedirMotivo({ titulo: 'Guardar topes', textoBoton: 'Guardar', explicacion: `${llamadas.length} cambio(s).`,
       accion: async (motivo) => { for (const c of llamadas) await c(motivo); } });
-    if (ok) { aviso('Topes guardados.'); recargar(); }
+    if (ok) { aviso(`Topes guardados · ${llamadas.length} cambio(s)`); recargar(); }
   });
 
   vista.append(
-    h('section', { class: 'tarjeta tarjeta-angosta', 'aria-labelledby': 't-reglas' }, h('h1', { id: 't-reglas' }, 'Reglas del negocio'),
+    h('section', { class: 'tarjeta tarjeta-angosta', 'aria-labelledby': 't-reglas' }, titulo('h1', 'reglas', 'Reglas del negocio', { id: 't-reglas' }),
       h('p', { class: 'ayuda' }, `Tope de crédito actual: ${dinero(emp.tope_credito_centavos || 0)}.`), f1),
-    h('section', { class: 'tarjeta', 'aria-labelledby': 't-topes' }, h('h2', { id: 't-topes' }, 'Topes por puesto'), f2));
+    h('section', { class: 'tarjeta', 'aria-labelledby': 't-topes' }, titulo('h2', 'usuarios', 'Topes por puesto', { id: 't-topes' }), f2));
 }

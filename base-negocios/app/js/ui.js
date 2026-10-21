@@ -188,11 +188,14 @@ export function botonAccion({ href, icono: ic, texto, color = 'azul', principal 
 
 // Fila con burbuja de ícono: filaIcono({ icono, color, titulo, detalle, derecha, abajo })
 export function filaIcono({ icono: ic, color = 'azul', burbuja: b = null, titulo, detalle = null, derecha = null, abajo = null, props = {} }) {
-  return h('div', { ...props, class: 'fila-icono' + (props.class ? ' ' + props.class : '') },
+  // abajo (botones) va en su propia línea, debajo del texto y del monto: así en el celular el
+  // nombre y el monto no quedan apretados (css: .fila-icono-abajo).
+  return h('div', { ...props, class: 'fila-icono' + (abajo ? ' con-abajo' : '') + (props.class ? ' ' + props.class : '') },
     b || burbuja(ic, color),
     h('div', { class: 'fila-icono-texto' }, h('div', { class: 'fila-icono-titulo' }, titulo),
-      detalle ? h('div', { class: 'fila-icono-detalle' }, detalle) : null, abajo),
-    derecha ? h('div', { class: 'fila-icono-derecha' }, derecha) : null);
+      detalle ? h('div', { class: 'fila-icono-detalle' }, detalle) : null),
+    derecha ? h('div', { class: 'fila-icono-derecha' }, derecha) : null,
+    abajo ? h('div', { class: 'fila-icono-abajo' }, abajo) : null);
 }
 
 // Gráfica de barras simple (sin librería): barras = [{ etiqueta, valor, texto, textoCorto, destacado }].
@@ -215,17 +218,77 @@ export function graficaBarras(barras, { titulo = 'Gráfica', alto = 150 } = {}) 
   return caja;
 }
 
-// Estado vacío: ícono grande + frase + (opcional) botón. boton = { texto, href } o { texto, onclick }.
-export function estadoVacio({ icono: ic = 'info', titulo = null, texto, boton = null, color = 'azul' }) {
-  return h('div', { class: 'estado-vacio' }, burbuja(ic, color, { class: 'burbuja-grande' }),
+// Estado vacío que enseña: ícono grande + frase sencilla + botones para empezar (solo los que el
+// usuario puede usar; null se ignora). boton / botones = { texto, href | onclick, icono, id }.
+// El primero va como botón principal. chico: para dentro de una tarjeta con más cosas.
+export function estadoVacio({ icono: ic = 'info', titulo = null, texto, boton = null, botones = [], color = 'azul', chico = false, props = {} }) {
+  const lista = [boton, ...botones].filter(Boolean);
+  const hacer = (b, i) => {
+    const clase = 'boton' + (i === 0 ? ' boton-principal' : '');
+    const hijos = [b.icono ? icono(b.icono) : null, h('span', {}, b.texto)];
+    return b.href ? h('a', { class: clase, href: b.href, id: b.id || null }, hijos)
+      : h('button', { type: 'button', class: clase, id: b.id || null, onclick: b.onclick }, hijos);
+  };
+  return h('div', { ...props, class: 'estado-vacio' + (chico ? ' estado-vacio-chico' : '') + (props.class ? ' ' + props.class : '') },
+    burbuja(ic, color, { class: chico ? '' : 'burbuja-grande' }),
     titulo ? h('p', { class: 'estado-vacio-titulo' }, titulo) : null,
-    h('p', { class: 'vacio' }, texto),
-    boton ? (boton.href ? h('a', { class: 'boton boton-principal', href: boton.href }, boton.texto)
-      : h('button', { type: 'button', class: 'boton boton-principal', onclick: boton.onclick }, boton.texto)) : null);
+    texto ? h('p', { class: 'vacio' }, texto) : null,
+    lista.length ? h('div', { class: 'botones estado-vacio-botones' }, lista.map(hacer)) : null);
 }
 
 // Mensaje de éxito, información o error con ícono (dentro de la pantalla, no se quita solo).
 export function mensaje(tipo, texto, detalle = null, props = {}) {
-  return h('div', { ...props, class: `mensaje mensaje-${tipo} con-icono`, role: tipo === 'error' ? 'alert' : 'status' },
+  return h('div', { ...props, class: `mensaje mensaje-${tipo} con-icono${props.class ? ' ' + props.class : ''}`, role: tipo === 'error' ? 'alert' : 'status' },
     icono(ICONO_MENSAJE[tipo] || 'info'), h('div', {}, h('p', {}, h('strong', {}, texto)), detalle ? h('p', {}, detalle) : null));
+}
+
+// ---------------- Piezas de la ronda 2 (app 0.6.0) ----------------
+
+// Título con su ícono dorado: titulo('h1', 'etiqueta', 'Productos', { id: 't-prod' }).
+export function titulo(nivel, ic, texto, props = {}) {
+  return h(nivel, { ...props, class: 'titulo-icono' + (props.class ? ' ' + props.class : '') }, icono(ic), texto);
+}
+
+// Chip de estado con color fijo: verde = bien / pagado; dorado = espera; rojo = problema; azul = información.
+const ESTADOS = {
+  emitida: ['Emitida', 'verde'], pagada: ['Pagada', 'verde'], aplicada: ['Aplicada', 'verde'], cobrado: ['Cobrado', 'verde'],
+  activo: ['Activo', 'verde'], activa: ['Activa', 'verde'], al_dia: ['Al día', 'verde'],
+  vigente: ['Vigente', 'azul'], credito: ['Crédito', 'azul'], contado: ['Contado', 'neutro'],
+  pendiente: ['Pendiente', 'dorado'], pendiente_aprobacion: ['En espera de aprobación', 'dorado'], por_emitir: ['Por emitir', 'dorado'],
+  vencida: ['Vencida', 'rojo'], anulada: ['Anulada', 'rojo'], rechazada: ['Rechazada', 'rojo'], bajo_minimo: ['Bajo el mínimo', 'rojo'],
+  cancelada: ['Cancelada', 'neutro'], inactivo: ['Inactivo', 'neutro'], inactiva: ['Inactiva', 'neutro'],
+};
+export function chipEstado(estado, texto = null) {
+  const [t, c] = ESTADOS[estado] || [String(estado || ''), 'neutro'];
+  return chip(texto || t, c, { dataset: { estado: String(estado || '') } });
+}
+
+// Monto con color con significado: sentido 'entra' = verde, 'sale' = rojo; sin sentido = color normal
+// (y rojo si es negativo). signo: antepone + o - al texto. dato: data-dato para las pruebas.
+export function monto(texto, { sentido = null, negativo = false, dato = null, signo = '' } = {}) {
+  const color = sentido === 'entra' ? ' monto-entra' : sentido === 'sale' || negativo ? ' monto-sale' : '';
+  return h('span', { class: 'monto' + color, dataset: dato ? { dato } : null }, signo + texto);
+}
+
+// Tabla que en el celular (menos de 700 px) se ve como tarjetas: la primera columna arriba (lo
+// principal) y cada dato con su título; los botones (columna con acciones: true) grandes y a lo ancho.
+// columnas = [{ titulo, num, acciones }]; filas = [[celda, ...]] (celda = texto, nodo o { contenido, props });
+// filaProps(i) = props de cada <tr>.
+export function tabla({ columnas, filas, props = {}, filaProps = () => ({}) }) {
+  const celda = (x) => (x && typeof x === 'object' && !(x instanceof Node) && !Array.isArray(x) && 'contenido' in x ? x : { contenido: x });
+  return h('div', { class: 'tabla-envoltura' }, h('table', { ...props, class: 'tabla tabla-celular' + (props.class ? ' ' + props.class : '') },
+    h('thead', {}, h('tr', {}, columnas.map((c) => h('th', { scope: 'col', class: c.num ? 'num' : null }, c.titulo)))),
+    h('tbody', {}, filas.map((f, i) => h('tr', filaProps(i) || {}, f.map((x, j) => {
+      const c = columnas[j] || {};
+      const { contenido, props: p = {} } = celda(x);
+      const clase = [c.num ? 'num' : null, j === 0 ? 'celda-principal' : null, c.acciones ? 'celda-acciones' : null, p.class || null].filter(Boolean).join(' ');
+      return h('td', { ...p, class: clase || null, 'data-titulo': c.titulo || null }, contenido);
+    }))))));
+}
+
+// Encabezado de pantalla: el título (o el saludo) y, al lado, las subpestañas de la pestaña
+// (en la computadora, como en el dibujo de Inicio; en el celular quedan arriba, por CSS).
+export function cabezaPantalla(ctx, ...izquierda) {
+  const nav = ctx && ctx.subpestanas && ctx.subpestanas.children.length ? ctx.subpestanas : null;
+  return h('div', { class: 'cabeza-pantalla' }, h('div', { class: 'cabeza-texto' }, ...izquierda), nav);
 }

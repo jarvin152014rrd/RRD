@@ -4,7 +4,7 @@
 import { rpc, escribir, leer } from '../api.js';
 import { empresaId, perfilActual, puede } from '../sesion.js';
 import { dinero, fechaHora, aCentavos } from '../formato.js';
-import { h, aviso, limpiarAvisos, cajaError, errorSimple, campo, dialogo, conBoton } from '../ui.js';
+import { h, aviso, limpiarAvisos, cajaError, errorSimple, campo, dialogo, conBoton, titulo, mensaje, monto, chip, estadoVacio, filaIcono } from '../ui.js';
 import { cajas, cuentasDinero, miTurno, olvidarDatos } from '../datos.js';
 
 // Billetes y monedas de Honduras (centavos).
@@ -87,7 +87,7 @@ function formularioAbrir(alAbrir) {
     if (selOrigen.value) datos.cuenta_origen_id = selOrigen.value;
     const r = await conBoton(boton, zonaError, () => escribir('abrir_turno', { p_empresa_id: empresaId(), p_caja_id: selCaja.value,
       p_fondo_centavos: v.contado, p_datos: datos }), 'Abriendo…');
-    if (r) { olvidarDatos('cuentas'); limpiarAvisos(); aviso(`Turno ${r.numero} abierto con ${dinero(r.fondo_inicial_centavos)}.`); alAbrir(r); }
+    if (r) { olvidarDatos('cuentas'); limpiarAvisos(); aviso(`Turno #${r.numero} abierto · fondo de ${dinero(r.fondo_inicial_centavos)}`); alAbrir(r); }
   });
   return form;
 }
@@ -122,7 +122,9 @@ export async function mostrar(vista, ctx) {
     if (!ctx.sigueVigente()) return;
     if (!turno) {
       vista.replaceChildren(h('section', { class: 'tarjeta tarjeta-angosta', 'aria-labelledby': 't-abrir' },
-        h('h1', { id: 't-abrir' }, 'Abrir turno'), formularioAbrir(() => pintar())));
+        titulo('h1', 'candado_abierto', 'Abrir mi caja', { id: 't-abrir' }),
+        mensaje('info', 'Su caja está cerrada.', 'Para empezar a cobrar, cuente el dinero de la gaveta y abra su turno.'),
+        formularioAbrir(() => pintar())));
       return;
     }
     const filas = await leer('v_turno_caja', { turno_id: turno.turno_id });
@@ -130,21 +132,24 @@ export async function mostrar(vista, ctx) {
     const lista = h('div', { class: 'lista' }, h('p', { class: 'cargando' }, 'Cargando movimientos…'));
     vista.replaceChildren(
       h('section', { class: 'tarjeta', 'aria-labelledby': 't-turno' },
-        h('h1', { id: 't-turno' }, `Mi turno · ${turno.caja}`),
+        h('div', { class: 'titulo-con-total' }, titulo('h1', 'reloj', `Mi turno · ${turno.caja}`, { id: 't-turno' }), chip('Caja abierta', 'verde')),
         h('div', { class: 'fila' }, h('span', {}, 'Turno'), h('span', {}, `#${turno.numero}`)),
         h('div', { class: 'fila' }, h('span', {}, 'Abierto'), h('span', {}, fechaHora(turno.abierto_en))),
         h('div', { class: 'fila' }, h('span', {}, 'Fondo inicial'), h('span', { class: 'monto' }, dinero(turno.fondo_inicial_centavos))),
         h('div', { class: 'botones' }, h('button', { type: 'button', class: 'boton boton-principal', id: 'cerrar-turno',
           onclick: () => cierre(turno) }, 'Cerrar turno'))),
       h('section', { class: 'tarjeta', 'aria-labelledby': 't-mov' },
-        h('h2', { id: 't-mov' }, 'Entradas y salidas del turno'),
+        titulo('h2', 'movimientos', 'Entradas y salidas del turno', { id: 't-mov' }),
         h('p', { class: 'ayuda' }, 'Para que el conteo sea a ciegas, aquí no se muestra cuánto debería haber.'), lista));
     try {
       const movs = t.cuenta_dinero_id ? await movimientosDelTurno(t) : [];
-      lista.replaceChildren(...(movs.length ? movs.map((m) => h('div', { class: 'fila' },
-        h('span', {}, m.texto, m.hora ? h('span', { class: 'detalle' }, fechaHora(m.hora)) : null),
-        h('span', { class: 'monto' + (m.sale ? ' peligro' : '') }, m.sale ? '-' + dinero(m.sale) : '+' + dinero(m.entra))))
-        : [h('p', { class: 'vacio' }, 'Todavía no hay movimientos en este turno.')]));
+      // Verde = entra dinero a la caja; rojo = sale.
+      lista.replaceChildren(...(movs.length ? movs.map((m) => filaIcono({
+        icono: m.sale ? 'baja' : 'sube', color: m.sale ? 'rojo' : 'verde', burbuja: null,
+        titulo: m.texto, detalle: m.hora ? fechaHora(m.hora) : null,
+        derecha: m.sale ? monto(dinero(m.sale), { sentido: 'sale', signo: '-' }) : monto(dinero(m.entra), { sentido: 'entra', signo: '+' }),
+      }))
+        : [estadoVacio({ icono: 'billetes', chico: true, texto: 'Todavía no hay movimientos en este turno.' })]));
     } catch (err) { lista.replaceChildren(await cajaError(err)); }
   };
 
@@ -167,10 +172,16 @@ export async function mostrar(vista, ctx) {
       if (nota.value.trim()) datos.nota = nota.value.trim();
       const r = await conBoton(boton, zonaError, () => escribir('cerrar_turno', { p_turno_id: turno.turno_id,
         p_contado_centavos: v.contado, p_datos: datos }), 'Cerrando…');
-      if (r) { olvidarDatos('cuentas'); limpiarAvisos(); aviso(`Turno #${r.numero} cerrado.`, 'ok'); resultado(r); }
+      if (r) {
+        olvidarDatos('cuentas'); limpiarAvisos();
+        // "Turno cerrado · faltante L 50.00": rojo si falta dinero, verde si cuadra o sobra.
+        const d = r.diferencia_centavos;
+        aviso(`Turno #${r.numero} cerrado · ${d === 0 ? 'la caja cuadra' : d < 0 ? 'faltante ' + dinero(-d) : 'sobrante ' + dinero(d)}`, d < 0 ? 'error' : 'ok', 8000);
+        resultado(r);
+      }
     });
     vista.replaceChildren(h('section', { class: 'tarjeta tarjeta-angosta', 'aria-labelledby': 't-cierre' },
-      h('h1', { id: 't-cierre' }, `Cerrar turno #${turno.numero}`), form));
+      titulo('h1', 'candado', `Cerrar turno #${turno.numero}`, { id: 't-cierre' }), form));
     conteo.enfocar();
   }
 
@@ -178,13 +189,14 @@ export async function mostrar(vista, ctx) {
     const d = r.diferencia_centavos;
     const texto = d === 0 ? 'La caja cuadra.' : d < 0 ? `Faltan ${dinero(-d)}.` : `Sobran ${dinero(d)}.`;
     vista.replaceChildren(h('section', { class: 'tarjeta tarjeta-angosta', 'aria-labelledby': 't-res' },
-      h('h1', { id: 't-res' }, `Turno #${r.numero} cerrado`),
-      h('div', { class: 'fila' }, h('span', {}, 'Usted contó'), h('span', { class: 'monto', dataset: { dato: 'contado' } }, dinero(r.contado_centavos))),
-      h('div', { class: 'fila' }, h('span', {}, 'Debía haber'), h('span', { class: 'monto', dataset: { dato: 'esperado' } }, dinero(r.esperado_centavos))),
+      h('div', { class: 'titulo-con-total' }, titulo('h1', 'candado', `Turno #${r.numero} cerrado`, { id: 't-res' }),
+        chip(d === 0 ? 'Cuadra' : d < 0 ? 'Faltante' : 'Sobrante', d < 0 ? 'rojo' : d === 0 ? 'verde' : 'dorado')),
+      h('div', { class: 'fila' }, h('span', {}, 'Usted contó'), monto(dinero(r.contado_centavos), { dato: 'contado' })),
+      h('div', { class: 'fila' }, h('span', {}, 'Debía haber'), monto(dinero(r.esperado_centavos), { dato: 'esperado' })),
       h('div', { class: 'fila fila-total' }, h('span', {}, 'Diferencia'),
-        h('span', { class: 'monto' + (d < 0 ? ' peligro' : ''), dataset: { dato: 'diferencia' } }, dinero(d))),
-      h('p', { class: `mensaje ${d === 0 ? 'mensaje-ok' : 'mensaje-info'}` }, texto,
-        d !== 0 ? ' La diferencia queda pendiente: el administrador o el dueño decide qué hacer con ella.' : ''),
+        monto(dinero(d), { dato: 'diferencia', sentido: d < 0 ? 'sale' : d > 0 ? 'entra' : null })),
+      mensaje(d < 0 ? 'error' : d === 0 ? 'ok' : 'info', texto,
+        d !== 0 ? 'La diferencia queda pendiente: el administrador o el dueño decide qué hacer con ella.' : null),
       h('div', { class: 'botones' }, h('button', { type: 'button', class: 'boton', onclick: () => pintar() }, 'Listo'))));
   }
 

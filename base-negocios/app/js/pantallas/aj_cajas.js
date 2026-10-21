@@ -4,7 +4,7 @@
 import { rpc, leer, escribir } from '../api.js';
 import { empresaId, perfilActual, puede } from '../sesion.js';
 import { dinero, aCentavos } from '../formato.js';
-import { h, aviso, errorSimple, campo, conBoton, pedirMotivo, confirmar } from '../ui.js';
+import { h, icono, aviso, errorSimple, campo, conBoton, pedirMotivo, confirmar, titulo, filaIcono, chipEstado, chip, monto, estadoVacio } from '../ui.js';
 import { olvidarDatos } from '../datos.js';
 
 const TIPOS = { efectivo_caja: 'Efectivo (caja)', banco: 'Banco', caja_chica: 'Caja chica', pos_por_liquidar: 'Tarjetas por liquidar',
@@ -19,22 +19,27 @@ export async function mostrar(vista, ctx) {
   const dueno = puede('empresa.configurar');
   const recargar = async () => { olvidarDatos('cuentas'); vista.replaceChildren(); await mostrar(vista, ctx); };
 
-  const filas = cuentas.map((c) => h('article', { class: 'venta-fila', dataset: { cuenta: c.cuenta_dinero_id } },
-    h('div', {}, h('strong', {}, c.nombre), !c.activa ? h('span', { class: 'etiqueta' }, ' Inactiva') : null,
-      h('span', { class: 'detalle' }, [TIPOS[c.tipo] || c.tipo, c.banco, c.numero_enmascarado, c.caja ? 'Caja ' + c.caja : null,
-        c.politica_saldo_negativo && c.politica_saldo_negativo !== 'no_permitir' ? POLITICAS[c.politica_saldo_negativo] : null].filter(Boolean).join(' · '))),
-    h('span', { class: 'monto' + (c.saldo_centavos < 0 ? ' peligro' : '') }, dinero(c.saldo_centavos)),
-    h('div', { class: 'botones' },
+  // Ícono por tipo (azul = información; dorado = dinero por confirmar). Saldo negativo en rojo.
+  const ICONO = { efectivo_caja: 'caja', caja_chica: 'billetes', banco: 'banco', transito: 'deposito', pos_por_liquidar: 'reloj', transferencia_por_confirmar: 'reloj' };
+  const filas = cuentas.map((c) => filaIcono({
+    icono: ICONO[c.tipo] || 'dinero', color: !c.activa ? 'neutro' : c.saldo_centavos < 0 ? 'rojo' : ['transito', 'pos_por_liquidar', 'transferencia_por_confirmar'].includes(c.tipo) ? 'dorado' : 'azul',
+    titulo: [h('strong', {}, c.nombre), !c.activa ? [' ', chipEstado('inactiva')] : null],
+    detalle: [TIPOS[c.tipo] || c.tipo, c.banco, c.numero_enmascarado, c.caja ? 'Caja ' + c.caja : null,
+      c.politica_saldo_negativo && c.politica_saldo_negativo !== 'no_permitir' ? POLITICAS[c.politica_saldo_negativo] : null].filter(Boolean).join(' · '),
+    derecha: [monto(dinero(c.saldo_centavos), { negativo: c.saldo_centavos < 0 }), c.saldo_centavos < 0 ? chip('En negativo', 'rojo') : null],
+    abajo: h('div', { class: 'botones' },
       dueno && c.activa && c.tipo !== 'transito' ? h('button', { type: 'button', class: 'boton', onclick: () => politica(c) }, 'Saldo negativo') : null,
       ['efectivo_caja', 'banco', 'caja_chica'].includes(c.tipo) ? h('button', { type: 'button', class: `boton ${c.activa ? 'boton-peligro' : ''}`,
-        onclick: () => activar(c) }, c.activa ? 'Desactivar' : 'Activar') : null)));
+        onclick: () => activar(c) }, c.activa ? 'Desactivar' : 'Activar') : null),
+    props: { dataset: { cuenta: c.cuenta_dinero_id } },
+  }));
 
   async function activar(c) {
     const ok = await pedirMotivo({ titulo: c.activa ? `Desactivar ${c.nombre}` : `Activar ${c.nombre}`, peligro: c.activa,
       textoBoton: c.activa ? 'Desactivar' : 'Activar',
       explicacion: c.activa ? 'Solo se puede con saldo L 0.00, sin turno abierto ni depósitos en camino. No se borra nada.' : null,
       accion: (motivo) => rpc(c.activa ? 'desactivar_cuenta_dinero' : 'reactivar_cuenta_dinero', { p_empresa_id: E, p_cuenta_dinero_id: c.cuenta_dinero_id, p_motivo: motivo }) });
-    if (ok) { aviso(c.activa ? 'Cuenta desactivada.' : 'Cuenta activada.'); recargar(); }
+    if (ok) { aviso(c.activa ? `Cuenta desactivada · ${c.nombre}` : `Cuenta activada · ${c.nombre}`); recargar(); }
   }
 
   function politica(c) {
@@ -53,9 +58,9 @@ export async function mostrar(vista, ctx) {
       if (sel.value === 'sobregiro_hasta' && !lim) { zona.append(errorSimple('Escriba el sobregiro máximo.')); return; }
       const ok = await pedirMotivo({ titulo: `Saldo negativo · ${c.nombre}`, textoBoton: 'Guardar', explicacion: POLITICAS[sel.value],
         accion: (motivo) => rpc('configurar_saldo_negativo', { p_empresa_id: E, p_cuenta_dinero_id: c.cuenta_dinero_id, p_politica: sel.value, p_limite_centavos: lim, p_motivo: motivo }) });
-      if (ok) { aviso('Política guardada.'); recargar(); }
+      if (ok) { aviso(`Guardado · ${c.nombre}: ${POLITICAS[sel.value].toLowerCase()}`); recargar(); }
     });
-    vista.replaceChildren(h('section', { class: 'tarjeta tarjeta-angosta' }, h('h1', {}, `Saldo negativo · ${c.nombre}`), form));
+    vista.replaceChildren(h('section', { class: 'tarjeta tarjeta-angosta' }, titulo('h1', 'reglas', `Saldo negativo · ${c.nombre}`), form));
   }
 
   function nueva() {
@@ -105,18 +110,21 @@ export async function mostrar(vista, ctx) {
       try {
         if (conSaldo) await escribir('registrar_saldo_inicial_dinero', { p_empresa_id: E, p_datos: { cuenta_dinero_id: c.cuenta_dinero_id, monto_centavos: monto, fecha: perfilActual().empresa.hoy } });
         else if (puede('dinero.saldo_inicial')) await rpc('empezar_cuenta_en_cero', { p_empresa_id: E, p_cuenta_dinero_id: c.cuenta_dinero_id });
-        aviso('Cuenta creada.');
+        aviso(`Cuenta creada · ${datos.nombre}${conSaldo ? ' con ' + dinero(monto) : ''}`);
       } catch {
         aviso('La cuenta se creó, pero el saldo inicial no se guardó. Cárguelo otra vez más tarde.', 'info', 9000);
       }
       recargar();
     });
-    vista.replaceChildren(h('section', { class: 'tarjeta tarjeta-angosta', 'aria-labelledby': 't-ncta' }, h('h1', { id: 't-ncta' }, 'Nueva caja o banco'), form));
+    vista.replaceChildren(h('section', { class: 'tarjeta tarjeta-angosta', 'aria-labelledby': 't-ncta' }, titulo('h1', 'mas', 'Nueva caja o banco', { id: 't-ncta' }), form));
     nombre.focus();
   }
 
   vista.append(h('section', { class: 'tarjeta', 'aria-labelledby': 't-cajas' },
-    h('div', { class: 'titulo-con-boton' }, h('h1', { id: 't-cajas' }, 'Cajas y bancos'),
-      h('button', { type: 'button', class: 'boton boton-principal', id: 'nueva-cuenta', onclick: () => nueva() }, 'Nueva caja o banco')),
-    h('div', { class: 'lista' }, filas.length ? filas : h('p', { class: 'vacio' }, 'Todavía no hay cuentas de dinero.'))));
+    h('div', { class: 'titulo-con-boton' }, titulo('h1', 'banco', 'Cajas y bancos', { id: 't-cajas' }),
+      filas.length ? h('button', { type: 'button', class: 'boton boton-principal', id: 'nueva-cuenta', onclick: () => nueva() }, icono('mas'), 'Nueva caja o banco') : null),
+    filas.length ? h('div', { class: 'lista-filas' }, filas)
+      : estadoVacio({ icono: 'banco', titulo: 'Aún no tiene cajas ni bancos',
+        texto: 'Guarde dónde tiene su dinero: la caja de la tienda, la caja chica y sus cuentas de banco.',
+        boton: { texto: 'Agregar la primera', onclick: () => nueva(), icono: 'mas', id: 'nueva-cuenta' } })));
 }

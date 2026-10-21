@@ -84,13 +84,13 @@ export async function mostrar(vista, ctx) {
     guardar(datos, 'Guardar la marca del negocio');
   });
 
-  vista.append(
+  vista.append(...[
     h('section', { class: 'tarjeta tarjeta-angosta', 'aria-labelledby': 't-neg' }, h('h1', { id: 't-neg' }, 'Mi negocio'), form),
     puede('empresa.configurar') ? h('section', { class: 'tarjeta tarjeta-angosta', 'aria-labelledby': 't-fis' },
       h('h2', { id: 't-fis' }, 'Datos fiscales'),
       h('div', { class: 'fila' }, h('span', {}, 'Nombre legal'), h('span', {}, m.nombre)),
       h('div', { class: 'fila' }, h('span', {}, 'RTN'), h('span', { dataset: { dato: 'rtn' } }, m.rtn || '—')),
-      h('p', { class: 'ayuda' }, 'Salen en las facturas. Para cambiarlos hable con su proveedor (quedan en la ficha del negocio).')) : null);
+      h('p', { class: 'ayuda' }, 'Salen en las facturas. Para cambiarlos hable con su proveedor (quedan en la ficha del negocio).')) : null].filter(Boolean));
   // Al salir de esta pantalla sin guardar, el programa sigue con la marca guardada.
   aplicarMarca(marca);
 }

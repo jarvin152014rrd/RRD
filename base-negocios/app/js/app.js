@@ -3,7 +3,7 @@ import * as api from './api.js';
 import { cargarPerfil, olvidarPerfil, perfilActual, vigilarSesion, empresaId, puede } from './sesion.js';
 import { menuDelUsuario, botonesCelular, RUTAS_VIEJAS } from './menu.js';
 import { olvidarCatalogo } from './errores.js';
-import { cargarMarca, aplicarMarca } from './marca.js';
+import { cargarMarca, aplicarMarca, iniciales } from './marca.js';
 import { h, icono, chip, cajaError, limpiarAvisos } from './ui.js';
 
 const raiz = document.getElementById('app');
@@ -68,12 +68,6 @@ function forzarSalida(texto) {
 
 // ---------------- Armazón de la app ----------------
 let zonas = null; // { pestanas, subpestanas, contenido, barra }
-
-function iniciales(nombre) {
-  const p = String(nombre || '').trim().split(/\s+/).filter(Boolean);
-  if (p.length === 0) return 'MN';
-  return ((p[0][0] || '') + (p.length > 1 ? p[p.length - 1][0] : '')).toUpperCase();
-}
 
 function mostrarApp() {
   const perfil = perfilActual();
@@ -179,7 +173,8 @@ function alCambiarRuta() {
   if (location.hash !== rutaAnterior) limpiarAvisos();
   rutaAnterior = location.hash;
   document.title = `${titulo} · ${perfilActual().empresa.nombre}`;
-  mostrarPantalla(pantalla, { pestana, sub, titulo, menu });
+  // subpestanas: las pantallas que quieren (Inicio) las ponen al lado de su título (ui.cabezaPantalla).
+  mostrarPantalla(pantalla, { pestana, sub, titulo, menu, subpestanas: zonas.subpestanas });
 }
 
 let turno = 0; // evita que una pantalla lenta pinte encima de la siguiente

@@ -4,7 +4,7 @@
 import { rpc, leer, escribir } from '../api.js';
 import { empresaId, perfilActual } from '../sesion.js';
 import { fecha, cantidad } from '../formato.js';
-import { h, aviso, errorSimple, campo, conBoton, confirmar, cajaError } from '../ui.js';
+import { h, aviso, errorSimple, campo, conBoton, confirmar, cajaError, titulo, filaIcono, chip, estadoVacio } from '../ui.js';
 import { filtrar } from '../datos.js';
 
 export async function mostrar(vista, ctx) {
@@ -34,7 +34,7 @@ export async function mostrar(vista, ctx) {
   const pintarLineas = () => zonaLineas.replaceChildren(...(lineas.length ? lineas.map((l, i) => h('div', { class: 'conteo-fila' },
     h('span', {}, h('strong', {}, l.nombre), h('span', { class: 'detalle' }, ` ${l.codigo} · hay ${cantidad(l.hay)} ${l.unidad || ''}`),
       h('button', { type: 'button', class: 'boton', onclick: () => { lineas.splice(i, 1); pintarLineas(); } }, 'Quitar')), l.input))
-    : [h('p', { class: 'vacio' }, 'Busque y agregue los productos que va a trasladar.')]));
+    : [estadoVacio({ icono: 'traslado', chico: true, texto: 'Busque y agregue los productos que va a trasladar.' })]));
   function agregar(x) {
     if (!lineas.some((l) => l.producto_id === x.producto_id)) {
       lineas.push({ producto_id: x.producto_id, nombre: x.nombre, codigo: x.codigo, unidad: x.unidad, hay: x.cantidad,
@@ -59,22 +59,26 @@ export async function mostrar(vista, ctx) {
     const r = await conBoton(boton, zonaError, () => escribir('trasladar_inventario', { p_empresa_id: E, p_bodega_origen_id: origen.value,
       p_bodega_destino_id: destino.value, p_fecha: perfilActual().empresa.hoy, p_lineas: ls, p_nota: nota.value.trim() || null }), 'Trasladando…');
     if (!r) return;
-    aviso(`Traslado #${r.numero || ''} registrado.`);
+    aviso(`Traslado #${r.numero || ''} guardado · ${ls.length} producto(s) de ${origen.selectedOptions[0].textContent} a ${destino.selectedOptions[0].textContent}`);
     vista.replaceChildren(); mostrar(vista, ctx).catch(async (e) => vista.append(await cajaError(e)));
   });
   pintarLineas();
   const merc = (pend.mercaderia || []);
-  vista.append(
+  vista.append(...[
     merc.length ? h('section', { class: 'tarjeta', 'aria-labelledby': 't-rec' },
-      h('h2', { id: 't-rec' }, 'Mercadería en camino desde otra sucursal'),
-      merc.map((m) => h('div', { class: 'fila' }, h('span', {}, `Traslado #${m.numero}: ${m.de} → ${m.a}`,
-        h('span', { class: 'detalle' }, `${fecha(m.fecha)} · ${m.lineas} producto(s) · hace ${m.dias} día(s)`)),
-        m.puedo_recibir ? h('button', { type: 'button', class: 'boton boton-principal', onclick: async (ev) => {
+      titulo('h2', 'traslado', 'Mercadería en camino desde otra sucursal', { id: 't-rec' }),
+      merc.map((m) => filaIcono({ icono: 'traslado', color: 'dorado',
+        titulo: h('strong', {}, `Traslado #${m.numero}: ${m.de} → ${m.a}`),
+        detalle: `${fecha(m.fecha)} · ${m.lineas} producto(s) · hace ${m.dias} día(s)`,
+        derecha: chip('En camino', 'dorado'),
+        abajo: m.puedo_recibir ? h('div', { class: 'botones' }, h('button', { type: 'button', class: 'boton boton-principal', onclick: async (ev) => {
           if (!await confirmar({ titulo: 'Confirmar recepción', texto: `¿Llegó el traslado #${m.numero}? Si llegó menos, anótelo y haga un conteo.`, textoBoton: 'Sí, llegó' })) return;
           const z = h('div'); ev.target.after(z);
           const r = await conBoton(ev.target, z, () => escribir('confirmar_recepcion_traslado', { p_documento_id: m.documento_id }));
-          if (r) { aviso('Recepción confirmada.'); vista.replaceChildren(); mostrar(vista, ctx); }
-        } }, 'Confirmar recepción') : h('span', { class: 'etiqueta' }, 'Lo recibe la otra sucursal')))) : null,
-    h('section', { class: 'tarjeta tarjeta-angosta', 'aria-labelledby': 't-tras' }, h('h1', { id: 't-tras' }, 'Trasladar mercadería'),
-      bodegas.length < 2 ? h('p', { class: 'vacio' }, 'Necesita al menos dos bodegas para trasladar.') : form));
+          if (r) { aviso(`Recepción confirmada · traslado #${m.numero}`); vista.replaceChildren(); mostrar(vista, ctx); }
+        } }, 'Confirmar recepción')) : h('p', { class: 'ayuda' }, 'Lo recibe la otra sucursal.') }))) : null,
+    h('section', { class: 'tarjeta tarjeta-angosta', 'aria-labelledby': 't-tras' }, titulo('h1', 'traslado', 'Trasladar mercadería', { id: 't-tras' }),
+      bodegas.length < 2 ? estadoVacio({ icono: 'traslado', titulo: 'Necesita dos bodegas',
+        texto: 'Para trasladar mercadería hacen falta al menos dos bodegas (por ejemplo, la tienda y la bodega de atrás).',
+      }) : form)].filter(Boolean));
 }

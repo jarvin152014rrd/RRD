@@ -1,11 +1,12 @@
 // Ajustes · "Mi cuenta" (antes "Mis datos"): quién soy, estado de la licencia y versión, y
-// "Alertas que recibo" (todavía en construcción). La copia de los datos en Excel ("Descargar
+// "Alertas que recibo" (app 0.6.0: mis_preferencias_alertas / guardar_preferencias_alertas del
+// núcleo 0.12; cada quien elige las suyas, solo de los tipos que su puesto puede ver). La copia de los datos en Excel ("Descargar
 // todo") está en Ajustes > "Excel y copia de mis datos"; quien no ve esa subpestaña (le falta
 // excel.importar o el módulo) la tiene aquí: el cliente SIEMPRE puede sacar sus datos.
 import { rpc, leer } from '../api.js';
 import { empresaId, perfilActual, puede } from '../sesion.js';
 import { fecha } from '../formato.js';
-import { h, icono, aviso, conBoton, estadoVacio } from '../ui.js';
+import { h, icono, aviso, conBoton, estadoVacio, cajaError, titulo, chip, mensaje } from '../ui.js';
 import { descargarExcel } from '../excel.js';
 import { hayEnMenu } from '../menu.js';
 
@@ -24,7 +25,7 @@ export function tarjetaCopiaDatos(clase = '') {
     const plantillas = [];
     for (const hoja of hojas) plantillas.push(await rpc('exportar_plantilla', { p_empresa_id: empresaId(), p_hoja: hoja }));
     await descargarExcel(`${p.empresa.nombre}_datos_${p.empresa.hoy}.xlsx`.replace(/[^\p{L}\p{N}_.-]+/gu, '_'), plantillas);
-    aviso('Descarga lista.');
+    aviso(`Descarga lista · ${plantillas.length} hoja(s) en Excel`);
   }, 'Preparando…'));
   return h('section', { class: ('tarjeta ' + clase).trim(), 'aria-labelledby': 't-todo', id: 'copia-datos' },
     h('h2', { id: 't-todo', class: 'titulo-icono' }, icono('descargar'), 'Copia de mis datos'),
@@ -37,7 +38,8 @@ export async function mostrar(vista, ctx) {
   if (!ctx.sigueVigente()) return;
   const lic = p.licencia || {};
   const fila = (t, v, dato) => h('div', { class: 'fila' }, h('span', {}, t), h('span', { dataset: dato ? { dato } : null }, v));
-  vista.append(
+  // (append no salta los null: se filtran para que no salga el texto "null")
+  vista.append(...[
     h('section', { class: 'tarjeta tarjeta-angosta', 'aria-labelledby': 't-yo' }, h('h1', { id: 't-yo', class: 'titulo-icono' }, icono('cuenta'), 'Mi cuenta'),
       fila('Nombre', (p.usuario && p.usuario.nombre) || '—'), fila('Correo', (p.usuario && p.usuario.correo) || '—'),
       fila('Puesto', p.rol.nombre || p.rol.codigo), fila('Negocio', p.empresa.nombre)),
@@ -47,8 +49,49 @@ export async function mostrar(vista, ctx) {
       fila('Versión del programa', VERSION_APP, 'version-app'),
       fila('Versión del servidor', ver ? ver.version_nucleo : '—', 'version-nucleo')),
     hayEnMenu(ctx.menu || [], 'ajustes', 'excel') ? null : tarjetaCopiaDatos('tarjeta-angosta'),
-    h('section', { class: 'tarjeta tarjeta-angosta', 'aria-labelledby': 't-mis-alertas', id: 'mis-alertas' },
-      h('h2', { id: 't-mis-alertas', class: 'titulo-icono' }, icono('campana'), 'Alertas que recibo'),
-      estadoVacio({ icono: 'construccion', color: 'dorado',
-        texto: 'Muy pronto podrá elegir aquí qué alertas le llegan. Mientras tanto, todas las alertas que le tocan salen en Inicio > Pendientes.' })));
+    await tarjetaAlertas()].filter(Boolean));
+}
+
+// "Alertas que recibo": una casilla por tipo de alerta que su puesto puede ver (por defecto todas).
+// Solo cambia lo que ESTA persona ve en Inicio > Pendientes y en la campanita; a los demás no.
+async function tarjetaAlertas() {
+  const sec = h('section', { class: 'tarjeta tarjeta-angosta', 'aria-labelledby': 't-mis-alertas', id: 'mis-alertas' },
+    titulo('h2', 'campana', 'Alertas que recibo', { id: 't-mis-alertas' }));
+  let lista;
+  try { lista = await rpc('mis_preferencias_alertas', { p_empresa_id: empresaId() }); } catch (err) { sec.append(await cajaError(err)); return sec; }
+  if (!Array.isArray(lista) || !lista.length) {
+    sec.append(estadoVacio({ icono: 'campana', chico: true, texto: 'Con su puesto no le llega ningún tipo de alerta.' }));
+    return sec;
+  }
+  const marcas = lista.map((t) => ({ t, c: h('input', { type: 'checkbox', checked: t.recibir !== false, dataset: { alerta: t.tipo },
+    'aria-describedby': `alerta-desc-${t.tipo}` }) }));
+  const cuenta = h('span', {});
+  const pintarCuenta = () => {
+    const n = marcas.filter((m) => m.c.checked).length;
+    cuenta.replaceChildren(chip(`Recibe ${n} de ${marcas.length}`, n === marcas.length ? 'verde' : n === 0 ? 'rojo' : 'dorado', { dataset: { dato: 'alertas-recibe' } }));
+  };
+  marcas.forEach((m) => m.c.addEventListener('change', pintarCuenta));
+  pintarCuenta();
+  const zona = h('div', { 'aria-live': 'assertive' });
+  const boton = h('button', { type: 'button', class: 'boton boton-principal boton-ancho', id: 'alertas-guardar' }, 'Guardar mis alertas');
+  boton.addEventListener('click', async () => {
+    zona.replaceChildren();
+    const cambios = Object.fromEntries(marcas.filter((m) => m.c.checked !== (m.t.recibir !== false)).map((m) => [m.t.tipo, m.c.checked]));
+    if (!Object.keys(cambios).length) { zona.append(mensaje('info', 'No cambió nada.')); return; }
+    const r = await conBoton(boton, zona, () => rpc('guardar_preferencias_alertas', { p_empresa_id: empresaId(), p_datos: cambios }));
+    if (!r) return;
+    // Lo que respondió el servidor es lo que vale.
+    for (const m of marcas) { const x = (r || []).find((y) => y.tipo === m.t.tipo); if (x) { m.t.recibir = x.recibir; m.c.checked = x.recibir; } }
+    pintarCuenta();
+    const n = marcas.filter((m) => m.c.checked).length;
+    aviso(`Alertas guardadas · recibe ${n} de ${marcas.length}`);
+    window.dispatchEvent(new Event('pendientes-cambiaron')); // la campanita vuelve a contar
+  });
+  sec.append(
+    h('p', { class: 'ayuda' }, 'Elija qué avisos le salen en Inicio > Pendientes y en la campanita. Solo cambia lo que usted ve.'),
+    cuenta,
+    h('div', { class: 'lista-alertas' }, marcas.map(({ t, c }) => h('label', { class: 'opcion-alerta' }, c,
+      h('span', {}, h('strong', {}, t.nombre), h('span', { class: 'detalle', id: `alerta-desc-${t.tipo}` }, t.descripcion))))),
+    zona, boton);
+  return sec;
 }

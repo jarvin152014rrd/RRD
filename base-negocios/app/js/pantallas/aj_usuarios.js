@@ -6,7 +6,7 @@
 // y la tabla de permisos por puesto (editable SOLO por el dueño, con motivo: cambiar_permiso_rol).
 import { rpc, leer, escribir, funcion, config } from '../api.js';
 import { empresaId, perfilActual, puede } from '../sesion.js';
-import { h, aviso, errorSimple, campo, conBoton, pedirMotivo, dialogo, cajaError } from '../ui.js';
+import { h, icono, aviso, errorSimple, campo, conBoton, pedirMotivo, dialogo, cajaError, titulo, filaIcono, chip, chipEstado, tabla, mensaje } from '../ui.js';
 
 const PUESTOS = { dueno: 'Dueño', admin: 'Administrador', cajero: 'Cajero', vendedor: 'Vendedor', contador: 'Contador', proveedor: 'Proveedor' };
 const EDITABLES = ['admin', 'cajero', 'vendedor', 'contador'];
@@ -30,23 +30,27 @@ export async function mostrar(vista, ctx) {
 
   const solicitar = h('button', { type: 'button', class: 'boton', id: 'solicitar-ampliacion', onclick: () => pedirAmpliacion(lim) }, 'Solicitar ampliación');
   const cabecera = h('div', { class: 'titulo-con-boton' },
-    h('div', {}, h('h1', { id: 't-usr' }, 'Usuarios'),
-      h('p', { class: 'ayuda', dataset: { dato: 'uso-usuarios' } }, lim.limite === null ? `${lim.uso} usuario(s) activos (sin límite en su plan).` : `${lim.uso} de ${lim.limite} usados.`)),
+    h('div', {}, titulo('h1', 'usuarios', 'Usuarios', { id: 't-usr' }),
+      h('p', { class: 'ayuda' }, h('span', { dataset: { dato: 'uso-usuarios' } }, lim.limite === null ? `${lim.uso} usuario(s) activos (sin límite en su plan).` : `${lim.uso} de ${lim.limite} usados.`),
+        lleno ? [' ', chip('Plan lleno', 'dorado')] : null)),
     h('div', { class: 'botones' },
-      h('button', { type: 'button', class: 'boton boton-principal', id: 'agregar-usuario', onclick: () => agregar() }, 'Agregar usuario'),
+      h('button', { type: 'button', class: 'boton boton-principal', id: 'agregar-usuario', onclick: () => agregar() }, icono('cliente_mas'), 'Agregar usuario'),
       puede('proveedor.solicitar') && lim.limite !== null ? solicitar : null));
 
   const filas = usuarios.filter((u) => u.rol !== 'proveedor').map((u) => {
     const sucs = asignadas.filter((a) => a.user_id === u.user_id).map((a) => nomSuc.get(a.sucursal_id) || '¿?');
     const tocar = puedeTocar(u) && u.activo;
-    return h('article', { class: 'venta-fila', dataset: { usuario: u.user_id } },
-      h('div', {}, h('strong', {}, u.nombre || '(sin nombre)'), !u.activo ? h('span', { class: 'etiqueta' }, ' Inactivo') : null,
-        h('span', { class: 'detalle' }, `${PUESTOS[u.rol] || u.rol} · ${sucs.length ? 'Sucursal: ' + sucs.join(', ') : 'Todas las sucursales'}`)),
-      h('span', {}, ''),
-      tocar ? h('div', { class: 'botones' },
+    return filaIcono({
+      icono: u.rol === 'dueno' ? 'estrella' : 'usuario', color: u.activo ? 'azul' : 'neutro',
+      titulo: [h('strong', {}, u.nombre || '(sin nombre)'), u.user_id === yo.usuario.id ? [' ', chip('Usted', 'azul')] : null],
+      detalle: `${PUESTOS[u.rol] || u.rol} · ${sucs.length ? 'Sucursal: ' + sucs.join(', ') : 'Todas las sucursales'}`,
+      derecha: chipEstado(u.activo ? 'activo' : 'inactivo'),
+      abajo: tocar ? h('div', { class: 'botones' },
         sucursales.length > 1 ? h('button', { type: 'button', class: 'boton', onclick: () => elegirSucursales(u, sucs) }, 'Sucursales') : null,
         h('button', { type: 'button', class: 'boton', onclick: () => accion(u, 'cerrar') }, 'Cerrar sesión'),
-        h('button', { type: 'button', class: 'boton boton-peligro', onclick: () => accion(u, 'desactivar') }, 'Desactivar')) : h('span', {}, ''));
+        h('button', { type: 'button', class: 'boton boton-peligro', onclick: () => accion(u, 'desactivar') }, 'Desactivar')) : null,
+      props: { dataset: { usuario: u.user_id } },
+    });
   });
 
   async function accion(u, que) {
@@ -57,7 +61,7 @@ export async function mostrar(vista, ctx) {
       accion: (motivo) => (cerrar && config.modo === 'supabase'
         ? funcion('cerrar-sesion-remota', { empresa_id: E, user_id: u.user_id, motivo })
         : rpc(cerrar ? 'cerrar_sesion_usuario' : 'desactivar_usuario_empresa', { p_empresa_id: E, p_user_id: u.user_id, p_motivo: motivo })) });
-    if (ok) { aviso(cerrar ? 'Sesión cerrada.' : 'Usuario desactivado.'); recargar(); }
+    if (ok) { aviso(cerrar ? `Sesión cerrada · ${u.nombre} tendrá que volver a entrar` : `Usuario desactivado · ${u.nombre} ya no puede entrar`); recargar(); }
   }
 
   function elegirSucursales(u, actuales) {
@@ -72,7 +76,7 @@ export async function mostrar(vista, ctx) {
           cerrar();
           const ok = await pedirMotivo({ titulo: 'Cambiar sucursales', textoBoton: 'Guardar',
             accion: (motivo) => rpc('asignar_sucursales_usuario', { p_empresa_id: E, p_user_id: u.user_id, p_sucursales: ids, p_motivo: motivo }) });
-          if (ok) { aviso('Sucursales guardadas.'); recargar(); }
+          if (ok) { aviso(`Sucursales guardadas · ${u.nombre}`); recargar(); }
         } }, 'Siguiente')));
   }
 
@@ -87,7 +91,7 @@ export async function mostrar(vista, ctx) {
     enviar.addEventListener('click', async () => {
       if (detalle.value.trim().length < 5) { zona.replaceChildren(errorSimple('Escriba qué necesita (5 letras o más).')); return; }
       const r = await conBoton(enviar, zona, () => escribir('solicitar_al_proveedor', { p_empresa_id: E, p_tipo: 'ampliacion', p_detalle: detalle.value.trim() }), 'Enviando…');
-      if (r) { cerrar(); aviso('Solicitud enviada a su proveedor.'); }
+      if (r) { cerrar(); aviso('Solicitud enviada · su proveedor le responde'); }
     });
   }
 
@@ -101,7 +105,7 @@ export async function mostrar(vista, ctx) {
     const zona = h('div', { 'aria-live': 'assertive', id: 'agregar-error' });
     const boton = h('button', { type: 'submit', class: 'boton boton-principal boton-ancho' }, 'Agregar');
     const form = h('form', { class: 'formulario', novalidate: true },
-      lleno ? h('p', { class: 'mensaje mensaje-info' }, `Ya usa ${lim.uso} de ${lim.limite} usuarios de su plan.`) : null,
+      lleno ? mensaje('info', `Ya usa ${lim.uso} de ${lim.limite} usuarios de su plan.`) : null,
       campo('Correo', correo), campo('Nombre', nombre), campo('Puesto', rol),
       campo('Clave temporal', clave, 'Mínimo 8 letras o números. Désela en persona; la cambia al entrar.'), zona, boton,
       h('button', { type: 'button', class: 'boton boton-ancho', onclick: () => recargar() }, 'Cancelar'));
@@ -115,7 +119,8 @@ export async function mostrar(vista, ctx) {
       const r = await conBoton(boton, null, () => funcion('crear-usuario', { empresa_id: E, correo: correo.value.trim(), nombre: nombre.value.trim(),
         rol: rol.value, clave: clave.value }).catch((e) => { error = e; return null; }), 'Agregando…');
       if (r) {
-        aviso(r.ya_tenia_cuenta ? `${nombre.value.trim()} ya tenía cuenta: entra con la clave que ya usaba.` : `${nombre.value.trim()} ya puede entrar.`);
+        aviso(r.ya_tenia_cuenta ? `Usuario agregado · ${nombre.value.trim()} ya tenía cuenta: entra con la clave que ya usaba`
+          : `Usuario agregado · ${nombre.value.trim()} ya puede entrar`);
         recargar(); return;
       }
       if (error) {
@@ -126,11 +131,11 @@ export async function mostrar(vista, ctx) {
       }
     });
     vista.replaceChildren(h('section', { class: 'tarjeta tarjeta-angosta', 'aria-labelledby': 't-nuevo-usr' },
-      h('h1', { id: 't-nuevo-usr' }, 'Agregar usuario'), form));
+      titulo('h1', 'cliente_mas', 'Agregar usuario', { id: 't-nuevo-usr' }), form));
     correo.focus();
   }
 
-  vista.append(h('section', { class: 'tarjeta', 'aria-labelledby': 't-usr' }, cabecera, h('div', { class: 'lista', id: 'lista-usuarios' }, filas)));
+  vista.append(h('section', { class: 'tarjeta', 'aria-labelledby': 't-usr' }, cabecera, h('div', { class: 'lista-filas', id: 'lista-usuarios' }, filas)));
   if (soyDueno) vista.append(await tablaPermisos(E, recargar));
 }
 
@@ -140,11 +145,13 @@ async function tablaPermisos(E) {
     leer('rol_permiso', { empresa_id: E }, { limite: 1000 })]);
   const tiene = new Set(rp.map((x) => `${x.rol}|${x.permiso}`));
   const SOLO_DUENO = ['permisos.editar', 'periodos.reabrir', 'soporte.otorgar', 'empresa.configurar'];
-  const tabla = h('table', { class: 'tabla permisos-tabla', id: 'tabla-permisos' },
-    h('thead', {}, h('tr', {}, h('th', {}, 'Permiso'), EDITABLES.map((r) => h('th', {}, PUESTOS[r])))),
-    h('tbody', {}, permisos.filter((p) => !SOLO_DUENO.includes(p.codigo)).map((p) => h('tr', {},
-      h('td', {}, p.descripcion || p.codigo, h('span', { class: 'detalle' }, ` (${p.codigo})`)),
-      EDITABLES.map((r) => {
+  // En el celular cada permiso es una tarjeta con una casilla por puesto (ui.tabla).
+  const lista = permisos.filter((p) => !SOLO_DUENO.includes(p.codigo));
+  const tablaPerm = tabla({ props: { id: 'tabla-permisos', class: 'permisos-tabla' },
+    columnas: [{ titulo: 'Permiso' }, ...EDITABLES.map((r) => ({ titulo: PUESTOS[r] }))],
+    filas: lista.map((p) => [
+      h('span', {}, p.descripcion || p.codigo, h('span', { class: 'detalle' }, ` (${p.codigo})`)),
+      ...EDITABLES.map((r) => {
         const c = h('input', { type: 'checkbox', checked: tiene.has(`${r}|${p.codigo}`), 'aria-label': `${PUESTOS[r]}: ${p.descripcion || p.codigo}`,
           dataset: { rol: r, permiso: p.codigo } });
         c.addEventListener('change', async () => {
@@ -152,12 +159,12 @@ async function tablaPermisos(E) {
           const ok = await pedirMotivo({ titulo: otorgar ? 'Dar permiso' : 'Quitar permiso', textoBoton: otorgar ? 'Dar permiso' : 'Quitar permiso',
             explicacion: `${PUESTOS[r]}: ${p.descripcion || p.codigo}. Vale para todos los usuarios de ese puesto.`,
             accion: (motivo) => rpc('cambiar_permiso_rol', { p_empresa_id: E, p_rol: r, p_permiso: p.codigo, p_otorgar: otorgar, p_motivo: motivo }) });
-          if (ok) aviso('Permiso guardado.'); else c.checked = !otorgar;
+          if (ok) aviso(`Permiso guardado · ${PUESTOS[r]}: ${otorgar ? 'ahora puede' : 'ya no puede'} ${(p.descripcion || p.codigo).toLowerCase()}`); else c.checked = !otorgar;
         });
-        return h('td', {}, c);
-      })))));
+        return c;
+      })]) });
   return h('section', { class: 'tarjeta', 'aria-labelledby': 't-perm' },
-    h('h2', { id: 't-perm' }, 'Qué puede hacer cada puesto'),
+    titulo('h2', 'candado', 'Qué puede hacer cada puesto', { id: 't-perm' }),
     h('p', { class: 'ayuda' }, 'Solo el dueño cambia esta tabla. Cada cambio pide motivo y queda en la bitácora.'),
-    h('div', { class: 'tabla-envoltura' }, tabla));
+    tablaPerm);
 }
