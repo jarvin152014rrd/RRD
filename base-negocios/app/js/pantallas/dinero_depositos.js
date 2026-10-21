@@ -9,7 +9,7 @@ import { h, icono, aviso, cajaError, errorSimple, campo, conBoton, confirmar, pe
   estadoVacio, mensaje } from '../ui.js';
 import { hayEnMenu } from '../menu.js';
 import { cuentasDinero, cuentasQuePagan, olvidarDatos } from '../datos.js';
-import { hoy, inputMonto, inputFecha, textoCuenta } from '../formularios.js';
+import { hoy, inputMonto, inputFecha, textoCuenta, textoMonto } from '../formularios.js';
 
 const ES_CAJA = (c) => c.tipo === 'efectivo_caja' || c.tipo === 'caja_chica';
 // Qué se puede elegir en cada tipo (igual que valida trasladar_dinero en el núcleo).
@@ -161,7 +161,7 @@ function formularioMover(vista, ctx, cuentas) {
     if (selOrigen.value === selDestino.value) return falla('El dinero debe salir de una cuenta y entrar a OTRA.', '', selDestino);
     const repone = tipo.valor === 'reposicion_caja_chica';
     const m = montoIn.value.trim() === '' && repone ? null : aCentavos(montoIn.value);
-    if (!m && !(repone && montoIn.value.trim() === '')) return falla('Escriba el monto.', 'Solo números, por ejemplo 2500 o 2500.50', montoIn);
+    if (!m && !(repone && montoIn.value.trim() === '')) return falla(textoMonto(montoIn, 'Escriba el monto.'), 'Solo números, por ejemplo 2500 o 2500.50', montoIn);
     const o = lista.find((c) => c.cuenta_dinero_id === selOrigen.value), dst = lista.find((c) => c.cuenta_dinero_id === selDestino.value);
     if (m && m > Number(o.saldo_centavos) && (o.politica_saldo_negativo || 'no_permitir') === 'no_permitir') {
       return falla(`${o.nombre} solo tiene ${dinero(o.saldo_centavos)}.`, 'Baje el monto o elija otra cuenta.', montoIn);

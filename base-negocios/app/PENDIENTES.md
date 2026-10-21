@@ -1,4 +1,9 @@
-# Pendientes de la app (0.7.0)
+# Pendientes de la app (0.7.1)
+
+- Comas: unos pocos campos que NO usan `aCentavos`/`aCantidad` todavía toman la coma como decimal ("2,5" = 2.5):
+  porcentaje de impuestos, topes en Reglas, mínimo del producto y cantidades de Traslados de inventario. Pasarlos
+  a la misma regla (coma solo de miles) en la próxima ronda.
+- Cifras de Compras y Gastos: suman hasta 300 filas (se avisa). Falta una lectura de totales en el núcleo.
 
 - Pantallas en construcción (con su estado vacío amable): apartados, cajas abiertas, reportes y cierre de mes.
   HECHO (0.7.0): Compras (compras, proveedores, pagar a proveedores) y Dinero (gastos, depósitos y traslados,

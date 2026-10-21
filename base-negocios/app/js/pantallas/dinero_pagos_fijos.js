@@ -10,7 +10,7 @@ import { h, icono, aviso, cajaError, errorSimple, campo, conBoton, confirmar, pe
   estadoVacio, mensaje } from '../ui.js';
 import { hayEnMenu } from '../menu.js';
 import { cuentasDinero, cuentasQuePagan, categoriasGasto, alcance, olvidarDatos } from '../datos.js';
-import { hoy, selectCuentas, inputMonto, inputFecha, dato, cifraChica, cuandoVence } from '../formularios.js';
+import { hoy, selectCuentas, inputMonto, inputFecha, dato, cifraChica, cuandoVence, textoMonto } from '../formularios.js';
 
 const DIAS = ['', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado', 'domingo'];
 function cada(p) {
@@ -100,7 +100,7 @@ async function formularioPagar(vista, ctx, p) {
     ev.preventDefault();
     zonaError.replaceChildren();
     const m = aCentavos(montoIn.value);
-    if (!m) { zonaError.append(errorSimple('Escriba el monto real que paga.', 'Solo números, por ejemplo 12000 o 2380.50')); montoIn.focus(); return; }
+    if (!m) { zonaError.append(errorSimple(textoMonto(montoIn, 'Escriba el monto real que paga.'), 'Solo números, por ejemplo 12000 o 2380.50')); montoIn.focus(); return; }
     if (!selCuenta.value) { zonaError.append(errorSimple('Elija de qué caja o banco sale el dinero.')); selCuenta.focus(); return; }
     const cuenta = cuentas.find((c) => c.cuenta_dinero_id === selCuenta.value);
     const ok = await confirmar({ titulo: `¿Pagar "${p.nombre}"?`, textoBoton: 'Sí, pagar',
@@ -176,7 +176,7 @@ async function formularioPagoFijo(vista, ctx, p) {
     if (nombre.value.trim().length < 3) return falla('Escriba el nombre del pago fijo.', 'Ej.: Alquiler del local', nombre);
     if (!selCat.value) return falla('Elija la categoría de gasto.', '', selCat);
     const m = montoIn.value.trim() === '' ? 0 : aCentavos(montoIn.value);
-    if (m === null) return falla('El monto no es válido.', 'Solo números, por ejemplo 12000', montoIn);
+    if (m === null) return falla(textoMonto(montoIn, 'El monto no es válido.'), 'Solo números, por ejemplo 12000', montoIn);
     const mensual = selFrec.value === 'mensual';
     const c = Number(cadaIn.value);
     if (!Number.isInteger(c) || c < 1 || c > (mensual ? 12 : 52)) return falla(mensual ? 'Cada cuántos meses: de 1 a 12.' : 'Cada cuántas semanas: de 1 a 52.', '', cadaIn);

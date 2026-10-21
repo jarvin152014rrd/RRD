@@ -14,6 +14,11 @@ function guardado(clave, cargar, fresco = false) {
   memoria.set(clave, { cuando: Date.now(), promesa });
   return promesa;
 }
+// Filtros que las pantallas recuerdan mientras la app está abierta: al salir vuelven a los de siempre.
+const reinicios = new Set();
+export function reiniciarAlSalir(fn) { reinicios.add(fn); }
+export function reiniciarTodo() { for (const fn of reinicios) { try { fn(); } catch { /* nada */ } } }
+
 export function olvidarDatos(clave = null) { if (clave) memoria.delete(clave); else memoria.clear(); }
 
 export const productos = (fresco) => guardado('productos', () =>

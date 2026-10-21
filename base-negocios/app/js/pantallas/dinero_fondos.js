@@ -10,7 +10,7 @@ import { dinero, fecha, aCentavos } from '../formato.js';
 import { h, icono, aviso, cajaError, errorSimple, campo, conBoton, confirmar, titulo, filaIcono, chip, chipEstado, monto,
   estadoVacio, mensaje } from '../ui.js';
 import { cuentasDinero, cuentasQuePagan, categoriasGasto, alcance, olvidarDatos } from '../datos.js';
-import { hoy, selectCuentas, inputMonto, inputFecha, cifraChica } from '../formularios.js';
+import { hoy, selectCuentas, inputMonto, inputFecha, cifraChica, textoMonto } from '../formularios.js';
 
 const TIPO_FONDO = { reinversion: 'Reinversión', emergencias: 'Emergencias', otro: 'Otro' };
 const MOV = { aporte: 'Reparto de utilidad', anulacion_aporte: 'Reparto anulado', uso: 'Uso del fondo' };
@@ -123,7 +123,7 @@ async function formularioUso(vista, ctx, fondos) {
     const falla = (t, q = '', foco = null) => { zonaError.append(errorSimple(t, q)); if (foco) foco.focus(); };
     const f = conSaldo.find((x) => x.fondo_id === selFondo.value);
     const m = aCentavos(montoIn.value);
-    if (!m) return falla('Escriba el monto.', '', montoIn);
+    if (!m) return falla(textoMonto(montoIn, 'Escriba el monto.'), '', montoIn);
     if (m > Number(f.saldo_centavos)) return falla(`El fondo ${f.nombre} solo tiene ${dinero(f.saldo_centavos)}.`, 'Baje el monto.', montoIn);
     if (para.value.trim().length < 5) return falla('Escriba para qué se usa (mínimo 5 letras).', '', para);
     if (!selCuenta.value) return falla('Elija de qué caja o banco sale el dinero.', '', selCuenta);
@@ -175,7 +175,7 @@ async function formularioDividendos(vista, ctx, s) {
     ev.preventDefault();
     zonaError.replaceChildren();
     const m = aCentavos(montoIn.value);
-    if (!m) { zonaError.append(errorSimple('Escriba el monto.')); montoIn.focus(); return; }
+    if (!m) { zonaError.append(errorSimple(textoMonto(montoIn, 'Escriba el monto.'))); montoIn.focus(); return; }
     if (m > pend) { zonaError.append(errorSimple(`A ${s.nombre} se le deben ${dinero(pend)}; no puede pagarle más.`)); montoIn.focus(); return; }
     if (!selCuenta.value) { zonaError.append(errorSimple('Elija de qué caja o banco sale el dinero.')); selCuenta.focus(); return; }
     const cuenta = cuentas.find((c) => c.cuenta_dinero_id === selCuenta.value);

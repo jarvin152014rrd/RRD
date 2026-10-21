@@ -1,5 +1,28 @@
 # Cambios de la app
 
+## app 0.7.1 (núcleo 0.15.0, sin migraciones nuevas) — Arreglos de la revisión de Compras y Dinero
+
+- **Grave: la coma en los montos.** `aCentavos`, `aCosto` y `aCantidad` borraban todas las comas: "150,50" se
+  guardaba como L 15,050.00 y "2,5" como 25. Ahora la coma solo vale como separador de miles en grupos de 3
+  ("1,500", "1,234,567.89"); cualquier otra se rechaza. Vale en TODAS las pantallas que usan esas funciones
+  (vender, caja, cobros, gastos, compras, cajas, reglas, productos…): debajo de cualquier campo de dinero sale
+  "Use punto para los decimales, por ejemplo 150.50" y el formulario no guarda. El Excel no usa estas funciones.
+- **Confirmación de compra:** dice el total claro (total, subtotal e ISV), ya no "unos L …".
+- **Cuadrar con el banco, lectura del CSV:** una fila con otro número de columnas que los títulos se deja fuera y
+  se dice su número de fila; la columna del monto se busca por su título exacto ("Fecha valor" ya no se toma como
+  monto); fecha con hora; campos entre comillas con salto de línea; tope de 5,000 movimientos o 2 MB con aviso;
+  cada movimiento numerado (y su fila del archivo); los de otro mes se quitan con aviso antes de enviar. Un
+  reintento dice "ya estaba cargado" (nunca "undefined").
+- **Compras y Todos los gastos:** si llegan 300 filas avisa que las cifras de arriba suman solo esas y que acorte
+  las fechas (el núcleo no tiene una lectura de totales).
+- **Al salir** los filtros de Compras, Gastos, Cuadrar con el banco y Proyección vuelven a los de siempre.
+- **Todos los gastos:** el menú pide `gastos.registrar` o `dinero.ver`; la lista pide `dinero.ver`; "Registrar
+  un gasto" pide los dos. Sin `dinero.ver` explica que falta el permiso de ver las cajas (antes decía, por error,
+  "Primero guarde sus cajas").
+- **Pagar a un proveedor:** la fecha mínima es la mayor entre la fecha de la factura y la de los libros.
+- Pruebas: `probar_compras_dinero.cjs` 21 (nuevas: comas con 12 casos, CSV, tope de 300, filtros al salir, permiso
+  de gastos, fecha mínima). Cascarón `cascaron-0.7.1`.
+
 ## app 0.7.0 (núcleo 0.15.0, sin migraciones nuevas) — Compras y Dinero funcionando
 
 ### Parte 1: Compras

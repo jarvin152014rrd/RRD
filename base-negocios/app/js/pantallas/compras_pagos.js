@@ -8,7 +8,7 @@ import { dinero, fecha, aCentavos, diasEntre } from '../formato.js';
 import { h, icono, aviso, cajaError, errorSimple, campo, conBoton, confirmar, titulo, filaIcono, chipEstado, monto, estadoVacio, mensaje } from '../ui.js';
 import { hayEnMenu } from '../menu.js';
 import { cuentasDinero, cuentasQuePagan, alcance, olvidarDatos } from '../datos.js';
-import { hoy, selectCuentas, inputMonto, inputFecha, dato, cifraChica, cuandoVence } from '../formularios.js';
+import { hoy, selectCuentas, inputMonto, inputFecha, dato, cifraChica, cuandoVence, textoMonto } from '../formularios.js';
 
 // Facturas por pagar que este usuario puede ver. v_cxp_documento ya deja fuera las compras de otras
 // sucursales (RLS de compra), pero NO los saldos iniciales: a un usuario limitado se le quitan los de
@@ -77,7 +77,9 @@ export async function formularioPago(vista, ctx, d, { alVolver = null } = {}) {
   const selCuenta = cuentas.length ? selectCuentas(cuentas, { id: 'pago-cuenta' }, { vacio: 'Elija de dónde sale el dinero' })
     : h('select', { id: 'pago-cuenta' }, h('option', { value: 'forma:caja' }, 'Caja general'), h('option', { value: 'forma:banco' }, 'Banco'));
   const montoIn = inputMonto('pago-monto', d.saldo_centavos);
-  const fechaIn = inputFecha('pago-fecha', hoy(), { min: d.fecha_documento });
+  // El pago no puede ser antes de la factura ni antes de su fecha en los libros (la mayor de las dos).
+  const minimo = [d.fecha_documento, d.fecha_contable].filter(Boolean).sort().pop();
+  const fechaIn = inputFecha('pago-fecha', hoy(), { min: minimo });
   const referencia = h('input', { id: 'pago-referencia', type: 'text', maxlength: 100, placeholder: 'Ej.: cheque 451 o transferencia 9988' });
   const tipoPago = h('p', { class: 'ayuda', id: 'pago-tipo', 'aria-live': 'polite' });
   const zonaError = h('div', { 'aria-live': 'assertive' });
@@ -102,7 +104,7 @@ export async function formularioPago(vista, ctx, d, { alVolver = null } = {}) {
     ev.preventDefault();
     zonaError.replaceChildren();
     const m = aCentavos(montoIn.value);
-    if (!m) { zonaError.append(errorSimple('Escriba el monto que paga.', 'Solo números, por ejemplo 4500 o 4500.50')); montoIn.focus(); return; }
+    if (!m) { zonaError.append(errorSimple(textoMonto(montoIn, 'Escriba el monto que paga.'), 'Solo números, por ejemplo 4500 o 4500.50')); montoIn.focus(); return; }
     if (m > Number(d.saldo_centavos)) {
       zonaError.append(errorSimple(`No puede pagar más de lo que debe: ${dinero(d.saldo_centavos)}.`, 'Baje el monto.')); montoIn.focus(); return;
     }

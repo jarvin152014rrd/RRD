@@ -10,8 +10,8 @@ import { dinero, fecha, cantidad, aCosto, aCantidad, aCentavos, sumarDias } from
 import { h, icono, aviso, cajaError, errorSimple, campo, conBoton, confirmar, pedirMotivo, titulo, filaIcono, chipEstado, monto,
   estadoVacio, mensaje, tabla } from '../ui.js';
 import { hayEnMenu } from '../menu.js';
-import { proveedores, bodegas, cuentasDinero, cuentasQuePagan, filtrar, olvidarDatos } from '../datos.js';
-import { hoy, selectCuentas, inputFecha, dato, cifraChica } from '../formularios.js';
+import { proveedores, bodegas, cuentasDinero, cuentasQuePagan, filtrar, olvidarDatos, reiniciarAlSalir } from '../datos.js';
+import { hoy, selectCuentas, inputFecha, dato, cifraChica, textoMonto } from '../formularios.js';
 import { cuentasPorPagar, estadoFactura, formularioPago } from './compras_pagos.js';
 
 // Estado de una compra para su chip: anulada, pagada (contado o sin saldo), vencida o por pagar.
@@ -29,8 +29,11 @@ function costoTexto(c) {
   return Number.isFinite(n) ? `L ${n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 4 })}` : '';
 }
 
+const LIMITE = 300;
+
 // Filtros que se recuerdan mientras la app está abierta (no se guardan en el navegador).
 const filtros = { desde: null, hasta: null, proveedor: '' };
+reiniciarAlSalir(() => Object.assign(filtros, { desde: null, hasta: null, proveedor: '' }));
 
 export async function mostrar(vista, ctx) {
   const [provs, docs] = await Promise.all([proveedores(true), cuentasPorPagar()]);
@@ -45,6 +48,7 @@ export async function mostrar(vista, ctx) {
   selProv.value = filtros.proveedor;
   const zona = h('div', {});
   const resumen = h('div', { class: 'cifras' });
+  const tope = h('div', {});
 
   async function cargar() {
     Object.assign(filtros, { desde: desde.value, hasta: hasta.value, proveedor: selProv.value });
@@ -52,7 +56,9 @@ export async function mostrar(vista, ctx) {
     const f = { empresa_id: empresaId(), fecha_contable: { gte: filtros.desde || '2000-01-01', lte: filtros.hasta || '2100-12-31' } };
     if (filtros.proveedor) f.proveedor_id = filtros.proveedor;
     let compras;
-    try { compras = await leer('compra', f, { orden: 'numero.desc', limite: 300 }); } catch (err) { zona.replaceChildren(await cajaError(err)); return; }
+    try { compras = await leer('compra', f, { orden: 'numero.desc', limite: LIMITE }); } catch (err) { zona.replaceChildren(await cajaError(err)); return; }
+    // Las cifras de arriba suman lo que llegó: si llegaron LIMITE filas puede haber más (no hay lectura de totales en el núcleo).
+    tope.replaceChildren(compras.length >= LIMITE ? mensaje('info', `Se muestran las últimas ${LIMITE} compras y las cifras suman solo esas.`, 'Acorte las fechas para ver el total exacto.', { dataset: { info: 'tope-filas' } }) : '');
     const vigentes = compras.filter((c) => !c.anulada_en);
     const porPagar = vigentes.reduce((s, c) => s + Number((porDoc.get(c.id) || {}).saldo_centavos || 0), 0);
     resumen.replaceChildren(
@@ -84,7 +90,7 @@ export async function mostrar(vista, ctx) {
       texto: 'Anote aquí lo que le compra a sus proveedores: los productos entran al inventario con su costo y el sistema lleva lo que debe.',
       botones: [puede('compras.registrar') ? { texto: 'Registrar la primera compra', onclick: nueva, icono: 'mas', id: 'nueva-compra' } : null,
         hayEnMenu(ctx.menu || [], 'compras', 'proveedores') && puede('terceros.editar') ? { texto: 'Agregar un proveedor', href: '#/compras/proveedores', icono: 'proveedor' } : null] })
-      : [h('div', { class: 'dos-columnas filtros' }, campo('Desde', desde), campo('Hasta', hasta), campo('Proveedor', selProv)), resumen, zona]));
+      : [h('div', { class: 'dos-columnas filtros' }, campo('Desde', desde), campo('Hasta', hasta), campo('Proveedor', selProv)), tope, resumen, zona]));
   if (!sinNada) await cargar();
 }
 
@@ -321,13 +327,13 @@ export async function formularioCompra(vista, ctx, { proveedorId = null } = {}) 
     const datosLineas = [];
     for (const l of lineas) {
       const q = aCantidad(l.cant.value), c = aCosto(l.costo.value);
-      if (!q) return falla(`Escriba la cantidad de ${l.p.nombre}.`, 'Un número mayor que cero.', l.cant);
+      if (!q) return falla(textoMonto(l.cant, `Escriba la cantidad de ${l.p.nombre}.`), 'Un número mayor que cero.', l.cant);
       if (!l.p.permite_fracciones && !Number.isInteger(q)) return falla(`${l.p.nombre} se compra en unidades enteras.`, 'Quite los decimales.', l.cant);
-      if (!c) return falla(`Escriba el costo por unidad de ${l.p.nombre}.`, 'En lempiras, sin ISV. Ej.: 120 o 120.50', l.costo);
+      if (!c) return falla(textoMonto(l.costo, `Escriba el costo por unidad de ${l.p.nombre}.`), 'En lempiras, sin ISV. Ej.: 120 o 120.50', l.costo);
       const x = { producto_id: l.p.producto_id, cantidad: q, costo_unitario: c };
       if (l.isv.value.trim() !== '') {
         const isv = aCentavos(l.isv.value);
-        if (isv === null) return falla(`El ISV de ${l.p.nombre} no es un monto válido.`, 'Déjelo vacío para que lo calcule el sistema.', l.isv);
+        if (isv === null) return falla(textoMonto(l.isv, `El ISV de ${l.p.nombre} no es un monto válido.`), 'Déjelo vacío para que lo calcule el sistema.', l.isv);
         x.isv_centavos = isv;
       }
       datosLineas.push(x);
@@ -348,7 +354,7 @@ export async function formularioCompra(vista, ctx, { proveedorId = null } = {}) 
     const prov = provs.find((p) => p.id === selProv.value);
     const t = cuenta();
     const ok = await confirmar({ titulo: '¿Guardar esta compra?', textoBoton: 'Sí, guardar compra',
-      texto: `Compra a ${prov.nombre}, factura ${datos.numero_documento}: ${lineas.length} ${lineas.length === 1 ? 'producto' : 'productos'} por unos ${dinero(t.total)}. `
+      texto: `Compra a ${prov.nombre}, factura ${datos.numero_documento}: ${lineas.length} ${lineas.length === 1 ? 'producto' : 'productos'}. Total: ${dinero(t.total)} (subtotal ${dinero(t.sub)} + ISV ${dinero(t.isv)}; el sistema confirma el ISV al guardar). `
         + (cond.valor === 'contado' ? `Sale de ${sale}.` : `Al crédito: vence el ${fecha(vence.value)}.`)
         + ` Los productos entran a ${selBod.selectedOptions[0].textContent}.` });
     if (!ok) return;

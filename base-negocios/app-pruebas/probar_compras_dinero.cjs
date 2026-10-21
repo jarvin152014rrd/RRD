@@ -566,6 +566,134 @@ const existencia = (prod, bod = 'B1') => num('dueno@demo.hn', `(SELECT coalesce(
   });
 
 
+  // ============================ 0.7.1: arreglos de la revisión ============================
+  await prueba('0.7.1: la coma solo vale como separador de miles ("150,50" se rechaza; "1,500" = 1500)', async () => {
+    const r = await d.p.evaluate(async () => {
+      const f = await import('/js/formato.js');
+      const casos = ['150,50', '1,500', '1,500.75', '12,50', '2,5', '1,234,567.89', '0.5', '', '-5', '  150.50  ', '1,50,000', 'L 1,500'];
+      return { c: casos.map((x) => f.aCentavos(x)), costo: [f.aCosto('1,250.5'), f.aCosto('120,50'), f.aCosto('12.505')],
+        cant: [f.aCantidad('2,5'), f.aCantidad('1,500'), f.aCantidad('2.5'), f.aCantidad('-5'), f.aCantidad('')],
+        coma: [f.comaInvalida('150,50'), f.comaInvalida('1,500'), f.comaInvalida('150.50')], msj: f.MENSAJE_COMA };
+    });
+    const esperado = [null, 150000, 150075, null, null, 123456789, 50, null, null, 15050, null, 150000];
+    afirmar(JSON.stringify(r.c) === JSON.stringify(esperado), 'aCentavos: ' + JSON.stringify(r.c));
+    afirmar(JSON.stringify(r.costo) === JSON.stringify([125050, null, 1250.5]), 'aCosto: ' + JSON.stringify(r.costo));
+    afirmar(JSON.stringify(r.cant) === JSON.stringify([null, 1500, 2.5, null, null]), 'aCantidad: ' + JSON.stringify(r.cant));
+    afirmar(JSON.stringify(r.coma) === JSON.stringify([true, false, false]) && r.msj === 'Use punto para los decimales, por ejemplo 150.50', 'comaInvalida');
+    // En pantalla: aviso debajo del campo y el formulario no guarda.
+    const p = d.p;
+    const antes = num('dueno@demo.hn', `(SELECT count(*) FROM public.gasto WHERE empresa_id = '${EM}')`);
+    await ir(p, 'dinero/gastos', '#nuevo-gasto');
+    await p.click('#nuevo-gasto');
+    await p.waitForSelector('#gasto-monto');
+    await p.fill('#gasto-monto', '150,50');
+    await p.waitForSelector('#gasto-monto + .aviso-coma');
+    await p.selectOption('#gasto-cuenta', id('BAC'));
+    await p.selectOption('#gasto-categoria', id('CAT_MANT'));
+    await p.fill('#gasto-descripcion', 'Prueba de la coma');
+    await p.click('#gasto-guardar');
+    afirmar((await texto(p, '#contenido .mensaje-error')).includes('Use punto para los decimales'), 'el error no explica la coma');
+    afirmar(num('dueno@demo.hn', `(SELECT count(*) FROM public.gasto WHERE empresa_id = '${EM}')`) === antes, 'guardó un gasto con coma');
+    await p.fill('#gasto-monto', '150.50');
+    afirmar(await p.locator('.aviso-coma').count() === 0, 'el aviso no se quita al corregir');
+    // Vender y caja usan la misma función: un depósito de "1,500" es L 1,500.00.
+    afirmar(await p.evaluate(async () => (await import('/js/formato.js')).aCentavos('1,500')) === 150000, 'miles en caja');
+  });
+
+  await prueba('0.7.1: CSV del banco (columnas de más o de menos, "Fecha valor", hora, comillas con salto de línea, tope) y fuera del mes', async () => {
+    const r = await d.p.evaluate(async () => {
+      const m = await import('/js/pantallas/dinero_banco.js');
+      const a = m.leerCsvBanco('Fecha,Fecha valor,Descripción,Monto\n2026-09-02 08:15,2026-09-03,"PAGO ENEE\nRECIBO 9",-1150.00\n2026-09-05,2026-09-05,DEPOSITO,2500.50,extra\n05/09/2026 14:00,x,"COMISION, MANEJO",-57.50\n');
+      const muchas = 'Fecha;Descripcion;Monto\n' + Array.from({ length: m.MAX_FILAS + 3 }, () => '2026-09-01;X;1.00').join('\n');
+      const b = m.leerCsvBanco(muchas);
+      return { a, nb: b.filas.length, eb: b.errores };
+    });
+    afirmar(r.a.filas.length === 2 && r.a.filas[0].monto_centavos === -115000 && r.a.filas[0].fecha === '2026-09-02' && r.a.filas[0].descripcion.includes('RECIBO 9')
+      && r.a.filas[1].fecha === '2026-09-05' && r.a.filas[1].monto_centavos === -5750 && r.a.filas[1].descripcion === 'COMISION, MANEJO', 'CSV: ' + JSON.stringify(r.a));
+    afirmar(r.a.errores.length === 1 && r.a.errores[0].startsWith('fila 4:') && r.a.errores[0].includes('columnas'), 'fila con columnas de más: ' + JSON.stringify(r.a.errores));
+    afirmar(r.nb === 5000 && r.eb.some((e) => e.includes('5000')), 'tope de filas');
+    // Fuera del mes: se quita con aviso antes de enviar; un reintento dice "ya estaba cargado" (respuesta simulada).
+    const p = d.p;
+    await ir(p, 'dinero/banco', '#banco-cuenta');
+    await p.selectOption('#banco-cuenta', id('ATL'));
+    const mes = await p.locator('#banco-mes option').nth(1).getAttribute('value');
+    await p.selectOption('#banco-mes', mes);
+    await p.waitForSelector('#banco-filas');
+    const [a, n] = mes.split('-').map(Number);
+    const dia = (x) => `${a}-${String(n).padStart(2, '0')}-${x}`;
+    await p.locator('#banco-filas [data-campo=fecha]').fill(dia('10'));
+    await p.locator('#banco-filas [data-campo=descripcion]').fill('DEPOSITO');
+    await p.locator('#banco-filas [data-campo=monto]').fill('100');
+    await p.click('#banco-agregar-fila');
+    await p.locator('#banco-filas [data-campo=fecha]').nth(1).fill(`${a + 1}-01-15`);
+    await p.locator('#banco-filas [data-campo=descripcion]').nth(1).fill('OTRO MES');
+    await p.locator('#banco-filas [data-campo=monto]').nth(1).fill('5');
+    afirmar((await p.locator('#banco-filas [data-info=numero-fila]').allInnerTexts()).join('|') === 'Movimiento 1|Movimiento 2', 'las filas no van numeradas');
+    await p.fill('#banco-saldo-final', '100');
+    await p.route('**/rest/v1/rpc/importar_estado_cuenta', (rr) => rr.fulfill({ status: 200, contentType: 'application/json',
+      body: JSON.stringify({ conciliacion_id: 'x', importacion_id: 'y', duplicado: true }) }));
+    await p.click('#banco-cargar');
+    await p.waitForSelector('[data-info=fuera-del-mes]');
+    afirmar(await p.locator('#banco-filas .fila-banco').count() === 1, 'no quitó la fila de otro mes');
+    const conf = await confirmarDialogo(p);
+    afirmar(conf.includes('1 movimientos'), 'la confirmación cuenta mal: ' + conf);
+    await p.waitForSelector('#avisos .mensaje');
+    const av = await p.locator('#avisos').innerText();
+    afirmar(av.includes('ya estaba cargado') && !av.includes('undefined'), 'aviso de reintento: ' + av);
+    await p.unroute('**/rest/v1/rpc/importar_estado_cuenta');
+  });
+
+  await prueba('0.7.1: con 300 compras o gastos avisa que las cifras suman solo esas; el pago no se fecha antes de la compra', async () => {
+    const p = d.p;
+    const falsa = (i) => ({ id: `00000000-0000-4000-8000-${String(i).padStart(12, '0')}`, numero: i, numero_documento: 'X-' + i, proveedor_id: id('PROV1'),
+      fecha_contable: '2026-09-01', condicion: 'contado', total_centavos: 100, anulada_en: null });
+    await p.route(/\/rest\/v1\/compra\?/, (rr) => rr.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(Array.from({ length: 300 }, (_, i) => falsa(i + 1))) }));
+    await ir(p, 'compras/compras', '[data-info=tope-filas]');
+    afirmar((await texto(p, '[data-info=tope-filas]')).includes('últimas 300'), 'sin aviso de 300 compras');
+    await p.unroute(/\/rest\/v1\/compra\?/);
+    await p.route(/\/rest\/v1\/v_gasto\?/, (rr) => rr.fulfill({ status: 200, contentType: 'application/json',
+      body: JSON.stringify(Array.from({ length: 300 }, (_, i) => ({ gasto_id: 'g' + i, numero: i, descripcion: 'x', estado: 'aplicado', monto_centavos: 100, fecha_contable: '2026-09-01' }))) }));
+    await ir(p, 'dinero/gastos', '[data-info=tope-filas]');
+    await p.unroute(/\/rest\/v1\/v_gasto\?/);
+    // Fecha mínima del pago = la mayor entre la fecha de la factura y la de los libros.
+    await ir(p, 'compras/pagos', '#lista-cxp');
+    const doc = JSON.parse(sql('dueno@demo.hn', `(SELECT row_to_json(x) FROM (SELECT documento_id, greatest(fecha_documento, fecha_contable) AS minimo FROM public.v_cxp_documento WHERE empresa_id = '${EM}' LIMIT 1) x)`));
+    await p.locator(`[data-documento="${doc.documento_id}"] button`).click();
+    await p.waitForSelector('#pago-fecha');
+    afirmar(await p.getAttribute('#pago-fecha', 'min') === doc.minimo, 'fecha mínima del pago');
+  });
+
+  await prueba('0.7.1: al salir los filtros vuelven a los de siempre; "Todos los gastos" sin dinero.ver explica el permiso', async () => {
+    const { ctx, p } = await nueva();
+    await entrar(p, 'dueno@demo.hn');
+    await ir(p, 'compras/compras', '#compras-proveedor');
+    await p.selectOption('#compras-proveedor', id('PROV2'));
+    await p.waitForFunction(() => document.querySelectorAll('#lista-compras [data-compra]').length >= 1);
+    await p.click('.quien button');
+    await entrar(p, 'dueno@demo.hn');
+    await ir(p, 'compras/compras', '#compras-proveedor');
+    afirmar(await p.inputValue('#compras-proveedor') === '', 'el filtro de proveedor quedó del usuario anterior');
+    await ctx.close();
+    // Menú: basta registrar o ver; la pantalla sin dinero.ver no lista y explica (perfil simulado sin dinero.ver).
+    const m = await d.p.evaluate(async () => {
+      const md = await import('/js/menu_datos.js');
+      const g = md.MENU.find((x) => x.id === 'dinero').subs.find((x) => x.id === 'gastos');
+      return [md.visibleCon(g, new Set(['dinero']), new Set(['gastos.registrar'])), md.visibleCon(g, new Set(['dinero']), new Set(['dinero.ver'])),
+        md.visibleCon(g, new Set(['dinero']), new Set(['ventas.ver']))];
+    });
+    afirmar(JSON.stringify(m) === '[true,true,false]', 'permisos del menú de gastos: ' + JSON.stringify(m));
+    const x = await nueva();
+    await x.p.route('**/rest/v1/rpc/mi_perfil', async (rr) => {
+      const res = await rr.fetch(); const j = await res.json();
+      if (j && j.permisos) j.permisos = j.permisos.filter((q) => q !== 'dinero.ver');
+      await rr.fulfill({ response: res, body: JSON.stringify(j) });
+    });
+    await entrar(x.p, 'admin@demo.hn');
+    await ir(x.p, 'dinero/gastos', '[data-info=sin-dinero-ver]');
+    afirmar(await x.p.locator('#nuevo-gasto').count() === 0 && !(await texto(x.p, '#contenido')).includes('Primero guarde sus cajas'), 'sin dinero.ver no debe ofrecer registrar');
+    await x.ctx.close();
+  });
+
   await d.ctx.close();
   await prueba('sin errores de JavaScript en Compras y Dinero', async () => {
     afirmar(erroresJs.length === 0, erroresJs.join(' | '));

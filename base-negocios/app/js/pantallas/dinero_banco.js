@@ -10,8 +10,8 @@ import { dinero, fecha, aCentavos } from '../formato.js';
 import { h, icono, aviso, cajaError, errorSimple, campo, conBoton, confirmar, pedirMotivo, titulo, filaIcono, chip, chipEstado, monto,
   estadoVacio, mensaje } from '../ui.js';
 import { hayEnMenu } from '../menu.js';
-import { cuentasDinero, olvidarDatos } from '../datos.js';
-import { hoy, cifraChica } from '../formularios.js';
+import { cuentasDinero, olvidarDatos, reiniciarAlSalir } from '../datos.js';
+import { hoy, cifraChica, textoMonto } from '../formularios.js';
 
 const MESES = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
 const OPERACION = { gasto: 'Gasto', compra: 'Compra de contado', pago_proveedor: 'Pago a proveedor', venta: 'Venta', cobro: 'Cobro',
@@ -24,6 +24,7 @@ const firmado = (c) => monto(dinero(Math.abs(c)), { sentido: c < 0 ? 'sale' : 'e
 
 // Lo elegido se recuerda mientras la app está abierta.
 const eleccion = { banco: null, mes: null };
+reiniciarAlSalir(() => Object.assign(eleccion, { banco: null, mes: null }));
 
 export async function mostrar(vista, ctx) {
   const [cuentas, concs] = await Promise.all([cuentasDinero(true), leer('v_conciliacion', { empresa_id: empresaId() }, { orden: 'anio.desc', limite: 500 })]);
@@ -97,24 +98,42 @@ function formularioCarga(zona, ctx, { banco, anio, mes, recargar, conciliacionId
     const m = h('input', { type: 'text', inputmode: 'decimal', value: x.monto_centavos ? (Math.abs(x.monto_centavos) / 100).toFixed(2) : '', placeholder: '0.00', 'aria-label': 'Monto', dataset: { campo: 'monto' } });
     const s = h('select', { 'aria-label': 'Entra o sale', dataset: { campo: 'signo' } }, h('option', { value: '-' }, 'Sale del banco'), h('option', { value: '+' }, 'Entra al banco'));
     if (x.monto_centavos > 0) s.value = '+';
-    const l = { f, d, r, m, s };
-    l.nodo = h('div', { class: 'grupo-campos fila-banco' },
+    const l = { f, d, r, m, s, num: h('p', { class: 'titulo-chico', dataset: { info: 'numero-fila' } }), filaArchivo: x.fila || null };
+    l.nodo = h('div', { class: 'grupo-campos fila-banco' }, l.num,
       h('div', { class: 'dos-columnas' }, campo('Fecha', f), campo('Descripción', d), campo('Referencia (opcional)', r), campo('Monto (L)', m), campo('¿Entra o sale?', s)),
-      h('button', { type: 'button', class: 'boton', 'aria-label': 'Quitar esta fila', onclick: () => { lineas.splice(lineas.indexOf(l), 1); l.nodo.remove(); } }, icono('cerrar'), 'Quitar'));
+      h('button', { type: 'button', class: 'boton', 'aria-label': 'Quitar esta fila', onclick: () => { lineas.splice(lineas.indexOf(l), 1); l.nodo.remove(); numerar(); } }, icono('cerrar'), 'Quitar'));
     lineas.push(l);
     filas.append(l.nodo);
+    numerar();
+  }
+  // Cada movimiento con su número (y la fila del archivo de donde salió).
+  function numerar() {
+    lineas.forEach((l, i) => { l.num.textContent = `Movimiento ${i + 1}${l.filaArchivo ? ` (fila ${l.filaArchivo} del archivo)` : ''}`; });
+  }
+  // Fechas fuera del mes: el núcleo rechazaría todo el estado de cuenta; se quitan antes de enviar y se avisa.
+  const fin = new Date(Date.UTC(anio, mes, 0)).toISOString().slice(0, 10);
+  const fueraDelMes = (fe) => fe < desde || fe > fin;
+  function quitarFueraDelMes() {
+    const fuera = lineas.filter((l) => l.f.value && fueraDelMes(l.f.value));
+    for (const l of fuera) { lineas.splice(lineas.indexOf(l), 1); l.nodo.remove(); }
+    numerar();
+    return fuera.map((l) => `${l.filaArchivo ? 'fila ' + l.filaArchivo : 'un movimiento'} del ${fecha(l.f.value)}`);
   }
   archivo.addEventListener('change', async () => {
     zonaArchivo.replaceChildren();
     const a = archivo.files && archivo.files[0];
     if (!a) return;
+    if (a.size > MAX_BYTES) { zonaArchivo.append(errorSimple('El archivo es muy grande (más de 2 MB).', `Descargue solo un mes del estado de cuenta (hasta ${MAX_FILAS} movimientos).`)); archivo.value = ''; return; }
     const r = leerCsvBanco(await a.text());
     if (!r.filas.length) { zonaArchivo.append(errorSimple('No se encontraron movimientos en el archivo.', r.errores[0] || 'Revise que sea el CSV del estado de cuenta (con fecha, descripción y monto).')); return; }
     for (const l of [...lineas]) l.nodo.remove();
     lineas.length = 0;
     for (const x of r.filas) agregar(x);
-    zonaArchivo.append(mensaje(r.errores.length ? 'info' : 'ok', `Se leyeron ${r.filas.length} movimientos del archivo.`,
-      r.errores.length ? `${r.errores.length} línea(s) no se entendieron y se dejaron fuera: ${r.errores.slice(0, 3).join('; ')}` : 'Revíselos abajo antes de cargar.'));
+    const fuera = quitarFueraDelMes();
+    zonaArchivo.append(mensaje(r.errores.length || fuera.length ? 'info' : 'ok', `Se leyeron ${lineas.length} movimientos del archivo.`,
+      [r.errores.length ? `Líneas que no se entendieron y se dejaron fuera: ${r.errores.slice(0, 5).join('; ')}${r.errores.length > 5 ? ` y ${r.errores.length - 5} más` : ''}.` : '',
+        fuera.length ? `Se quitaron ${fuera.length} de otro mes: ${fuera.slice(0, 5).join('; ')}.` : '',
+        !r.errores.length && !fuera.length ? 'Revíselos abajo antes de cargar.' : ''].filter(Boolean).join(' '), { dataset: { info: 'lectura-csv' } }));
   });
   const form = h('form', { class: 'formulario', novalidate: true },
     h('p', {}, `Estado de cuenta de ${banco.nombre} de ${textoMes(anio, mes)}.`),
@@ -132,6 +151,8 @@ function formularioCarga(zona, ctx, { banco, anio, mes, recargar, conciliacionId
     const ini = conSigno(saldoIni.value), fin = conSigno(saldoFin.value);
     if (saldoIni.value.trim() && ini === null) return falla('El saldo inicial no es un monto válido.', '', saldoIni);
     if (fin === null) return falla('Escriba el saldo con que termina el mes según el banco.', 'Lo dice al final del estado de cuenta.', saldoFin);
+    const fuera = quitarFueraDelMes();
+    if (fuera.length) zonaArchivo.append(mensaje('info', `Se quitaron ${fuera.length} movimiento(s) de otro mes.`, `${fuera.slice(0, 5).join('; ')}. Este estado de cuenta es de ${textoMes(anio, mes)}.`, { dataset: { info: 'fuera-del-mes' } }));
     if (!lineas.length) return falla('Agregue los movimientos del banco.', 'Suba el archivo CSV o toque "Agregar un movimiento".');
     const datos = { archivo: (archivo.files && archivo.files[0] && archivo.files[0].name.slice(0, 200)) || 'escrito a mano', saldo_final_centavos: fin, filas: [] };
     if (ini !== null) datos.saldo_inicial_centavos = ini;
@@ -139,7 +160,7 @@ function formularioCarga(zona, ctx, { banco, anio, mes, recargar, conciliacionId
       const m = aCentavos(l.m.value);
       if (!l.f.value) return falla(`Fila ${i + 1}: escriba la fecha.`, '', l.f);
       if (l.d.value.trim().length < 2) return falla(`Fila ${i + 1}: escriba la descripción.`, '', l.d);
-      if (!m) return falla(`Fila ${i + 1}: escriba el monto.`, 'Solo números, mayor que cero.', l.m);
+      if (!m) return falla(`Fila ${i + 1}: ${textoMonto(l.m, 'escriba el monto.')}`, 'Solo números, mayor que cero.', l.m);
       const x = { fecha: l.f.value, descripcion: l.d.value.trim(), monto_centavos: l.s.value === '-' ? -m : m };
       if (l.r.value.trim()) x.referencia = l.r.value.trim();
       datos.filas.push(x);
@@ -150,7 +171,9 @@ function formularioCarga(zona, ctx, { banco, anio, mes, recargar, conciliacionId
     const r = await conBoton(boton, zonaError, () => escribir('importar_estado_cuenta', { p_empresa_id: empresaId(), p_cuenta_dinero_id: banco.cuenta_dinero_id,
       p_anio: anio, p_mes: mes, p_datos: datos, p_id_operacion: id }), 'Cargando…');
     if (!r) return;
-    aviso(`Estado de cuenta cargado · ${r.filas_nuevas} movimientos nuevos${r.filas_repetidas ? `, ${r.filas_repetidas} ya estaban` : ''} · ${r.emparejadas_automaticamente} se marcaron solos`, 'ok', 8000);
+    // Un reintento (mismo id_operacion) no trae los conteos: se dice que ya estaba cargado. Nunca "undefined".
+    aviso(r.duplicado ? 'Ese estado de cuenta ya estaba cargado: no se repitió nada.'
+      : `Estado de cuenta cargado · ${r.filas_nuevas ?? 0} movimientos nuevos${r.filas_repetidas ? `, ${r.filas_repetidas} ya estaban` : ''} · ${r.emparejadas_automaticamente ?? 0} se marcaron solos`, 'ok', 8000);
     recargar();
   });
   agregar();
@@ -293,58 +316,76 @@ function conSigno(t) {
 }
 
 // ---------------- Leer el CSV del banco ----------------
-// Acepta coma, punto y coma o tabulador; fechas AAAA-MM-DD o DD/MM/AAAA; montos con o sin "L", con
-// signo, entre paréntesis (= negativo) y con coma de miles. Columnas por su título: fecha, descripción
-// (o concepto, detalle), referencia, monto (o importe, valor) o débito y crédito por separado.
-// -> { filas: [{ fecha, descripcion, referencia, monto_centavos }], errores: [texto] }
+// Acepta coma, punto y coma o tabulador; campos entre comillas (también con saltos de línea adentro);
+// fechas AAAA-MM-DD o DD/MM/AAAA, con o sin hora; montos con o sin "L", con signo, entre paréntesis
+// (= negativo), con coma o punto de miles. Columnas por su título: fecha, descripción (o concepto, detalle),
+// referencia, monto (o importe, valor; título exacto, así "Fecha valor" no se toma como monto) o débito y
+// crédito por separado. Una fila con otro número de columnas que los títulos no se usa y se avisa.
+// Tope: MAX_FILAS movimientos. -> { filas: [{ fila, fecha, descripcion, referencia, monto_centavos }], errores: [texto] }
+export const MAX_FILAS = 5000;
+export const MAX_BYTES = 2 * 1024 * 1024;
 export function leerCsvBanco(texto) {
-  const lineas = String(texto || '').replace(/^﻿/, '').split(/\r?\n/).filter((l) => l.trim());
   const errores = [], filas = [];
-  if (lineas.length < 2) return { filas, errores: ['El archivo no tiene títulos y movimientos.'] };
-  const sep = [';', '\t', ','].sort((a, b) => lineas[0].split(b).length - lineas[0].split(a).length)[0];
-  const partir = (l) => {
-    const out = []; let cur = '', q = false;
-    for (let i = 0; i < l.length; i++) {
-      const ch = l[i];
-      if (ch === '"') { if (q && l[i + 1] === '"') { cur += '"'; i++; } else q = !q; } else if (ch === sep && !q) { out.push(cur.trim()); cur = ''; } else cur += ch;
-    }
-    out.push(cur.trim());
-    return out;
-  };
-  const sinT = (x) => x.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
-  const tit = partir(lineas[0]).map(sinT);
-  const col = (re) => tit.findIndex((t) => re.test(t));
-  const iF = col(/fecha|date/), iD = col(/desc|concepto|detalle|transac|movimiento/), iR = col(/ref|document|cheque|numero|no\./);
-  const iDeb = col(/debito|cargo|retiro|salida|debe/), iCred = col(/credito|abono|deposito|entrada|haber/), iM = col(/monto|importe|valor|amount|cantidad/);
+  const t = String(texto || '').replace(/^﻿/, '');
+  const primera = t.split(/\r?\n/, 1)[0] || '';
+  const sep = [';', '\t', ','].sort((a, b) => primera.split(b).length - primera.split(a).length)[0];
+  // Registros (respetando comillas): cada uno con el número de línea donde empieza.
+  const registros = [];
+  let campo = '', reg = [], q = false, linea = 1, inicio = 1;
+  for (let i = 0; i < t.length; i++) {
+    const ch = t[i];
+    if (q) {
+      if (ch === '"' && t[i + 1] === '"') { campo += '"'; i++; } else if (ch === '"') q = false; else { if (ch === '\n') linea++; campo += ch; }
+    } else if (ch === '"') q = true;
+    else if (ch === sep) { reg.push(campo.trim()); campo = ''; } else if (ch === '\r') { /* nada */ } else if (ch === '\n') {
+      reg.push(campo.trim()); campo = '';
+      if (reg.some((x) => x !== '')) registros.push({ linea: inicio, campos: reg });
+      reg = []; linea++; inicio = linea;
+    } else campo += ch;
+  }
+  reg.push(campo.trim());
+  if (reg.some((x) => x !== '')) registros.push({ linea: inicio, campos: reg });
+  if (registros.length < 2) return { filas, errores: ['El archivo no tiene títulos y movimientos.'] };
+  const sinT = (x) => x.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim();
+  const tit = registros[0].campos.map(sinT);
+  const col = (re) => tit.findIndex((x) => re.test(x));
+  const iF = col(/^fecha$/) >= 0 ? col(/^fecha$/) : col(/^(fecha|date)/);
+  const iD = col(/desc|concepto|detalle|transac/);
+  const iR = col(/^(ref|referencia|documento|no\.? ?documento|cheque|numero)/);
+  const iDeb = col(/^(debito|debitos|cargo|cargos|retiro|retiros|debe)$/), iCred = col(/^(credito|creditos|abono|abonos|deposito|depositos|haber)$/);
+  const iM = col(/^(monto|importe|valor|amount|cantidad)( \((l|lps|hnl)\)| (l|lps|hnl))?$/);
   if (iF < 0 || (iM < 0 && iDeb < 0 && iCred < 0)) return { filas, errores: ['No se encontraron las columnas de fecha y monto (o débito y crédito).'] };
-  const aFecha = (t) => {
-    let m = /^(\d{4})-(\d{2})-(\d{2})/.exec(t);
+  const aFecha = (x) => {
+    let m = /^(\d{4})-(\d{2})-(\d{2})(?:[ T].*)?$/.exec(x);
     if (m) return `${m[1]}-${m[2]}-${m[3]}`;
-    m = /^(\d{1,2})[/.-](\d{1,2})[/.-](\d{4})$/.exec(t);
+    m = /^(\d{1,2})[/.-](\d{1,2})[/.-](\d{4})(?:\s.*)?$/.exec(x);
     return m ? `${m[3]}-${m[2].padStart(2, '0')}-${m[1].padStart(2, '0')}` : null;
   };
-  const aMonto = (t) => {
-    let s = String(t || '').replace(/\s|L|HNL/gi, '');
-    if (!s) return 0;
+  const aMonto = (x) => {
+    let v = String(x || '').replace(/\s|L|HNL/gi, '');
+    if (!v) return 0;
     let neg = false;
-    if (/^\(.*\)$/.test(s)) { neg = true; s = s.slice(1, -1); }
-    if (s.startsWith('-')) { neg = !neg; s = s.slice(1); }
+    if (/^\(.*\)$/.test(v)) { neg = true; v = v.slice(1, -1); }
+    if (v.startsWith('-')) { neg = !neg; v = v.slice(1); }
     // "2.500,50" (coma decimal): los puntos son de miles. "2,500.50": las comas son de miles.
-    if (/,\d{1,2}$/.test(s)) s = s.replace(/\./g, '').replace(',', '.');
-    else s = s.replace(/,/g, '');
-    const c = aCentavos(s);
+    if (/,\d{1,2}$/.test(v)) v = v.replace(/\./g, '').replace(',', '.');
+    else v = v.replace(/,/g, '');
+    const c = aCentavos(v);
     return c === null ? null : neg ? -c : c;
   };
-  for (const [n, l] of lineas.slice(1).entries()) {
-    const x = partir(l);
+  const columnas = registros[0].campos.length;
+  for (const { linea: n, campos: x } of registros.slice(1)) {
+    if (filas.length >= MAX_FILAS) { errores.push(`hay más de ${MAX_FILAS} movimientos: se leyeron los primeros ${MAX_FILAS}`); break; }
+    if (x.length !== columnas) { errores.push(`fila ${n}: tiene ${x.length} columnas y los títulos ${columnas}`); continue; }
     const f = aFecha(x[iF] || '');
     let m;
     if (iDeb >= 0 || iCred >= 0) {
       const deb = iDeb >= 0 ? aMonto(x[iDeb]) : 0, cred = iCred >= 0 ? aMonto(x[iCred]) : 0;
       m = deb === null || cred === null ? null : Math.abs(cred) - Math.abs(deb);
     } else m = aMonto(x[iM]);
-    if (!f || m === null || m === 0) { errores.push(`línea ${n + 2}`); continue; }
-    filas.push({ fecha: f, descripcion: (iD >= 0 && x[iD]) || 'Movimiento del banco', referencia: iR >= 0 ? x[iR] || '' : '', monto_centavos: m });
+    if (!f) { errores.push(`fila ${n}: la fecha no se entiende`); continue; }
+    if (m === null || m === 0) { errores.push(`fila ${n}: el monto no se entiende`); continue; }
+    filas.push({ fila: n, fecha: f, descripcion: (iD >= 0 && x[iD]) || 'Movimiento del banco', referencia: iR >= 0 ? x[iR] || '' : '', monto_centavos: m });
   }
   return { filas, errores };
 }

@@ -9,14 +9,24 @@ import { dinero, fecha, aCentavos, sumarDias } from '../formato.js';
 import { h, icono, aviso, cajaError, errorSimple, campo, conBoton, confirmar, pedirMotivo, titulo, filaIcono, chipEstado, monto,
   estadoVacio, mensaje } from '../ui.js';
 import { hayEnMenu } from '../menu.js';
-import { cuentasDinero, cuentasQuePagan, categoriasGasto, proveedores, olvidarDatos } from '../datos.js';
-import { hoy, selectCuentas, inputMonto, inputFecha, cifraChica } from '../formularios.js';
+import { cuentasDinero, cuentasQuePagan, categoriasGasto, proveedores, olvidarDatos, reiniciarAlSalir } from '../datos.js';
+import { hoy, selectCuentas, inputMonto, inputFecha, cifraChica, textoMonto } from '../formularios.js';
 
 const filtros = { desde: null, hasta: null, categoria: '', cuenta: '' };
+reiniciarAlSalir(() => Object.assign(filtros, { desde: null, hasta: null, categoria: '', cuenta: '' }));
+const LIMITE = 300;
+// Registrar pide gastos.registrar Y poder ver las cajas (dinero.ver): sin eso no hay de dónde elegir.
+const puedeRegistrar = () => puede('gastos.registrar') && puede('dinero.ver');
 const ESTADO = { aplicado: ['aplicado', 'Pagado'], pendiente_aprobacion: ['pendiente_aprobacion', null], rechazado: ['rechazado', null], anulado: ['anulado', null] };
 
 export async function mostrar(vista, ctx) {
-  const [cats, cuentas] = await Promise.all([categoriasGasto(true), puede('dinero.ver') ? cuentasDinero(true) : []]);
+  // La lista es de toda la empresa: pide dinero.ver. Quien solo puede registrar no tiene de dónde elegir la caja.
+  if (!puede('dinero.ver')) {
+    vista.append(h('section', { class: 'tarjeta', 'aria-labelledby': 't-gastos' }, titulo('h1', 'recibo', 'Todos los gastos', { id: 't-gastos' }),
+      mensaje('info', 'Le falta el permiso para ver las cajas y bancos.', 'Para ver los gastos y registrar uno desde cualquier caja o banco, pídale al dueño el permiso de ver el dinero.', { dataset: { info: 'sin-dinero-ver' } })));
+    return;
+  }
+  const [cats, cuentas] = await Promise.all([categoriasGasto(true), cuentasDinero(true)]);
   if (!ctx.sigueVigente()) return;
   if (!filtros.desde) { filtros.desde = sumarDias(hoy(), -30); filtros.hasta = hoy(); }
   const desde = inputFecha('gastos-desde', filtros.desde);
@@ -26,6 +36,7 @@ export async function mostrar(vista, ctx) {
     cuentasQuePagan(cuentas).map((c) => h('option', { value: c.cuenta_dinero_id }, c.nombre)));
   selCat.value = filtros.categoria; selCta.value = filtros.cuenta;
   const resumen = h('div', { class: 'cifras' });
+  const tope = h('div', {});
   const zona = h('div', {});
   const yo = (usuarioActual() || {}).id;
 
@@ -36,7 +47,8 @@ export async function mostrar(vista, ctx) {
     if (filtros.categoria) f.categoria_id = filtros.categoria;
     if (filtros.cuenta) f.cuenta_dinero_id = filtros.cuenta;
     let gastos;
-    try { gastos = await leer('v_gasto', f, { orden: 'numero.desc', limite: 300 }); } catch (err) { zona.replaceChildren(await cajaError(err)); return; }
+    try { gastos = await leer('v_gasto', f, { orden: 'numero.desc', limite: LIMITE }); } catch (err) { zona.replaceChildren(await cajaError(err)); return; }
+    tope.replaceChildren(gastos.length >= LIMITE ? mensaje('info', `Se muestran los últimos ${LIMITE} gastos y las cifras suman solo esos.`, 'Acorte las fechas para ver el total exacto.', { dataset: { info: 'tope-filas' } }) : '');
     const suma = (e) => gastos.filter((g) => g.estado === e).reduce((s, g) => s + Number(g.monto_centavos), 0);
     resumen.replaceChildren(cifraChica('Gastado en estas fechas', dinero(suma('aplicado')), { dato: 'gastos-total', clase: 'monto-sale' }),
       cifraChica('En espera de aprobación', dinero(suma('pendiente_aprobacion')), { dato: 'gastos-espera' }),
@@ -77,13 +89,12 @@ export async function mostrar(vista, ctx) {
   const nuevo = () => formularioGasto(vista, ctx);
   vista.append(h('section', { class: 'tarjeta', 'aria-labelledby': 't-gastos' },
     h('div', { class: 'titulo-con-boton' }, titulo('h1', 'recibo', 'Todos los gastos', { id: 't-gastos' }),
-      puede('gastos.registrar') && cats.length ? h('button', { type: 'button', class: 'boton boton-principal', id: 'nuevo-gasto', onclick: nuevo }, icono('mas'), 'Registrar un gasto') : null),
-    puede('dinero.ver') ? null : h('p', { class: 'ayuda' }, 'Aquí salen los gastos que usted registró.'),
+      puedeRegistrar() && cats.length ? h('button', { type: 'button', class: 'boton boton-principal', id: 'nuevo-gasto', onclick: nuevo }, icono('mas'), 'Registrar un gasto') : null),
     !cats.length ? estadoVacio({ icono: 'recibo', titulo: 'Primero cree sus categorías de gasto',
       texto: 'Las categorías dicen en qué se gasta (alquiler, luz, planilla, papelería). Se crean una vez en Ajustes.',
       boton: hayEnMenu(ctx.menu || [], 'ajustes', 'cajas') ? { texto: 'Ir a Ajustes', href: '#/ajustes/cajas', icono: 'ajustes' } : null })
       : [h('div', { class: 'dos-columnas filtros' }, campo('Desde', desde), campo('Hasta', hasta), campo('Categoría', selCat),
-        cuentas.length ? campo('Caja o banco', selCta) : null), resumen, zona]));
+        cuentas.length ? campo('Caja o banco', selCta) : null), tope, resumen, zona]));
   if (cats.length) await cargar();
 }
 
@@ -139,7 +150,7 @@ export async function formularioGasto(vista, ctx) {
     if (!selCuenta.value) return falla('Elija de qué caja o banco sale el dinero.', '', selCuenta);
     if (!selCat.value) return falla('Elija en qué se gastó (categoría).', '', selCat);
     const m = aCentavos(montoIn.value);
-    if (!m) return falla('Escriba el monto.', 'Solo números, por ejemplo 1150 o 1150.50', montoIn);
+    if (!m) return falla(textoMonto(montoIn, 'Escriba el monto.'), 'Solo números, por ejemplo 1150 o 1150.50', montoIn);
     if (desc.value.trim().length < 3) return falla('Escriba de qué es el gasto (descripción).', '', desc);
     if (!fechaIn.value) return falla('Escriba la fecha del gasto.', '', fechaIn);
     const datos = { cuenta_dinero_id: selCuenta.value, categoria_id: selCat.value, monto_centavos: m, descripcion: desc.value.trim(), fecha: fechaIn.value };

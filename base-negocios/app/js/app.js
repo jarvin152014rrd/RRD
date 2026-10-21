@@ -6,7 +6,8 @@ import { olvidarCatalogo } from './errores.js';
 import { cargarMarca, aplicarMarca, iniciales } from './marca.js';
 import { h, icono, chip, cajaError, limpiarAvisos } from './ui.js';
 import { vigilarImpresion } from './imprimible.js';
-import { olvidarDatos } from './datos.js';
+import { olvidarDatos, reiniciarTodo } from './datos.js';
+import { comaInvalida, MENSAJE_COMA } from './formato.js';
 
 const raiz = document.getElementById('app');
 const bandaSinConexion = document.getElementById('sin-conexion');
@@ -60,6 +61,7 @@ async function salir(texto = 'Cerró su sesión.', tipo = 'ok') {
   aplicarMarca({});
   olvidarPerfil();
   olvidarCatalogo();
+  reiniciarTodo(); // filtros de las pantallas (fechas, proveedor, banco...) vuelven a los de siempre
   olvidarDatos(); // listas en memoria (productos, cuentas, alcance...): el próximo usuario no ve las del anterior
   await api.salir();
   if (location.hash) history.replaceState(null, '', location.pathname);
@@ -115,6 +117,18 @@ function mostrarApp() {
 document.addEventListener('click', (ev) => {
   const a = ev.target.closest && ev.target.closest('a.pestana, a.subpestana, a.boton-barra');
   if (a && zonas && a.getAttribute('href') === location.hash) { ev.preventDefault(); alCambiarRuta(); }
+});
+
+// Campos de dinero o cantidad (inputmode="decimal"): una coma que no es de miles ("150,50") no se acepta;
+// se avisa debajo del campo, en todas las pantallas, con el mismo texto (app 0.7.1).
+document.addEventListener('input', (ev) => {
+  const el = ev.target;
+  if (!(el instanceof HTMLInputElement) || el.getAttribute('inputmode') !== 'decimal') return;
+  const mal = comaInvalida(el.value);
+  let nota = el.nextElementSibling && el.nextElementSibling.classList.contains('aviso-coma') ? el.nextElementSibling : null;
+  if (mal && !nota) { nota = h('p', { class: 'ayuda aviso-coma texto-rojo', role: 'alert' }, MENSAJE_COMA); el.after(nota); }
+  if (!mal && nota) nota.remove();
+  el.setAttribute('aria-invalid', mal ? 'true' : 'false');
 });
 
 // ---------------- Pendientes (campanita y subpestaña) ----------------

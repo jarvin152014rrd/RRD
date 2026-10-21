@@ -1,6 +1,6 @@
 // Piezas de formulario que comparten Compras y Dinero (app 0.7.0). Sin innerHTML: todo con ui.h.
 import { h } from './ui.js';
-import { dinero, paraCampo } from './formato.js';
+import { dinero, paraCampo, comaInvalida, MENSAJE_COMA } from './formato.js';
 import { perfilActual } from './sesion.js';
 
 // "Hoy" del negocio: la fecha que trae el servidor en el perfil (zona del negocio, America/Tegucigalpa).
@@ -53,4 +53,9 @@ export function cuandoVence(dias) {
   if (dias === 0) return 'vence hoy';
   if (dias > 0) return `vence en ${dias} ${dias === 1 ? 'día' : 'días'}`;
   return `venció hace ${-dias} ${dias === -1 ? 'día' : 'días'}`;
+}
+
+// Mensaje para un monto o cantidad que no se pudo leer: si trae una coma que no es de miles, lo dice.
+export function textoMonto(input, normal) {
+  return comaInvalida(input.value) ? MENSAJE_COMA : normal;
 }

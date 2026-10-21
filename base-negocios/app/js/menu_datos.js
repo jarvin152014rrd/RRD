@@ -53,7 +53,8 @@ export const MENU = [
   // Dinero: todo el dinero (para el dueño).
   { id: 'dinero', titulo: 'Dinero', icono: 'dinero', subs: [
     { id: 'donde', titulo: '¿Dónde está mi dinero?', icono: 'banco', modulos: ['dinero'], permisos: ['dinero.ver'], pantalla: 'dinero_donde' },
-    { id: 'gastos', titulo: 'Todos los gastos', icono: 'recibo', modulos: ['dinero'], permisos: ['gastos.registrar'], pantalla: 'dinero_gastos' },
+    // La lista pide dinero.ver; quien solo registra ve por qué no puede (le falta ver las cajas).
+    { id: 'gastos', titulo: 'Todos los gastos', icono: 'recibo', modulos: ['dinero'], permisos: ['gastos.registrar', 'dinero.ver'], pantalla: 'dinero_gastos' },
     { id: 'depositos', titulo: 'Depósitos y traslados', icono: 'deposito', modulos: ['dinero'], permisos: ['dinero.trasladar'], todos: ['dinero.ver'], pantalla: 'dinero_depositos' },
     { id: 'pagos-fijos', titulo: 'Pagos fijos', icono: 'calendario', modulos: ['dinero'], permisos: ['dinero.administrar'], todos: ['dinero.ver'], pantalla: 'dinero_pagos_fijos' },
     { id: 'fondos', titulo: 'Fondos y socios', icono: 'capas', modulos: ['fondos'], permisos: ['fondos.ver'], pantalla: 'dinero_fondos' },

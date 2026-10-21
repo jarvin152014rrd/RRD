@@ -50,11 +50,27 @@ export function porcentaje(p) {
   return `${n > 0 ? '+' : ''}${n.toLocaleString('en-US', { maximumFractionDigits: 1 })} %`;
 }
 
+// Lo que la persona escribe, sin "L" ni espacios. La coma SOLO vale como separador de miles en grupos de
+// 3 ("1,500" o "1,234,567.89"); cualquier otra coma ("150,50", "2,5") se rechaza (null) porque no se sabe si
+// era un decimal: el decimal va con punto. (Antes se borraban todas las comas y "150,50" quedaba 15050.)
+const CON_MILES = /^\d{1,3}(,\d{3})+(\.\d*)?$/;
+function limpiarNumero(texto) {
+  const t = String(texto ?? '').trim().replace(/^L\s*/i, '');
+  if (!t.includes(',')) return t;
+  return CON_MILES.test(t) ? t.replace(/,/g, '') : null;
+}
+// ¿Tiene una coma que no es de miles? Para avisar "Use punto para los decimales".
+export function comaInvalida(texto) {
+  const t = String(texto ?? '').trim().replace(/^L\s*/i, '');
+  return t.includes(',') && !CON_MILES.test(t);
+}
+export const MENSAJE_COMA = 'Use punto para los decimales, por ejemplo 150.50';
+
 // Lo que la persona escribe -> centavos enteros (sin decimales flotantes).
-// "1,234.5" -> 123450; "" o texto raro -> null. Solo números positivos con hasta 2 decimales.
+// "1,234.5" -> 123450; "150,50", "" o texto raro -> null. Solo números positivos con hasta 2 decimales.
 export function aCentavos(texto) {
-  const t = String(texto ?? '').trim().replace(/,/g, '').replace(/^L\s*/i, '');
-  const m = /^(\d{1,12})(?:\.(\d{0,2}))?$/.exec(t);
+  const t = limpiarNumero(texto);
+  const m = t === null ? null : /^(\d{1,12})(?:\.(\d{0,2}))?$/.exec(t);
   if (!m) return null;
   return Number(m[1]) * 100 + Number((m[2] || '').padEnd(2, '0'));
 }
@@ -63,18 +79,18 @@ export function aCentavos(texto) {
 // (el núcleo guarda el costo unitario en centavos con decimales). "12.505" -> 1250.5. Se arma con
 // texto (sin multiplicar flotantes) para que llegue exacto. Texto raro o 0 -> null.
 export function aCosto(texto) {
-  const t = String(texto ?? '').trim().replace(/,/g, '').replace(/^L\s*/i, '');
-  const m = /^(\d{1,12})(?:\.(\d{0,4}))?$/.exec(t);
+  const t = limpiarNumero(texto);
+  const m = t === null ? null : /^(\d{1,12})(?:\.(\d{0,4}))?$/.exec(t);
   if (!m) return null;
   const dec = (m[2] || '').padEnd(4, '0');
   const n = Number(`${Number(m[1]) * 100 + Number(dec.slice(0, 2))}.${dec.slice(2)}`);
   return n > 0 ? n : null;
 }
 
-// Cantidad (unidades, libras...): positiva con hasta 4 decimales. "2.5" -> 2.5; texto raro o 0 -> null.
+// Cantidad (unidades, libras...): positiva con hasta 4 decimales. "2.5" -> 2.5; "2,5", texto raro o 0 -> null.
 export function aCantidad(texto) {
-  const t = String(texto ?? '').trim().replace(/,/g, '');
-  if (!/^\d{1,12}(?:\.\d{0,4})?$/.test(t)) return null;
+  const t = limpiarNumero(String(texto ?? '').replace(/^L/i, 'x'));
+  if (t === null || !/^\d{1,12}(?:\.\d{0,4})?$/.test(t)) return null;
   const n = Number(t);
   return n > 0 ? n : null;
 }

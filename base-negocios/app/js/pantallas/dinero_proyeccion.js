@@ -6,12 +6,13 @@ import { rpc } from '../api.js';
 import { empresaId } from '../sesion.js';
 import { dinero, fecha } from '../formato.js';
 import { h, cajaError, titulo, filaIcono, monto, estadoVacio, mensaje, tabla, graficaBarras } from '../ui.js';
-import { alcance } from '../datos.js';
+import { alcance, reiniciarAlSalir } from '../datos.js';
 import { cifraChica } from '../formularios.js';
 
 const TIPO = { cobro: ['Cobro a cliente', 'cobrar'], pago_proveedor: ['Pago a proveedor', 'proveedor'], pago_fijo: ['Pago fijo', 'calendario'],
   comisiones: ['Comisiones', 'credencial'], dividendos: ['Dividendos a socios', 'usuarios'] };
 let dias = 30;
+reiniciarAlSalir(() => { dias = 30; });
 
 // "L 12,500" sin centavos para la etiqueta corta de la barra en el celular.
 const corto = (c) => { const n = Math.round(Number(c) / 100); return `${n < 0 ? '-' : ''}L ${Math.abs(n) >= 1000 ? Math.round(Math.abs(n) / 1000) + 'k' : Math.abs(n)}`; };
