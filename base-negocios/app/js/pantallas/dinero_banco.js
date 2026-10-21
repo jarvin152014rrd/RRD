@@ -39,7 +39,11 @@ export async function mostrar(vista, ctx) {
   }
   const [ha, hm] = hoy().split('-').map(Number);
   const meses = Array.from({ length: 13 }, (_, i) => { const d = new Date(Date.UTC(ha, hm - 1 - i, 1)); return `${d.getUTCFullYear()}-${d.getUTCMonth() + 1}`; });
-  if (!eleccion.banco || !bancos.some((b) => b.cuenta_dinero_id === eleccion.banco)) eleccion.banco = bancos[0].cuenta_dinero_id;
+  if (!eleccion.banco || !bancos.some((b) => b.cuenta_dinero_id === eleccion.banco)) {
+    // Primero el banco con el último mes trabajado (o el primero de la lista).
+    const ultimo = [...misConcs].sort((x, y) => y.anio - x.anio || y.mes - x.mes)[0];
+    eleccion.banco = ultimo ? ultimo.cuenta_dinero_id : bancos[0].cuenta_dinero_id;
+  }
   if (!eleccion.mes) eleccion.mes = meses[1];
   const selBanco = h('select', { id: 'banco-cuenta' }, bancos.map((b) => h('option', { value: b.cuenta_dinero_id }, `${b.nombre}${b.numero_enmascarado ? ' ' + b.numero_enmascarado : ''}`)));
   const selMes = h('select', { id: 'banco-mes' }, meses.map((m) => { const [a, n] = m.split('-').map(Number); return h('option', { value: m }, textoMes(a, n) + (m === meses[0] ? ' (este mes)' : '')); }));
@@ -156,10 +160,12 @@ function formularioCarga(zona, ctx, { banco, anio, mes, recargar, conciliacionId
 
 // ---------------- Paso 3 y 4: ver, marcar, crear lo que falta y cerrar ----------------
 async function verConciliacion(zona, ctx, conciliacionId, { banco, recargar }) {
-  let r, periodo;
+  let r, periodo, creadas;
   try {
     r = await rpc('ver_conciliacion', { p_conciliacion_id: conciliacionId });
     [periodo] = await leer('periodo', { empresa_id: empresaId(), anio: r.anio, mes: r.mes });
+    // Filas del banco a las que ya se les creó su movimiento (si fue en otro mes, se marcan solas en ese mes).
+    creadas = new Map((await leer('banco_diferencia', { empresa_id: empresaId() }, { limite: 1000 })).map((x) => [x.banco_movimiento_id, x.fecha_contable]));
   } catch (err) { zona.replaceChildren(await cajaError(err)); return; }
   if (!ctx.sigueVigente()) return;
   const abierta = r.estado !== 'cerrada';
@@ -187,12 +193,16 @@ async function verConciliacion(zona, ctx, conciliacionId, { banco, recargar }) {
         await escribir('registrar_diferencia_banco', { p_conciliacion_id: conciliacionId, p_banco_movimiento_id: b.banco_movimiento_id,
           p_datos: { tipo, descripcion: b.descripcion.slice(0, 200), fecha: fechaUsar }, p_id_operacion: idOp });
         olvidarDatos('cuentas');
-        aviso(`${tipo === 'comision_bancaria' ? 'Comisión' : 'Intereses'} de ${dinero(Math.abs(b.monto_centavos))} creados en ${r.cuenta} y marcados`, 'ok', 7000);
+        aviso(`${tipo === 'comision_bancaria' ? 'Comisión creada' : 'Intereses creados'} · ${dinero(Math.abs(b.monto_centavos))} en ${r.cuenta}${mesCerrado ? ' · con fecha de hoy: se marca solo en este mes' : ' y marcados'}`, 'ok', 7000);
         recargarAqui();
       } catch (err) { zonaAcciones.replaceChildren(await cajaError(err)); }
     });
   };
-  const filasBanco = (r.en_banco_no_en_sistema || []).map((b) => filaIcono({
+  const filasBanco = (r.en_banco_no_en_sistema || []).map((b) => creadas.has(b.banco_movimiento_id) ? filaIcono({
+    icono: 'check_circulo', color: 'verde', titulo: h('strong', {}, b.descripcion), detalle: [fecha(b.fecha), b.referencia].filter(Boolean).join(' · '),
+    derecha: [firmado(b.monto_centavos), chip(`Creado el ${fecha(creadas.get(b.banco_movimiento_id))}`, 'verde')],
+    abajo: h('p', { class: 'ayuda' }, 'Ya está en el programa con fecha de otro mes: se marca solo en ese mes.'),
+    props: { dataset: { banco: b.banco_movimiento_id, creado: 'si' } } }) : filaIcono({
     icono: 'banco', color: 'dorado',
     burbuja: conciliar ? h('label', { class: 'casilla-toque' }, radio('banco', b.banco_movimiento_id, `Elegir ${b.descripcion} del ${fecha(b.fecha)}`, b)) : null,
     titulo: h('strong', {}, b.descripcion), detalle: [fecha(b.fecha), b.referencia].filter(Boolean).join(' · '),
@@ -237,7 +247,7 @@ async function verConciliacion(zona, ctx, conciliacionId, { banco, recargar }) {
     aviso(`${r.cuenta}: ${textoMes(r.anio, r.mes)} cuadrado y cerrado`, 'ok', 7000);
     recargar();
   });
-  const formula = `${dinero(r.saldo_sistema_centavos)} − ${dinero(r.en_sistema_no_en_banco_centavos)} + ${dinero(r.en_banco_no_en_sistema_centavos)} = ${dinero(r.saldo_banco_calculado_centavos)}`;
+  const formula = `${dinero(r.saldo_sistema_centavos)} − (${dinero(r.en_sistema_no_en_banco_centavos)}) + (${dinero(r.en_banco_no_en_sistema_centavos)}) = ${dinero(r.saldo_banco_calculado_centavos)}`;
   zona.replaceChildren(...[
     h('section', { class: 'tarjeta', 'aria-labelledby': 't-conc' },
       h('div', { class: 'titulo-con-total' }, titulo('h2', 'conciliar', `${r.cuenta} · ${textoMes(r.anio, r.mes)}`, { id: 't-conc' }),
@@ -319,8 +329,9 @@ export function leerCsvBanco(texto) {
     let neg = false;
     if (/^\(.*\)$/.test(s)) { neg = true; s = s.slice(1, -1); }
     if (s.startsWith('-')) { neg = !neg; s = s.slice(1); }
-    if (/,\d{1,2}$/.test(s) && !/\./.test(s)) s = s.replace(',', '.');
-    s = s.replace(/,/g, '');
+    // "2.500,50" (coma decimal): los puntos son de miles. "2,500.50": las comas son de miles.
+    if (/,\d{1,2}$/.test(s)) s = s.replace(/\./g, '').replace(',', '.');
+    else s = s.replace(/,/g, '');
     const c = aCentavos(s);
     return c === null ? null : neg ? -c : c;
   };

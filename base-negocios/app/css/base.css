@@ -540,3 +540,7 @@ a.fila-icono:hover .fila-icono-titulo { text-decoration: underline; }
 .filtros { margin-bottom: 12px; }
 .linea-isv { margin-top: 6px; }
 .linea-isv summary { cursor: pointer; font-size: 15px; color: var(--color-suave, #4a4a4a); min-height: 44px; display: flex; align-items: center; }
+.grafica-negativa .grafica-barra { background: var(--color-peligro, #a12a1e); }
+.grafica-negativa .grafica-valor { color: var(--color-peligro, #a12a1e); }
+.pasos-simples { margin: 0; padding-left: 22px; font-size: 15px; display: flex; flex-direction: column; gap: 4px; }
+.fila-banco > .boton { align-self: flex-start; }

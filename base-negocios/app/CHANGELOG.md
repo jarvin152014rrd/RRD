@@ -21,6 +21,30 @@
   vencido primero y tres cifras (debo, vencido, vence en 7 días). **Pagar** total o parcial diciendo de qué caja
   o banco sale; avisa si es parcial y cuánto quedará; no deja pagar de más. Mensaje: "Pago de L 4,500.00 a
   Distribuidora X · sale de BAC cheques".
+### Parte 2: Dinero (además de "¿Dónde está mi dinero?")
+- **Todos los gastos:** lista de toda la empresa con filtros (fecha, categoría, caja o banco), cifras de lo
+  gastado y lo que espera aprobación; **Registrar un gasto** desde cualquier caja o banco (con factura e ISV
+  opcional, que separa el núcleo) y anular o cancelar con motivo. Si pasa el tope del puesto dice claro "en
+  espera de aprobación · todavía no sale dinero" (lo decide `registrar_gasto`).
+- **Depósitos y traslados:** **Mover dinero** (depositar al banco, retirar, pasar entre cuentas, reponer la caja
+  chica) en una sola operación (`trasladar_dinero`); depósitos **en tránsito** con días y alerta, **Confirmar
+  depósito** (`confirmar_deposito`) y anular con motivo (`anular_operacion_dinero`); últimos movimientos.
+- **Pagos fijos:** lista con próxima fecha y chips (atrasado, vence pronto, al día) y lo que se va al mes;
+  crear, editar (con motivo), desactivar y activar (`crear_pago_fijo` / `editar_pago_fijo`); **Pagar ahora** con
+  el monto real y la cuenta (`registrar_pago_fijo`, respeta topes).
+- **Fondos y socios** (módulo fondos): cada fondo con saldo, de dónde viene, en qué se usó, meta y en qué
+  cuenta está; socios con lo que se les debe y **Pagar su parte** (`pagar_dividendos`); movimientos de los
+  fondos; **Usar un fondo** (pide comprobante: sin almacenamiento configurado lo explica y no deja guardar);
+  **Repartir la utilidad de un mes** cerrado y **Nuevo fondo** (solo el dueño).
+- **Cuadrar con el banco** (módulo conciliación): elegir banco y mes, cargar el estado de cuenta (CSV del banco
+  con coma, punto y coma o tabulador, débito/crédito o monto; o escrito a mano), ver programa, banco y diferencia
+  con la fórmula explicada, **marcar como el mismo movimiento**, crear comisión o intereses del banco, deshacer
+  y **cerrar el mes**. Si el mes ya está cerrado en los libros, lo creado va con fecha de hoy y se dice.
+- **Proyección:** 30, 60 o 90 días por semana (`proyeccion_flujo`): disponible hoy, saldo al final, gráfica de
+  barras (rojo si una semana queda en negativo), tabla por semana, detalle de lo que entra y sale, cobros vencidos
+  aparte y la fórmula en una línea. A un usuario limitado a su sucursal no se le muestra (es de toda la empresa).
+- Menú: Depósitos, Pagos fijos y Cuadrar con el banco piden además `dinero.ver` (sin él no podrían leer las cuentas).
+
 - Cada formulario manda un `id_operacion` fijo: un doble envío o un reintento sin internet no duplica (probado).
 - **Arreglo:** "Editar cliente" no guardaba (la app mandaba un `id_operacion` que `editar_tercero` no recibe).
 - **Arreglo:** al salir se borran las listas guardadas en memoria (productos, cuentas…): quien entre después
@@ -29,7 +53,7 @@
   `aCosto`, `aCantidad`, `sumarDias`, `diasEntre`; más estados en `chipEstado`.
 - Demo: módulos de fondos y conciliación, dos pagos fijos, dos fondos y dos socios con el reparto del mes pasado
   (mes cerrado), una compra de contado y una venta de taladros y el estado de cuenta del BAC del mes pasado.
-- Pruebas nuevas en `app-pruebas/probar_compras_dinero.cjs` (las corre `probar_app.sh`). Cascarón `cascaron-0.7.0`.
+- Pruebas nuevas en `app-pruebas/probar_compras_dinero.cjs` (17; las corre `probar_app.sh`). Cascarón `cascaron-0.7.0`.
 
 ## app 0.6.1 (núcleo 0.15.0, sin migraciones nuevas) — Arreglos de la revisión de la ronda 2
 

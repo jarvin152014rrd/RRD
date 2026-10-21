@@ -1,8 +1,21 @@
 # Pendientes de la app (0.7.0)
 
-- Pantallas en construcción (con su estado vacío amable): apartados, cajas abiertas, dinero (salvo ¿Dónde está mi
-  dinero?), reportes, proyección y cierre de mes.
-  HECHO (0.7.0): Compras (compras, proveedores, pagar a proveedores).
+- Pantallas en construcción (con su estado vacío amable): apartados, cajas abiertas, reportes y cierre de mes.
+  HECHO (0.7.0): Compras (compras, proveedores, pagar a proveedores) y Dinero (gastos, depósitos y traslados,
+  pagos fijos, fondos y socios, cuadrar con el banco, proyección).
+- Fondos: el núcleo no tiene "aporte de capital" de un socio (solo repartos de utilidad y su pago). Faltan en
+  pantalla: guardar socios y la regla de reparto, editar o desactivar un fondo y anular un reparto o un pago a
+  socio (el núcleo sí los tiene).
+- Usar un fondo exige el comprobante subido a Supabase Storage (`bucketComprobantes` en config.js): sin eso la
+  pantalla lo explica y no deja guardar. No probado contra Storage real.
+- Cuadrar con el banco: falta crear "otro" movimiento (pide un código de cuenta) y emparejar varias filas contra
+  un movimiento (pendiente en el núcleo). La lectura del CSV cubre formatos comunes; probar con los CSV reales de
+  BAC, Atlántida, Ficohsa y Banpaís.
+- Gastos: la foto del comprobante, sin Storage, queda solo como nombre en la descripción (como en Caja).
+- NÚCLEO (usuario limitado a su sucursal): `proyeccion_flujo` es de toda la empresa (la app no la muestra a un
+  usuario limitado); `pagos_fijos_proximos` y `pago_fijo` tampoco se limitan (la app oculta los que se pagan desde
+  una cuenta que no ve); `estado_fondos` trae el saldo de cuentas de otra sucursal (la app no lo muestra);
+  `v_conciliacion` trae bancos de otras sucursales (la app solo muestra los bancos que el usuario ve).
 - Compras: solo de productos que se guardan en inventario (así es `registrar_compra` del núcleo: un servicio da
   `PRODUCTO_INVALIDO`). Un servicio comprado (flete, reparación) se registra como gasto en Dinero.
 - Compras: el total de la pantalla es aproximado (calculado en el navegador con la tasa de cada producto); el

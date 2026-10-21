@@ -53,13 +53,13 @@ export const MENU = [
   // Dinero: todo el dinero (para el dueño).
   { id: 'dinero', titulo: 'Dinero', icono: 'dinero', subs: [
     { id: 'donde', titulo: '¿Dónde está mi dinero?', icono: 'banco', modulos: ['dinero'], permisos: ['dinero.ver'], pantalla: 'dinero_donde' },
-    { id: 'gastos', titulo: 'Todos los gastos', icono: 'recibo', modulos: ['dinero'], permisos: ['gastos.registrar'] },
-    { id: 'depositos', titulo: 'Depósitos y traslados', icono: 'deposito', modulos: ['dinero'], permisos: ['dinero.trasladar'] },
-    { id: 'pagos-fijos', titulo: 'Pagos fijos', icono: 'calendario', modulos: ['dinero'], permisos: ['dinero.administrar'] },
-    { id: 'fondos', titulo: 'Fondos y socios', icono: 'capas', modulos: ['fondos'], permisos: ['fondos.ver'] },
-    { id: 'banco', titulo: 'Cuadrar con el banco', icono: 'conciliar', modulos: ['conciliacion'], permisos: ['conciliacion.ver'] },
+    { id: 'gastos', titulo: 'Todos los gastos', icono: 'recibo', modulos: ['dinero'], permisos: ['gastos.registrar'], pantalla: 'dinero_gastos' },
+    { id: 'depositos', titulo: 'Depósitos y traslados', icono: 'deposito', modulos: ['dinero'], permisos: ['dinero.trasladar'], todos: ['dinero.ver'], pantalla: 'dinero_depositos' },
+    { id: 'pagos-fijos', titulo: 'Pagos fijos', icono: 'calendario', modulos: ['dinero'], permisos: ['dinero.administrar'], todos: ['dinero.ver'], pantalla: 'dinero_pagos_fijos' },
+    { id: 'fondos', titulo: 'Fondos y socios', icono: 'capas', modulos: ['fondos'], permisos: ['fondos.ver'], pantalla: 'dinero_fondos' },
+    { id: 'banco', titulo: 'Cuadrar con el banco', icono: 'conciliar', modulos: ['conciliacion'], permisos: ['conciliacion.ver'], todos: ['dinero.ver'], pantalla: 'dinero_banco' },
     // proyeccion_flujo (núcleo 042) pide contabilidad.ver.
-    { id: 'proyeccion', titulo: 'Proyección', icono: 'proyeccion', modulos: ['dinero'], permisos: ['contabilidad.ver'] },
+    { id: 'proyeccion', titulo: 'Proyección', icono: 'proyeccion', modulos: ['dinero'], permisos: ['contabilidad.ver'], pantalla: 'dinero_proyeccion' },
   ] },
   // Reportes: solo mirar.
   { id: 'reportes', titulo: 'Reportes', icono: 'reportes', subs: [

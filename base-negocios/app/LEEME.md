@@ -77,7 +77,7 @@ cierra en la base y además borra sus sesiones de Supabase Auth). Sin `modo` (la
 | `js/marca.js` | Nombre comercial, logo y colores del negocio (`marca_empresa`). Cambia solo el color principal y el de acento, con **contraste automático** (texto blanco u oscuro, AA); los colores con significado no cambian. Recuerda la marca en el equipo para la pantalla de entrar. |
 | `js/excel.js` | Arma y lee el `.xlsx` (columnas azules/grises, hoja Instrucciones) para `exportar_plantilla` / `importar_*`. |
 | `vendor/xlsx.bundle.js` | SheetJS (`xlsx-js-style` 1.2.0, licencia Apache 2.0 en `vendor/`), copia local: funciona sin internet. Se carga solo al usar Excel. |
-| `js/pantallas/*.js` | Una pantalla por archivo: `inicio`, `pendientes` (usa `alertas` y `aprobaciones`), `dinero_donde`, `mas`, `entrar`, `en_construccion`, `vender` (carrito; también lo usa `cotizaciones`), `ventas_dia`, `cotizaciones`, `devoluciones`, `caja_turno`, `caja_dinero`, `caja_gasto`, `clientes`, `me_deben`; Compras: `compras`, `compras_proveedores`, `compras_pagos`; Inventario: `inv_productos`, `inv_existencias`, `inv_conteo`, `inv_movimientos`, `inv_traslados`, `inv_excel`; Ajustes: `aj_negocio`, `aj_usuarios`, `aj_cajas`, `aj_impuestos`, `aj_reglas`, `aj_datos`. |
+| `js/pantallas/*.js` | Una pantalla por archivo: `inicio`, `pendientes` (usa `alertas` y `aprobaciones`), `dinero_donde`, `mas`, `entrar`, `en_construccion`, `vender` (carrito; también lo usa `cotizaciones`), `ventas_dia`, `cotizaciones`, `devoluciones`, `caja_turno`, `caja_dinero`, `caja_gasto`, `clientes`, `me_deben`; Compras: `compras`, `compras_proveedores`, `compras_pagos`; Dinero: `dinero_gastos`, `dinero_depositos`, `dinero_pagos_fijos`, `dinero_fondos`, `dinero_banco`, `dinero_proyeccion`; Inventario: `inv_productos`, `inv_existencias`, `inv_conteo`, `inv_movimientos`, `inv_traslados`, `inv_excel`; Ajustes: `aj_negocio`, `aj_usuarios`, `aj_cajas`, `aj_impuestos`, `aj_reglas`, `aj_datos`. |
 
 ## Agregar una pantalla
 
@@ -101,6 +101,19 @@ cierra en la base y además borra sus sesiones de Supabase Auth). Sin `modo` (la
   primero los pagos (abajo, en la misma compra).
 - **Proveedores:** **Nuevo proveedor** con su RTN y los días de plazo que le da. En **Ver** está lo que le debe
   y todo lo que le ha comprado y pagado.
+
+## Cómo se usa Dinero (0.7.0)
+
+- **Un gasto pagado del banco u otra caja:** Dinero > Todos los gastos > **Registrar un gasto**. Elija de dónde
+  sale, en qué se gastó y el monto. Si pasa su tope, queda esperando que el dueño lo apruebe.
+- **Llevar efectivo al banco:** Dinero > Depósitos y traslados > **Mover dinero** > Depositar al banco. Cuando lo
+  vea en el banco, toque **Confirmar depósito**.
+- **Pagos fijos:** anote una vez el alquiler, la luz o la planilla. Cuando pague, toque **Pagar ahora** y escriba
+  el monto real.
+- **Cuadrar con el banco:** elija el banco y el mes, suba el CSV del estado de cuenta y el saldo final. Lo que
+  coincide se marca solo; elija uno del banco y uno del programa y toque **Marcar como el mismo**; las comisiones
+  e intereses se crean con un botón. Cuando dice "Cuadra", toque **Cerrar este mes**.
+- **Proyección:** cuánto dinero tendrá cada semana. Si una semana sale en rojo, cobre antes o mueva pagos.
 
 ## Cómo se usa (0.6.0)
 

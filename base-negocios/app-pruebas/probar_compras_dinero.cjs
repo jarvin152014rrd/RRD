@@ -325,6 +325,246 @@ const existencia = (prod, bod = 'B1') => num('dueno@demo.hn', `(SELECT coalesce(
   });
 
   // ============================ PARTE 2: DINERO ============================
+  await prueba('todos los gastos: filtros, gasto desde el banco (sale de BAC, monto a mano) y del admin sobre su tope queda en espera', async () => {
+    const p = d.p;
+    await ir(p, 'dinero/gastos', '#lista-gastos');
+    const hoy = sql('dueno@demo.hn', `public.hoy_local('${EM}')`);
+    const n = num('dueno@demo.hn', `(SELECT count(*) FROM public.v_gasto WHERE empresa_id = '${EM}' AND fecha_contable BETWEEN '${hoy}'::date - 30 AND '${hoy}')`);
+    afirmar(await p.locator('#lista-gastos [data-gasto]').count() === n, 'cantidad de gastos distinta a la base');
+    await p.selectOption('#gastos-categoria', id('CAT_LUZ'));
+    await p.waitForFunction(() => [...document.querySelectorAll('#lista-gastos [data-gasto]')].every((x) => x.innerText.includes('Energía')));
+    await p.selectOption('#gastos-categoria', '');
+    const bac = saldoCuenta('BAC');
+    await p.click('#nuevo-gasto');
+    await p.waitForSelector('#gasto-cuenta');
+    await p.click('#gasto-guardar');
+    afirmar((await texto(p, '#contenido .mensaje-error')).includes('de qué caja o banco'), 'vacío no pide la cuenta');
+    await p.selectOption('#gasto-cuenta', id('BAC'));
+    await p.selectOption('#gasto-categoria', id('CAT_MANT'));
+    await p.fill('#gasto-monto', '1,150.00');
+    await p.fill('#gasto-descripcion', 'Papel y tinta para la oficina');
+    await p.check('#gasto-con-factura');
+    await p.fill('#gasto-factura', 'F-9001');
+    await p.fill('#gasto-rtn', '0801-1999-000333');
+    await p.click('#gasto-guardar');
+    const conf = await confirmarDialogo(p);
+    afirmar(conf.includes('Gasto de L 1,150.00') && conf.includes('sale de BAC cheques'), 'confirmación del gasto: ' + conf);
+    await p.waitForSelector('[data-info=gasto-guardado]');
+    // A mano: 115,000 con ISV 15 % incluido -> ISV 15,000 (L 150.00).
+    afirmar((await texto(p, '[data-info=gasto-guardado]')).includes('L 150.00 es ISV'), 'no separa el ISV: ' + await texto(p, '[data-info=gasto-guardado]'));
+    afirmar(saldoCuenta('BAC') === bac - 115000, 'el BAC no bajó L 1,150.00');
+    // Admin con tope de L 5,000: un gasto de L 6,000 queda en espera, sin mover dinero.
+    const { ctx, p: pa } = await nueva();
+    await entrar(pa, 'admin@demo.hn');
+    await ir(pa, 'dinero/gastos', '#nuevo-gasto');
+    await pa.click('#nuevo-gasto');
+    await pa.waitForSelector('#gasto-cuenta');
+    afirmar((await texto(pa, '#contenido')).includes('queda en espera de aprobación'), 'no avisa del tope antes de guardar');
+    await pa.selectOption('#gasto-cuenta', id('BAC'));
+    await pa.selectOption('#gasto-categoria', id('CAT_MANT'));
+    await pa.fill('#gasto-monto', '6000');
+    await pa.fill('#gasto-descripcion', 'Estantes para la bodega');
+    await pa.click('#gasto-guardar');
+    await confirmarDialogo(pa);
+    await pa.waitForSelector('[data-info=gasto-en-espera]');
+    afirmar((await texto(pa, '[data-info=gasto-en-espera]')).includes('en espera de aprobación'), 'no dice que queda en espera');
+    afirmar(saldoCuenta('BAC') === bac - 115000, 'el gasto en espera movió dinero');
+    await ctx.close();
+  });
+
+  await prueba('depósitos y traslados: depósito queda en tránsito, confirmar lo pasa al banco; traslado entre bancos', async () => {
+    const p = d.p;
+    await ir(p, 'dinero/depositos', '#mover-dinero');
+    const fuerte = saldoCuenta('FUERTE'), bac = saldoCuenta('BAC'), atl = saldoCuenta('ATL');
+    await p.click('#mover-dinero');
+    await p.waitForSelector('#mover-origen');
+    await p.selectOption('#mover-origen', id('FUERTE'));
+    await p.selectOption('#mover-destino', id('BAC'));
+    await p.fill('#mover-monto', '500');
+    await p.fill('#mover-referencia', 'Boleta 7777');
+    await p.click('#mover-guardar');
+    const conf = await confirmarDialogo(p);
+    afirmar(conf.includes('sale de Caja fuerte y entra a BAC cheques') && conf.includes('tránsito'), 'confirmación del depósito: ' + conf);
+    await p.waitForSelector('[data-info=movimiento-guardado]');
+    afirmar(saldoCuenta('FUERTE') === fuerte - 50000 && saldoCuenta('BAC') === bac, 'el depósito no quedó en tránsito');
+    await ir(p, 'dinero/depositos', '#lista-transito');
+    const op = sql('dueno@demo.hn', `(SELECT operacion_id FROM public.v_deposito_transito WHERE referencia = 'Boleta 7777')`);
+    await p.locator(`[data-transito="${op}"] button`, { hasText: 'Confirmar depósito' }).click();
+    await p.click('#confirmar-deposito-si');
+    await p.waitForFunction((x) => !document.querySelector(`[data-transito="${x}"]`) && document.getElementById('lista-operaciones'), op);
+    afirmar(saldoCuenta('BAC') === bac + 50000, 'confirmar no pasó el dinero al BAC');
+    // Traslado BAC -> Atlántida (un banco a otro).
+    await p.click('#mover-dinero');
+    await p.check('input[name=mover-tipo][value=traslado]');
+    await p.selectOption('#mover-origen', id('BAC'));
+    await p.selectOption('#mover-destino', id('ATL'));
+    await p.fill('#mover-monto', '250.50');
+    await p.click('#mover-guardar');
+    await confirmarDialogo(p);
+    await p.waitForSelector('[data-info=movimiento-guardado]');
+    afirmar(saldoCuenta('ATL') === atl + 25050 && saldoCuenta('BAC') === bac + 50000 - 25050, 'el traslado no cuadra');
+  });
+
+  await prueba('pagos fijos: lista con próxima fecha, crear, pagar ahora con el monto real y desactivar', async () => {
+    const p = d.p;
+    await ir(p, 'dinero/pagos-fijos', '#lista-fijos');
+    const n = num('dueno@demo.hn', `(SELECT count(*) FROM public.pagos_fijos_proximos('${EM}'))`);
+    afirmar(await p.locator('#lista-fijos [data-pago-fijo]').count() === n, 'cantidad de pagos fijos distinta');
+    afirmar(await p.locator(`[data-pago-fijo="${id('PF_ALQ')}"]`).getAttribute('data-estado') === 'vencido', 'el alquiler atrasado no sale vencido');
+    await p.click('#nuevo-pago-fijo');
+    await p.fill('#fijo-nombre', 'Internet de la tienda');
+    await p.selectOption('#fijo-categoria', id('CAT_MANT'));
+    await p.fill('#fijo-estimado', '950');
+    await p.fill('#fijo-dia', '10');
+    await p.click('#fijo-guardar');
+    await p.waitForSelector('#lista-fijos');
+    afirmar(num('dueno@demo.hn', `(SELECT count(*) FROM public.pago_fijo WHERE nombre = 'Internet de la tienda' AND activo)`) === 1, 'no se creó el pago fijo');
+    // Pagar ahora el alquiler con el monto real (L 12,350.00), sale de BAC.
+    const bac = saldoCuenta('BAC');
+    const vence = sql('dueno@demo.hn', `(SELECT proximo_vence_el FROM public.pagos_fijos_proximos('${EM}') WHERE pago_fijo_id = demo.id('PF_ALQ'))`);
+    await p.locator(`[data-pago-fijo="${id('PF_ALQ')}"] button`, { hasText: 'Pagar ahora' }).click();
+    await p.waitForSelector('#fijo-monto');
+    afirmar(await p.inputValue('#fijo-monto') === '12000.00', 'no empieza con el monto estimado');
+    await p.fill('#fijo-monto', '12350');
+    await p.click('#fijo-pagar');
+    const conf = await confirmarDialogo(p);
+    afirmar(conf.includes('L 12,350.00') && conf.includes('sale de BAC cheques'), 'confirmación del pago fijo: ' + conf);
+    await p.waitForSelector('[data-info=fijo-pagado]');
+    afirmar(saldoCuenta('BAC') === bac - 1235000, 'el BAC no bajó el monto real');
+    afirmar(num('dueno@demo.hn', `(SELECT count(*) FROM public.gasto WHERE pago_fijo_id = demo.id('PF_ALQ') AND pago_fijo_vence_el = '${vence}' AND monto_centavos = 1235000)`) === 1, 'no quedó el gasto del vencimiento más viejo');
+    await ir(p, 'dinero/pagos-fijos', '#lista-fijos');
+    const internet = sql('dueno@demo.hn', `(SELECT id FROM public.pago_fijo WHERE nombre = 'Internet de la tienda')`);
+    await p.locator(`[data-pago-fijo="${internet}"] button`, { hasText: 'Desactivar' }).click();
+    await dialogoMotivo(p, 'Ya no se usa este servicio');
+    await p.waitForSelector(`#lista-fijos-inactivos [data-pago-fijo="${internet}"]`);
+  });
+
+  await prueba('fondos y socios: saldos como la base, de dónde vienen y en qué cuenta están; pagar a un socio; usar un fondo pide el comprobante', async () => {
+    const p = d.p;
+    await ir(p, 'dinero/fondos', '#lista-fondos');
+    const e = JSON.parse(sql('dueno@demo.hn', `public.estado_fondos('${EM}')`));
+    afirmar((await texto(p, '[data-dato=total-fondos]')).trim() === lempiras(e.total_reservas_centavos), 'total de fondos distinto');
+    for (const f of e.fondos) afirmar((await texto(p, `[data-fondo="${f.fondo_id}"] [data-dato=saldo-fondo]`)).trim() === lempiras(f.saldo_centavos), 'saldo del fondo ' + f.nombre);
+    afirmar((await texto(p, `[data-fondo="${id('F_REINV')}"]`)).includes('separado en Atlántida ahorro'), 'no dice en qué cuenta está');
+    afirmar((await texto(p, '[data-info=regla]')).includes('Reinversión 40 %'), 'no muestra la regla');
+    // Reparto del demo, a mano: Reinversión 40 % + Emergencias 30 % + socios 30 % (María 60 %, Carlos 40 %) suman la base.
+    const base = num('dueno@demo.hn', `(SELECT base_centavos FROM public.v_distribucion WHERE empresa_id = '${EM}' AND NOT anulada LIMIT 1)`);
+    const partes = e.fondos.reduce((s, f) => s + Number(f.aportes_centavos), 0) + e.socios.reduce((s, x) => s + Number(x.dividendos_pendientes_centavos), 0);
+    afirmar(partes === base, `las partes (${partes}) no suman la base (${base})`);
+    const socio = e.socios.find((x) => x.nombre === 'Carlos Mejía');
+    const atl = saldoCuenta('ATL');
+    await p.locator(`[data-socio="${socio.socio_id}"] button`).click();
+    await p.fill('#socio-monto', '100');
+    await p.selectOption('#socio-cuenta', id('ATL'));
+    await p.click('#socio-pagar');
+    const conf = await confirmarDialogo(p);
+    afirmar(conf.includes('Pago de L 100.00 a Carlos Mejía · sale de Atlántida ahorro'), 'confirmación a socio: ' + conf);
+    await p.waitForSelector('#lista-fondos');
+    afirmar(saldoCuenta('ATL') === atl - 10000, 'el pago al socio no salió de Atlántida');
+    afirmar((await texto(p, `[data-socio="${socio.socio_id}"] [data-dato=pendiente-socio]`)).trim() === lempiras(socio.dividendos_pendientes_centavos - 10000), 'pendiente del socio');
+    await p.click('#usar-fondo');
+    await p.waitForSelector('#uso-fondo');
+    afirmar(await p.locator('[data-info=sin-almacenamiento]').count() === 1 && await p.locator('#uso-guardar').isDisabled(), 'sin almacenamiento debería explicar y no dejar guardar');
+  });
+
+  await prueba('cuadrar con el banco: marcar el cheque a mano, crear comisión e intereses, cuadra y se cierra; CSV del banco', async () => {
+    const p = d.p;
+    await ir(p, 'dinero/banco', '#solo-banco');
+    afirmar(await p.inputValue('#banco-cuenta') === id('BAC'), 'no abre el banco con meses trabajados');
+    const r0 = JSON.parse(sql('dueno@demo.hn', `public.ver_conciliacion(demo.id('CONC1'))`));
+    afirmar((await texto(p, '[data-dato=saldo-sistema]')).trim() === lempiras(r0.saldo_sistema_centavos), 'saldo del sistema distinto');
+    afirmar((await texto(p, '[data-info=formula]')).includes('saldo del banco'), 'sin la fórmula explicada');
+    // Montos distintos: no deja marcar.
+    const com = r0.en_banco_no_en_sistema.find((x) => x.descripcion.startsWith('COMISION'));
+    const che = r0.en_banco_no_en_sistema.find((x) => x.descripcion.startsWith('CHEQUE'));
+    const sis = r0.en_sistema_no_en_banco[0];
+    await p.check(`[data-banco="${com.banco_movimiento_id}"] input[type=radio]`);
+    await p.check(`[data-sistema="${sis.dinero_movimiento_id}"] input[type=radio]`);
+    await p.click('#banco-marcar');
+    afirmar((await texto(p, '#contenido .mensaje-error')).includes('Los montos no son iguales'), 'deja marcar montos distintos');
+    await p.check(`[data-banco="${che.banco_movimiento_id}"] input[type=radio]`);
+    await p.click('#banco-marcar');
+    await p.waitForFunction((x) => !document.querySelector(`[data-banco="${x}"]`), che.banco_movimiento_id);
+    // Comisión (sale) e intereses (entra): el mes pasado está cerrado, van con fecha de hoy.
+    await p.locator(`[data-banco="${com.banco_movimiento_id}"] button`, { hasText: 'comisión' }).click();
+    afirmar((await confirmarDialogo(p)).includes('fecha de hoy'), 'no explica que el mes está cerrado');
+    // Ya creada: no se ofrece crearla otra vez y dice que se marca sola en el mes de su fecha.
+    await p.waitForSelector(`[data-banco="${com.banco_movimiento_id}"][data-creado=si]`);
+    afirmar(await p.locator(`[data-banco="${com.banco_movimiento_id}"] button`).count() === 0, 'ofrece crear otra vez la comisión');
+    await p.locator('#solo-banco [data-banco] button', { hasText: 'paga el banco' }).click();
+    await confirmarDialogo(p);
+    await p.waitForFunction(() => document.querySelectorAll('#solo-banco [data-creado=si]').length === 2);
+    await p.waitForSelector('#contenido [data-info=cuadra]');
+    const r1 = JSON.parse(sql('dueno@demo.hn', `public.ver_conciliacion(demo.id('CONC1'))`));
+    afirmar(r1.cuadra && r1.diferencia_centavos === 0 && !r1.en_sistema_no_en_banco.length, 'no cuadra después de marcar');
+    afirmar(num('dueno@demo.hn', `(SELECT count(*) FROM public.banco_diferencia WHERE empresa_id = '${EM}')`) === 2, 'no se crearon la comisión y los intereses');
+    await p.screenshot({ path: path.join(CAPTURAS, 'dinero_banco_cuadrado_computadora.png'), fullPage: true });
+    await p.click('#banco-cerrar');
+    await confirmarDialogo(p);
+    await p.waitForFunction(() => document.querySelector('#meses-trabajados') && document.querySelector('#meses-trabajados').innerText.includes('Cerrada'));
+    afirmar(sql('dueno@demo.hn', `(SELECT estado FROM public.conciliacion WHERE id = demo.id('CONC1'))`) === 'cerrada', 'no se cerró');
+    // CSV del banco (sin red ni servidor): punto y coma, fechas DD/MM/AAAA, débito y crédito por separado.
+    const csv = await p.evaluate(async () => (await import('/js/pantallas/dinero_banco.js')).leerCsvBanco(
+      'Fecha;Descripción;Referencia;Débito;Crédito\n02/09/2026;PAGO ENEE;E-1;1,150.00;\n05/09/2026;DEPOSITO;D-9;;2.500,50\nmal;x;;;\n'));
+    afirmar(csv.filas.length === 2 && csv.filas[0].monto_centavos === -115000 && csv.filas[1].monto_centavos === 250050 && csv.filas[0].fecha === '2026-09-02' && csv.errores.length === 1,
+      'lectura del CSV: ' + JSON.stringify(csv));
+  });
+
+  await prueba('proyección: cifras como la base, fórmula en una línea, gráfica por semana y detalle de lo que entra y sale', async () => {
+    const p = d.p;
+    await ir(p, 'dinero/proyeccion', '#grafica-proyeccion');
+    const r = JSON.parse(sql('dueno@demo.hn', `public.proyeccion_flujo('${EM}', 30, 'semana')`));
+    afirmar((await texto(p, '[data-dato=disponible-hoy]')).trim() === lempiras(r.disponible_hoy_centavos), 'disponible hoy distinto');
+    afirmar((await texto(p, '[data-dato=saldo-final]')).trim() === lempiras(r.saldo_final_proyectado_centavos), 'saldo final distinto');
+    afirmar(await p.locator('#grafica-proyeccion .grafica-col').count() === r.semanas.length, 'barras distintas a las semanas');
+    // A mano, semana 1: empieza + entra - sale = termina.
+    const s1 = r.semanas[0];
+    afirmar(s1.saldo_inicial_centavos + s1.entradas_centavos - s1.salidas_centavos === s1.saldo_final_centavos, 'semana 1 no cuadra');
+    afirmar((await texto(p, '[data-dato=final-1]')).trim() === lempiras(s1.saldo_final_centavos), 'semana 1 en la tabla');
+    afirmar((await texto(p, '[data-info=formula]')).includes('cobros que vencen'), 'sin la fórmula');
+    afirmar(await p.locator('#detalle-proyeccion [data-tipo]').count() === r.detalle.length, 'detalle incompleto');
+    await p.selectOption('#proy-dias', '90');
+    await p.waitForFunction((n) => document.querySelectorAll('#grafica-proyeccion .grafica-col').length === n, Math.ceil(91 / 7));
+  });
+
+  await prueba('dinero: permisos (cajero y vendedor no ven Dinero; admin no reparte utilidades) y usuario limitado no ve la proyección', async () => {
+    for (const correo of ['cajero@demo.hn', 'vendedor@demo.hn']) {
+      const { ctx, p } = await nueva();
+      await entrar(p, correo);
+      for (const r of ['dinero/gastos', 'dinero/depositos', 'dinero/pagos-fijos', 'dinero/fondos', 'dinero/banco', 'dinero/proyeccion']) {
+        await p.goto(URL_APP + '/#/' + r);
+        await p.waitForFunction(() => !location.hash.startsWith('#/dinero/') || location.hash === '#/dinero/donde');
+      }
+      await ctx.close();
+    }
+    const { ctx, p } = await nueva();
+    await entrar(p, 'admin@demo.hn');
+    await ir(p, 'dinero/fondos', '#lista-fondos');
+    afirmar(await p.locator('#repartir-utilidad, #nuevo-fondo, #usar-fondo').count() === 0, 'el admin ve acciones solo del dueño');
+    // Limitado a su sucursal (respuesta simulada de mi_estado_sesion): la proyección es de toda la empresa y no se muestra.
+    await p.route('**/rest/v1/rpc/mi_estado_sesion', (r) => r.fulfill({ status: 200, contentType: 'application/json',
+      body: JSON.stringify({ activo: true, todas_las_sucursales: false, sucursales: [{ sucursal_id: 'S1' }] }) }));
+    await p.evaluate(async () => (await import('/js/datos.js')).olvidarDatos());
+    await ir(p, 'dinero/proyeccion', '#contenido .estado-vacio');
+    afirmar((await texto(p, '#contenido')).includes('La proyección es de toda la empresa') && await p.locator('#grafica-proyeccion').count() === 0, 'el limitado ve la proyección');
+    await ctx.close();
+  });
+
+  await prueba('dinero en el celular: formularios sin desbordes (con capturas)', async () => {
+    const { ctx, p } = await nueva(celular);
+    await entrar(p, 'dueno@demo.hn');
+    const pasos = [['dinero/gastos', '#nuevo-gasto', '#gasto-cuenta', 'dinero_gasto_nuevo'], ['dinero/depositos', '#mover-dinero', '#mover-origen', 'dinero_mover'],
+      ['dinero/pagos-fijos', '#nuevo-pago-fijo', '#fijo-nombre', 'dinero_pago_fijo_nuevo'], ['dinero/banco', null, '#zona-banco section', 'dinero_banco'],
+      ['dinero/proyeccion', null, '#grafica-proyeccion', 'dinero_proyeccion'], ['dinero/fondos', null, '#lista-fondos', 'dinero_fondos']];
+    for (const [ruta, boton, espera, nombre] of pasos) {
+      await ir(p, ruta, boton || espera);
+      if (boton) { await p.click(boton); await p.waitForSelector(espera); }
+      await revisarPantalla(p, nombre + ' (celular)', 390);
+      await p.screenshot({ path: path.join(CAPTURAS, `${nombre}_celular.png`), fullPage: true });
+    }
+    await ctx.close();
+  });
+
 
   await d.ctx.close();
   await prueba('sin errores de JavaScript en Compras y Dinero', async () => {
