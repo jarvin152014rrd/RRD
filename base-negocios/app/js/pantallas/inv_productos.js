@@ -5,7 +5,8 @@
 import { rpc, leer, escribir } from '../api.js';
 import { empresaId, puede, tieneModulo } from '../sesion.js';
 import { dinero, fechaHora, aCentavos, paraCampo, cantidad } from '../formato.js';
-import { h, aviso, errorSimple, campo, conBoton, pedirMotivo, confirmar } from '../ui.js';
+import { h, icono, aviso, errorSimple, campo, conBoton, pedirMotivo, confirmar } from '../ui.js';
+import { hayEnMenu } from '../menu.js';
 import { filtrar, olvidarDatos } from '../datos.js';
 
 const E = () => empresaId();
@@ -40,9 +41,12 @@ export async function mostrar(vista, ctx) {
   verInactivos.addEventListener('change', pintar);
   pintar();
   vista.append(h('section', { class: 'tarjeta', 'aria-labelledby': 't-prod' },
-    h('div', { class: 'titulo-con-boton' }, h('h1', { id: 't-prod' }, 'Productos y servicios'),
-      puede('productos.editar') ? h('button', { type: 'button', class: 'boton boton-principal', id: 'nuevo-producto',
-        onclick: () => formulario(vista, ctx, null) }, 'Nuevo producto') : null),
+    h('div', { class: 'titulo-con-boton' }, h('h1', { id: 't-prod', class: 'titulo-icono' }, icono('etiqueta'), 'Productos y servicios'),
+      h('div', { class: 'botones' },
+        // Subir muchos productos de una vez: lleva a Ajustes > Excel (si el usuario la ve).
+        hayEnMenu(ctx.menu || [], 'ajustes', 'excel') ? h('a', { class: 'boton', href: '#/ajustes/excel', id: 'subir-excel' }, icono('excel'), 'Subir Excel') : null,
+        puede('productos.editar') ? h('button', { type: 'button', class: 'boton boton-principal', id: 'nuevo-producto',
+          onclick: () => formulario(vista, ctx, null) }, icono('mas'), 'Nuevo producto') : null)),
     campo('Buscar', buscar), h('label', { class: 'opcion-check' }, verInactivos, ' Ver también los inactivos'), zona));
   buscar.focus();
 }

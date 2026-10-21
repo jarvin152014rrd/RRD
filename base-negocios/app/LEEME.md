@@ -58,7 +58,7 @@ cierra en la base y además borra sus sesiones de Supabase Auth). Sin `modo` (la
 | `manifest.webmanifest`, `iconos/` | Instalar como app (PWA). |
 | `sw.js` | Guarda solo el cascarón (HTML/CSS/JS). Los datos siempre del servidor. Suba `VERSION` al cambiar archivos y agregue los nuevos a `CASCARON`. |
 | `config.ejemplo.js` | Modelo de la configuración por cliente. |
-| `css/tema.css` | Solo colores y letras (ficha del cliente). |
+| `css/tema.css` | Solo colores y letras (ficha del cliente) y los colores con significado fijo: verde = entra dinero/bien, rojo = sale dinero/problema, dorado = importante/hoy, azul = información. |
 | `css/base.css` | Acomodo: encabezado, pestañas, tarjetas, barra del celular (< 700 px). |
 | `css/controles.css` | Botones, campos, diálogos (44 px, letra 15-16 px). Va al final: el tema no lo rompe. |
 | `js/app.js` | Arranque, entrar/salir, menú y rutas `#/pestana/subpestana`, aviso "Sin conexión". |
@@ -68,30 +68,40 @@ cierra en la base y además borra sus sesiones de Supabase Auth). Sin `modo` (la
 | `js/menu_datos.js` | Lista de pestañas y subpestañas (datos puros, sin importar nada): la usa también la vista previa del Armador. |
 | `js/errores.js` | Traduce errores con `error_catalogo` (mensaje sencillo + qué hacer). |
 | `js/formato.js` | `dinero(centavos)` → "L 1,234.56", fechas locales. |
-| `js/ui.js` | `h()` para armar pantallas sin innerHTML, avisos, diálogo de motivo, íconos. |
+| `js/ui.js` | `h()` para armar pantallas sin innerHTML, avisos, diálogo de motivo y las piezas visuales: `chip`, `burbuja`, `tarjetaCifra`, `botonAccion`, `filaIcono`, `graficaBarras`, `estadoVacio`, `mensaje`. |
+| `js/iconos.js` | Íconos de línea propios (`icono('vender')`), dentro de la app: sin internet. Nunca en lo impreso. |
 | `js/datos.js` | Listas compartidas en memoria un minuto: productos, clientes, cajas, cuentas de dinero, mi turno; `filtrar()` sin tildes. |
 | `js/comprobante.js` | Comprobante de venta (`documento_venta`), impresión de 80 mm y texto para WhatsApp. |
 | `js/marca.js` | Nombre comercial, logo y colores del negocio (`marca_empresa`); cambia solo variables de color. |
 | `js/excel.js` | Arma y lee el `.xlsx` (columnas azules/grises, hoja Instrucciones) para `exportar_plantilla` / `importar_*`. |
 | `vendor/xlsx.bundle.js` | SheetJS (`xlsx-js-style` 1.2.0, licencia Apache 2.0 en `vendor/`), copia local: funciona sin internet. Se carga solo al usar Excel. |
-| `js/pantallas/*.js` | Una pantalla por archivo: `inicio`, `alertas`, `aprobaciones`, `mas`, `entrar`, `en_construccion`, `vender` (carrito; también lo usa `cotizaciones`), `ventas_dia`, `cotizaciones`, `devoluciones`, `caja_turno`, `caja_dinero`, `caja_gasto`, `clientes`, `me_deben`; Inventario: `inv_productos`, `inv_existencias`, `inv_conteo`, `inv_movimientos`, `inv_traslados`, `inv_excel`; Ajustes: `aj_negocio`, `aj_usuarios`, `aj_cajas`, `aj_impuestos`, `aj_reglas`, `aj_datos`. |
+| `js/pantallas/*.js` | Una pantalla por archivo: `inicio`, `pendientes` (usa `alertas` y `aprobaciones`), `dinero_donde`, `mas`, `entrar`, `en_construccion`, `vender` (carrito; también lo usa `cotizaciones`), `ventas_dia`, `cotizaciones`, `devoluciones`, `caja_turno`, `caja_dinero`, `caja_gasto`, `clientes`, `me_deben`; Inventario: `inv_productos`, `inv_existencias`, `inv_conteo`, `inv_movimientos`, `inv_traslados`, `inv_excel`; Ajustes: `aj_negocio`, `aj_usuarios`, `aj_cajas`, `aj_impuestos`, `aj_reglas`, `aj_datos`. |
 
 ## Agregar una pantalla
 
 1. Cree `js/pantallas/mi_pantalla.js` con `export async function mostrar(vista, ctx) { ... }`
    (arme con `h()`; lea con `rpc()`; escriba con `escribir()`; muestre errores con `cajaError(err)`).
 2. En `js/menu_datos.js`, en la subpestaña que corresponda, ponga `pantalla: 'mi_pantalla'`
-   (y `modulos` / `permisos` si hace falta: basta uno de cada lista).
+   (y `modulos` / `permisos` si hace falta: basta uno de cada lista). Toda subpestaña lleva `icono`
+   (un nombre de `js/iconos.js`); la prueba falla si falta. Si cambia una ruta, agregue la vieja a `RUTAS_VIEJAS`.
 3. Agregue el archivo a `CASCARON` en `sw.js` y suba `VERSION`.
 4. Agregue su prueba en `app-pruebas/probar_app.cjs`.
+
+## Cómo se usa Inicio (0.5.0)
+
+- Arriba: saludo, la fecha y cómo está su caja. Los botones grandes hacen lo de todos los días: **Vender**,
+  **Cobrar a un cliente**, **Registrar un gasto** y **Abrir/Cerrar mi caja** (cada quien ve solo los suyos).
+- Las cifras: verde es dinero que entra, rojo lo que sale o está vencido, dorado lo importante.
+- **Primeros pasos** (dueño y admin): toque **Hacerlo** en cada paso; la lista se va sola al terminar.
+- La **campanita** dice cuántos pendientes hay; tóquela para ver alertas y aprobar o rechazar.
 
 ## Cómo se usa (0.3.0)
 
 - **Inventario > Productos:** busque, toque **Ver**. **Nuevo producto** pide código, nombre, precio y si incluye
   ISV. **Cambiar precio** pide el precio nuevo y el motivo (queda en el historial). **Desactivar** no borra nada.
 - **Inventario > Conteo físico:** elija la bodega, escriba lo que contó (no se ve lo del sistema), toque **Enviar
-  conteo a aprobación**. La existencia cambia cuando el admin o el dueño aprueba en Inicio > Aprobaciones.
-- **Inventario > Excel:** 1) **Descargar Excel**, 2) cambie las columnas azules y súbalo: verá qué pasará fila por
+  conteo a aprobación**. La existencia cambia cuando el admin o el dueño aprueba en Inicio > Pendientes.
+- **Ajustes > Excel y copia de mis datos** (antes Inventario > Excel; Productos tiene el botón "Subir Excel"): 1) **Descargar Excel**, 2) cambie las columnas azules y súbalo: verá qué pasará fila por
   fila, 3) **Guardar cambios** (solo se habilita sin errores; pide motivo; se guarda todo o nada).
 - **Inventario > Traslados:** elija de qué bodega a cuál, agregue productos y cantidades, **Trasladar**. Lo que
   llega de otra sucursal se confirma con **Confirmar recepción**.

@@ -1,10 +1,11 @@
-// Inventario · Excel de ida y vuelta: 1) descargar el Excel (columnas azules se cambian, grises
+// Ajustes · "Excel y copia de mis datos" (antes Inventario > Excel). Excel de ida y vuelta: 1) descargar el Excel (columnas azules se cambian, grises
 // solo informan), 2) subirlo y ver qué pasará fila por fila (importar_vista_previa: no guarda
 // nada), 3) Guardar (importar_aplicar, con motivo: todo o nada). "Guardar" queda deshabilitado
 // mientras haya un solo error. El archivo se lee y se arma en el navegador (js/excel.js).
 import { rpc, escribir } from '../api.js';
 import { empresaId, perfilActual, puede } from '../sesion.js';
-import { h, aviso, campo, conBoton, pedirMotivo, errorSimple, cajaError } from '../ui.js';
+import { h, icono, aviso, campo, conBoton, pedirMotivo, errorSimple, cajaError } from '../ui.js';
+import { tarjetaCopiaDatos } from './aj_datos.js';
 import { descargarExcel, leerHoja, nombreHoja } from '../excel.js';
 import { olvidarDatos } from '../datos.js';
 
@@ -112,6 +113,7 @@ export async function mostrar(vista) {
   });
 
   vista.append(
+    h('h1', { class: 'titulo-icono' }, icono('excel'), 'Excel y copia de mis datos'),
     h('section', { class: 'tarjeta', 'aria-labelledby': 't-xl1' },
       h('h2', { id: 't-xl1', class: 'paso-titulo' }, '1. Descargue su Excel'),
       h('p', { class: 'ayuda' }, 'Trae sus datos de hoy. Cambie las columnas azules (las grises son solo para que vea) y súbalo de nuevo.'),
@@ -120,5 +122,6 @@ export async function mostrar(vista) {
       h('h2', { id: 't-xl2', class: 'paso-titulo' }, '2. Súbalo y revise antes de guardar'),
       campo('Archivo de Excel', archivo, 'No se guarda nada hasta que toque "Guardar cambios".'), zonaPrevia),
     h('section', { class: 'tarjeta', 'aria-labelledby': 't-xl3' },
-      h('h2', { id: 't-xl3', class: 'paso-titulo' }, '3. Guardar cambios'), zonaGuardar, botonGuardar));
+      h('h2', { id: 't-xl3', class: 'paso-titulo' }, '3. Guardar cambios'), zonaGuardar, botonGuardar),
+    tarjetaCopiaDatos());
 }

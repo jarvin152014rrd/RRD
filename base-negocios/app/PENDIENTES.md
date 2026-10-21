@@ -1,6 +1,13 @@
-# Pendientes de la app (0.4.0)
+# Pendientes de la app (0.5.0)
 
-- Pantallas en construcción: apartados, cajas abiertas, compras, dinero, reportes, buscar, "Alertas que recibo".
+- Pantallas en construcción: apartados, cajas abiertas, compras, dinero (salvo ¿Dónde está mi dinero?), reportes,
+  proyección, "Alertas que recibo" (el núcleo ya tiene `mis_preferencias_alertas`: se puede hacer en la ronda 2).
+- Rediseño ronda 2: llevar el estilo nuevo (íconos en títulos, burbujas, estados vacíos) a las demás pantallas.
+- Inicio: "Lo más vendido" se calcula en el navegador con las últimas 1,000 líneas de venta (si hay más en la
+  semana, lo dice). Con mucho volumen convendrá una función del núcleo que ya lo sume.
+- Inicio: a un usuario restringido por sucursal no se le muestran la gráfica ni lo más vendido (las vistas son de
+  toda la empresa).
+- Fotos de productos: la burbuja de "Lo más vendido" ya está lista para la miniatura.
 - Fotos de comprobantes: se suben a Supabase Storage solo con `bucketComprobantes` en config.js (no probado
   contra Supabase real); en la demo no hay Storage y se guarda solo el nombre de la foto en la descripción.
 - Devoluciones: falta el "cambio de producto" en pantalla (el núcleo ya lo tiene) y elegir vale / saldo a favor
@@ -13,7 +20,7 @@
   se ve el aviso; no se guarda nada.
 - Modo sencillo (perfil pequeño con pocas pestañas): falta decidir qué pestañas quedan.
 - Elegir empresa cuando un usuario tiene varias (hoy entra a la última usada o la primera).
-- Contador de alertas y aprobaciones en las subpestañas; notificaciones al celular.
+- HECHO (0.5.0): número de pendientes en la campanita y en la subpestaña. Falta: notificaciones al celular.
 - Meta de ventas del día en Inicio (el núcleo aún no la tiene).
 - Al fallar Aprobar porque otro ya resolvió, la lista se refresca solo al volver a entrar a Inicio.
 - Letra IBM Plex se baja de Google Fonts; sin internet usa la del sistema. Evaluar incluirla en la app.

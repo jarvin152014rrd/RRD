@@ -1,5 +1,38 @@
 # Cambios de la app
 
+## app 0.5.0 (núcleo 0.15.0, sin migraciones nuevas) — Rediseño, ronda 1: base visual e Inicio
+
+- **Íconos propios** (`js/iconos.js`): 68 dibujos de línea dentro de la app (funcionan sin internet). Cada
+  pestaña y subpestaña del menú tiene el suyo (también en la barra del celular, en "Más" y en la vista previa del
+  Armador). Nada impreso lleva íconos ni emojis (el comprobante sigue igual).
+- **Colores con significado fijo** (`css/tema.css`): verde = entra dinero / todo bien; rojo = sale dinero /
+  problema; dorado = importante / hoy; azul = información. Con su fondo suave para burbujas y chips.
+- **Piezas nuevas en `js/ui.js`:** tarjeta de cifra, botón grande de acción, chip de color, fila con burbuja de
+  ícono, gráfica de barras sencilla, estado vacío y mensaje con ícono. Los avisos y errores ahora llevan ícono.
+  Letra base de 16 px y tarjetas más aireadas.
+- **Menú reordenado** ("cada pestaña responde una pregunta"):
+  - Inicio: Mi negocio hoy y **Pendientes** (une Alertas y Aprobaciones, con su número).
+  - Caja: Mi turno, Cobrar, Gasto pagado de esta caja, Meter o sacar efectivo, Cajas abiertas.
+  - Dinero: ¿Dónde está mi dinero? (la tabla que antes estaba en Inicio), Todos los gastos, Depósitos y
+    traslados, Pagos fijos, Fondos y socios, Cuadrar con el banco y Proyección (nueva, en construcción).
+  - Reportes: ¿Gané o perdí?, Ventas, Inventario valorizado, Empleados y comisiones, Quién hizo qué, Cierre de mes.
+  - Ajustes: el Excel se movió aquí como **"Excel y copia de mis datos"** (también trae "Descargar todo");
+    "Mis datos" ahora es **"Mi cuenta"** y trae "Alertas que recibo" (en construcción).
+  - Productos tiene botón directo **"Subir Excel"**.
+  - Barra del celular: Inicio, Vender, Caja, Productos y Más.
+  - Las rutas viejas siguen sirviendo y llevan a la nueva (`#/inicio/alertas`, `#/inicio/aprobaciones`,
+    `#/inventario/excel`, `#/ajustes/mis-alertas`, `#/buscar`). Las palabras del rubro guardadas con la ruta
+    vieja también (`barra/resumen` → Inicio, `barra/buscar` → Productos).
+- **Inicio nuevo:** saludo según la hora del negocio, fecha y estado de su caja; botones Vender, Cobrar a un
+  cliente, Registrar un gasto y Abrir/Cerrar mi caja (solo los que puede usar); cifras Vendí hoy (contra ayer),
+  Hay en caja ahora, Me deben y Debo a proveedores (con el próximo pago); gráfica de ventas de 7 días con Hoy en
+  dorado; lo más vendido de la semana (burbuja lista para la foto del producto); **Primeros pasos** (dueño y
+  admin, se deduce de los datos y desaparece al terminar); Pendientes con Aprobar/Rechazar; número en la campanita.
+  Todo sale de lecturas que ya existían en el núcleo: no se tocó el núcleo.
+- Las pantallas en construcción ahora se ven con un estado vacío amable y botón "Volver a Inicio".
+- Pruebas: `probar_app.cjs` 35 (nuevas: Inicio con sus partes, íconos en todo el menú, rutas viejas, cajero en
+  Inicio, comprobante sin íconos); `probar_armador.cjs` revisa los íconos de la vista previa. Cascarón `cascaron-0.5.0`.
+
 ## app 0.4.0 (núcleo 0.15.0: migración nueva 051)
 
 - **Supabase real:** `config.js` con `modo: 'supabase'` usa la Edge Function `cerrar-sesion-remota` para "Cerrar

@@ -46,3 +46,9 @@ dialog.dialogo::backdrop { background: rgba(15,31,61,.45); }
 .avisos { position: fixed; left: 50%; transform: translateX(-50%); bottom: 24px; z-index: 60; display: flex; flex-direction: column; gap: 8px; width: min(420px, calc(100vw - 32px)); pointer-events: none; }
 .avisos .mensaje { box-shadow: 0 4px 16px rgba(15,31,61,.18); }
 @media (max-width: 699px) { .avisos { bottom: 88px; } }
+
+/* Mensajes con ícono (app 0.5.0): ícono a la izquierda, texto a la derecha. */
+.mensaje.con-icono { display: flex; align-items: flex-start; gap: 10px; }
+.mensaje.con-icono > .icono { width: 22px; height: 22px; flex: none; margin-top: 1px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.mensaje.con-icono > div, .mensaje.con-icono > span { flex: 1; min-width: 0; }
+.boton .icono { width: 20px; height: 20px; flex: none; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }

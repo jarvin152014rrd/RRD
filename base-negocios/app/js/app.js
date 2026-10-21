@@ -1,10 +1,10 @@
 // Arranque de la app: sesión, menú, rutas (#/pestana/subpestana) y aviso "Sin conexión".
 import * as api from './api.js';
-import { cargarPerfil, olvidarPerfil, perfilActual, vigilarSesion } from './sesion.js';
-import { menuDelUsuario, botonesCelular } from './menu.js';
+import { cargarPerfil, olvidarPerfil, perfilActual, vigilarSesion, empresaId, puede } from './sesion.js';
+import { menuDelUsuario, botonesCelular, RUTAS_VIEJAS } from './menu.js';
 import { olvidarCatalogo } from './errores.js';
 import { cargarMarca, aplicarMarca } from './marca.js';
-import { h, icono, cajaError, limpiarAvisos } from './ui.js';
+import { h, icono, chip, cajaError, limpiarAvisos } from './ui.js';
 
 const raiz = document.getElementById('app');
 const bandaSinConexion = document.getElementById('sin-conexion');
@@ -81,10 +81,13 @@ function mostrarApp() {
   const nombre = (perfil.usuario && (perfil.usuario.nombre || perfil.usuario.correo)) || '';
   const pestanas = h('nav', { class: 'pestanas', 'aria-label': 'Menú principal' },
     menu.map((p) => h('a', { class: 'pestana' + (p.final ? ' pestana-final' : ''), href: `#/${p.id}/${p.subs[0].id}`,
-      dataset: { pestana: p.id } }, p.titulo)));
+      dataset: { pestana: p.id } }, icono(p.icono), h('span', {}, p.titulo))));
   const barra = h('nav', { class: 'barra-inferior', 'aria-label': 'Menú del celular' },
     botonesCelular(menu).map((b) => h('a', { class: 'boton-barra', href: b.ruta, dataset: { pestana: b.pestana } },
       icono(b.icono), h('span', {}, b.titulo))));
+  // Campanita: número de pendientes (alertas + aprobaciones); lleva a Inicio > Pendientes.
+  const campana = h('a', { class: 'campana', href: '#/inicio/pendientes', id: 'campana', 'aria-label': 'Pendientes' },
+    icono('campana'), h('span', { class: 'campana-numero', id: 'campana-numero', hidden: true }, '0'));
   const subpestanas = h('nav', { class: 'subpestanas', 'aria-label': 'Subpestañas' });
   const contenido = h('main', { class: 'contenido', id: 'contenido', tabindex: '-1' });
   raiz.replaceChildren(
@@ -93,13 +96,15 @@ function mostrarApp() {
         h('div', { class: 'marca' },
           h('div', { class: 'marca-logo', id: 'marca-logo', 'aria-hidden': 'true', dataset: { iniciales: iniciales(perfil.empresa.nombre) } }, iniciales(perfil.empresa.nombre)),
           h('span', { class: 'marca-nombre', id: 'marca-nombre' }, perfil.empresa.nombre)),
-        h('div', { class: 'quien' },
+        h('div', { class: 'quien' }, campana,
           h('span', {}, nombre, h('span', { class: 'rol-texto' }, ' · ', perfil.rol.nombre || perfil.rol.codigo)),
           h('button', { type: 'button', class: 'boton boton-claro', onclick: () => salir() }, 'Salir'))),
       pestanas),
     contenido, barra);
-  zonas = { pestanas, subpestanas, contenido, barra };
+  zonas = { pestanas, subpestanas, contenido, barra, campana };
+  numeroPendientes = 0;
   cargarMarca(); // nombre comercial, logo y colores (si no hay, quedan los del tema)
+  contarPendientes();
   vigilarSesion((motivo) => forzarSalida(motivo));
   window.addEventListener('hashchange', alCambiarRuta);
   alCambiarRuta();
@@ -112,17 +117,44 @@ document.addEventListener('click', (ev) => {
   if (a && zonas && a.getAttribute('href') === location.hash) { ev.preventDefault(); alCambiarRuta(); }
 });
 
+// ---------------- Pendientes (campanita y subpestaña) ----------------
+// Las pantallas avisan con eventos: "pendientes-conteo" (ya contaron) o "pendientes-cambiaron"
+// (aprobaron o rechazaron algo: hay que volver a contar). Sin internet se deja el número de antes.
+let numeroPendientes = 0;
+function ponerPendientes(n) {
+  if (!zonas || !Number.isFinite(n)) return;
+  numeroPendientes = n;
+  const num = document.getElementById('campana-numero');
+  if (num) { num.textContent = String(n); num.hidden = n === 0; }
+  zonas.campana.setAttribute('aria-label', n ? `Pendientes: ${n}` : 'Pendientes: ninguno');
+  for (const c of document.querySelectorAll('[data-contador=pendientes]')) { c.textContent = String(n); c.hidden = n === 0; }
+}
+async function contarPendientes() {
+  const e = empresaId();
+  if (!e) return;
+  const [alertas, aprob] = await Promise.all([
+    api.rpc('alertas_activas', { p_empresa_id: e }).then((r) => ((r && r.alertas) || [])
+      .filter((a) => !(puede('aprobaciones.ver') && a.tipo === 'aprobaciones')).length).catch(() => null),
+    puede('aprobaciones.ver') ? api.leer('v_aprobacion', { empresa_id: e, estado: 'pendiente' }, { limite: 100 }).then((x) => x.length).catch(() => null) : 0,
+  ]);
+  if (alertas === null || aprob === null) return;
+  ponerPendientes(alertas + aprob);
+}
+window.addEventListener('pendientes-cambiaron', () => contarPendientes());
+window.addEventListener('pendientes-conteo', (ev) => ponerPendientes(Number(ev.detail)));
+
 // ---------------- Rutas ----------------
 let rutaAnterior = null;
 function alCambiarRuta() {
   if (!zonas) return;
-  const [pid, sid] = location.hash.replace(/^#\/?/, '').split('/');
+  const ruta = location.hash.replace(/^#\/?/, '');
+  // Rutas de antes (ej. #/inventario/excel) -> la nueva, sin dejar la vieja en el historial.
+  if (Object.prototype.hasOwnProperty.call(RUTAS_VIEJAS, ruta)) { location.replace('#/' + RUTAS_VIEJAS[ruta]); return; }
+  const [pid, sid] = ruta.split('/');
   let pantalla, titulo, actual = pid, sub = null, pestana = null;
 
   if (pid === 'mas') {
     pantalla = 'mas'; titulo = 'Más';
-  } else if (pid === 'buscar') {
-    pantalla = 'en_construccion'; titulo = 'Buscar producto';
   } else {
     pestana = menu.find((p) => p.id === pid);
     if (!pestana) { location.replace('#/inicio/hoy'); return; }
@@ -133,12 +165,15 @@ function alCambiarRuta() {
 
   for (const a of zonas.pestanas.children) a.toggleAttribute('aria-current', a.dataset.pestana === actual);
   for (const a of zonas.pestanas.children) if (a.hasAttribute('aria-current')) a.setAttribute('aria-current', 'page');
+  const enBarra = [...zonas.barra.children].map((a) => a.dataset.pestana);
   for (const a of zonas.barra.children) {
-    const on = a.dataset.pestana === actual || (a.dataset.pestana === 'mas' && !['inicio', 'vender', 'buscar'].includes(actual));
+    const on = a.dataset.pestana === actual || (a.dataset.pestana === 'mas' && !enBarra.includes(actual));
     if (on) a.setAttribute('aria-current', 'page'); else a.removeAttribute('aria-current');
   }
   zonas.subpestanas.replaceChildren(...(pestana && pestana.subs.length > 1 ? pestana.subs.map((s) =>
-    h('a', { class: 'subpestana', href: `#/${pestana.id}/${s.id}`, 'aria-current': s.id === sub.id ? 'page' : null }, s.titulo)) : []));
+    h('a', { class: 'subpestana', href: `#/${pestana.id}/${s.id}`, 'aria-current': s.id === sub.id ? 'page' : null },
+      icono(s.icono), h('span', {}, s.titulo),
+      s.contador ? chip(String(numeroPendientes), 'dorado', { dataset: { contador: s.contador }, hidden: numeroPendientes === 0 }) : null)) : []));
 
   // Avisos viejos fuera al cambiar de pantalla (no al refrescar la misma, p. ej. tras aprobar en Inicio).
   if (location.hash !== rutaAnterior) limpiarAvisos();

@@ -54,7 +54,8 @@
 .vp-cuerpo { padding: 12px 16px 16px; display: flex; flex-direction: column; gap: 10px; }
 .vp-grupo h3 { font-size: 15px; margin: 0 0 6px; }
 .vp-grupo .chips { margin: 0; }
-.chip { font-size: 14px; padding: 4px 10px; border-radius: 14px; background: var(--color-tarjeta); border: 1px solid var(--color-linea); }
+.chip { font-size: 14px; padding: 4px 10px; border-radius: 14px; background: var(--color-tarjeta); border: 1px solid var(--color-linea); display: inline-flex; align-items: center; gap: 6px; }
+.chip .icono { width: 16px; height: 16px; color: var(--color-suave); }
 .problemas { display: flex; flex-direction: column; gap: 8px; }
 .diferencias { white-space: pre-wrap; font-family: var(--letra-mono); font-size: 14px; background: var(--color-fondo);
   border: 1px solid var(--color-linea); border-radius: 8px; padding: 12px; margin: 0; max-height: 420px; overflow: auto; }

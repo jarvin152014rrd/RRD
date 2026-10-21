@@ -3,6 +3,7 @@
 // Toda escritura la hace el servidor (herramientas/servidor_armador.js) con las herramientas de siempre.
 import { PREGUNTAS, NOMBRES, ORDEN_MODULOS, sugerir, problemasDependencias, idCliente } from './reglas.js';
 import { MENU, menuPara } from '../app/js/menu_datos.js';
+import { icono } from '../app/js/iconos.js';
 
 const raiz = document.getElementById('app');
 let catalogo = null;
@@ -299,7 +300,8 @@ async function pantallaArmar(vista, editar) {
       titulos.push([p.id, `Pestaña "${p.titulo}"`]);
       for (const s of p.subs) titulos.push([`${p.id}/${s.id}`, `${p.titulo} › ${s.titulo}`]);
     }
-    titulos.push(['barra/vender', 'Botón del celular "Vender"']);
+    titulos.push(['barra/inicio', 'Botón del celular "Inicio"'], ['barra/vender', 'Botón del celular "Vender"'],
+      ['barra/caja', 'Botón del celular "Caja"'], ['barra/productos', 'Botón del celular "Productos"']);
     const etiqueta = Object.fromEntries(titulos);
     const filas = Object.keys(e.palabras).map((k) => h('div', { class: 'palabra-fila' },
       h('label', { for: `palabra-${k.replace('/', '-')}` }, etiqueta[k] || k),
@@ -428,9 +430,9 @@ function pintarVistaPrevia(caja, e) {
     h('header', { class: 'encabezado' },
       h('div', { class: 'encabezado-fila' }, h('div', { class: 'marca' }, logo, h('span', { class: 'marca-nombre' }, nombre))),
       h('nav', { class: 'pestanas', 'aria-label': 'Pestañas que verá el cliente' }, menu.map((p, i) =>
-        h('span', { class: 'pestana' + (p.final ? ' pestana-final' : ''), 'aria-current': i === 0 ? 'page' : null }, p.titulo)))),
-    h('div', { class: 'vp-cuerpo' }, menu.map((p) => h('div', { class: 'vp-grupo' }, h('h3', {}, p.titulo),
-      h('div', { class: 'chips' }, p.subs.map((s) => h('span', { class: 'chip' }, s.titulo)))))));
+        h('span', { class: 'pestana' + (p.final ? ' pestana-final' : ''), 'aria-current': i === 0 ? 'page' : null }, icono(p.icono), h('span', {}, p.titulo))))),
+    h('div', { class: 'vp-cuerpo' }, menu.map((p) => h('div', { class: 'vp-grupo' }, h('h3', { class: 'titulo-icono' }, icono(p.icono), p.titulo),
+      h('div', { class: 'chips' }, p.subs.map((s) => h('span', { class: 'chip' }, icono(s.icono), s.titulo)))))));
   app.style.setProperty('--color-principal', e.color_principal);
   app.style.setProperty('--color-acento', e.color_acento);
   const puestos = h('div', { class: 'segmentos', role: 'group', 'aria-label': 'Puesto' },

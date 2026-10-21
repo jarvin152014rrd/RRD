@@ -98,6 +98,8 @@ function sql(consulta) {
     let t = await vp();
     afirmar(t.includes('Órdenes de trabajo') && t.includes('Nueva orden de trabajo') && t.includes('Taller Prueba'), 'la vista previa no usa las palabras del taller');
     afirmar(!t.includes('Compras'), 'muestra Compras apagado');
+    const sinIcono = await p.locator('#vista-menu .pestana:not(:has(svg)), #vista-menu .chip:not(:has(svg))').count();
+    afirmar(sinIcono === 0, `${sinIcono} pestaña(s) de la vista previa sin ícono`);
     await p.click('#puesto-cajero');
     t = await vp();
     afirmar(!t.includes('Usuarios y permisos'), 'el cajero vería Usuarios y permisos');

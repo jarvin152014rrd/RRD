@@ -17,6 +17,21 @@
   --color-ok-fondo: #e6f2ea;
   --color-aviso: #7a5410;
   --color-aviso-fondo: #fdf1dc;
+  /* Colores con SIGNIFICADO FIJO (app 0.5.0). No cambian con la marca del cliente.
+     verde = entra dinero / todo bien · rojo = sale dinero / problema
+     dorado = importante / hoy · azul = información. Cada uno con su fondo suave
+     (burbujas de ícono y chips). Texto sobre su fondo: contraste AA (4.5:1 o más). */
+  --color-verde: #1e6b3a;
+  --color-verde-fondo: #e3f1e7;
+  --color-rojo: #a12a1e;
+  --color-rojo-fondo: #fbe8e4;
+  --color-dorado: #7a5410;      /* dorado para LETRAS (el acento #c8972a es para rellenos) */
+  --color-dorado-fondo: #fcefd6;
+  --color-azul: #1a2f52;
+  --color-azul-fondo: #e4ebf6;
+  --color-neutro: #4a4a4a;
+  --color-neutro-fondo: #efebe4;
+  --color-barra-grafica: #b4c1d8;
   --letra: 'IBM Plex Sans', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
   --letra-mono: 'IBM Plex Mono', ui-monospace, 'SFMono-Regular', Menlo, Consolas, monospace;
 }

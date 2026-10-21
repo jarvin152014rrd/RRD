@@ -1,5 +1,8 @@
 // Ayudas para armar pantallas sin innerHTML (los datos del servidor van como texto).
 import { traducir } from './errores.js';
+import { icono } from './iconos.js';
+
+export { icono };
 
 // h('p', {class: 'x', onclick: fn}, 'texto', otroNodo)
 export function h(etiqueta, props = {}, ...hijos) {
@@ -24,10 +27,11 @@ export function h(etiqueta, props = {}, ...hijos) {
 export function aviso(texto, tipo = 'ok', dura = 4500) {
   const caja = document.getElementById('avisos');
   if (!caja) return;
-  const el = h('p', { class: `mensaje mensaje-${tipo}` }, texto);
+  const el = h('p', { class: `mensaje mensaje-${tipo} con-icono` }, icono(ICONO_MENSAJE[tipo] || 'info'), h('span', {}, texto));
   caja.append(el);
   setTimeout(() => el.remove(), dura);
 }
+const ICONO_MENSAJE = { ok: 'check_circulo', error: 'alerta', info: 'info' };
 export function limpiarAvisos() {
   const caja = document.getElementById('avisos');
   if (caja) caja.replaceChildren();
@@ -49,8 +53,8 @@ export function confirmar({ titulo, texto, textoBoton = 'Sí, guardar', peligro 
 // Caja de error con el mensaje sencillo y qué hacer.
 export async function cajaError(err) {
   const t = await traducir(err);
-  return h('div', { class: 'mensaje mensaje-error', role: 'alert' },
-    h('p', {}, h('strong', {}, t.mensaje)), t.queHacer ? h('p', {}, t.queHacer) : null);
+  return h('div', { class: 'mensaje mensaje-error con-icono', role: 'alert' }, icono('alerta'),
+    h('div', {}, h('p', {}, h('strong', {}, t.mensaje)), t.queHacer ? h('p', {}, t.queHacer) : null));
 }
 
 // Diálogo para pedir un motivo y confirmar. accion(motivo) puede lanzar error: se muestra
@@ -100,24 +104,6 @@ export function pedirMotivo({ titulo, explicacion, textoBoton, peligro = false, 
   });
 }
 
-// Íconos simples (trazos) para la barra del celular.
-const TRAZOS = {
-  resumen: 'M4 13h6V4H4zM14 20h6V11h-6zM4 20h6v-4H4zM14 7h6V4h-6z',
-  vender: 'M3 5h2l2.5 11h11L21 8H7M10 20a1 1 0 1 0 0 .1M18 20a1 1 0 1 0 0 .1',
-  buscar: 'M11 18a7 7 0 1 1 0-14 7 7 0 0 1 0 14zM21 21l-5-5',
-  mas: 'M4 6h16M4 12h16M4 18h16',
-};
-export function icono(nombre) {
-  const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-  svg.setAttribute('viewBox', '0 0 24 24'); svg.setAttribute('aria-hidden', 'true');
-  svg.setAttribute('fill', 'none'); svg.setAttribute('stroke', 'currentColor');
-  svg.setAttribute('stroke-width', '2'); svg.setAttribute('stroke-linecap', 'round'); svg.setAttribute('stroke-linejoin', 'round');
-  const p = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-  p.setAttribute('d', TRAZOS[nombre] || '');
-  svg.append(p);
-  return svg;
-}
-
 // Campo con etiqueta: campo('Nombre', h('input', {...}), 'ayuda opcional')
 let cuentaCampos = 0;
 export function campo(etiqueta, control, ayuda = null) {
@@ -148,8 +134,8 @@ export async function conBoton(boton, zonaError, accion, texto = 'Guardando…')
 
 // Mensaje de error propio (validación antes de llamar al servidor).
 export function errorSimple(texto, queHacer = '') {
-  return h('div', { class: 'mensaje mensaje-error', role: 'alert' }, h('p', {}, h('strong', {}, texto)),
-    queHacer ? h('p', {}, queHacer) : null);
+  return h('div', { class: 'mensaje mensaje-error con-icono', role: 'alert' }, icono('alerta'),
+    h('div', {}, h('p', {}, h('strong', {}, texto)), queHacer ? h('p', {}, queHacer) : null));
 }
 
 // Enlace de WhatsApp (wa.me). Teléfono de 8 dígitos = Honduras (504).
@@ -167,4 +153,79 @@ export function dialogo(titulo, ...contenido) {
   document.body.append(dlg);
   dlg.showModal();
   return { dlg, cerrar: () => dlg.close() };
+}
+
+// ---------------- Piezas visuales (app 0.5.0) ----------------
+// Colores con significado fijo (css/tema.css):
+//   verde = entra dinero / todo bien · rojo = sale dinero / problema
+//   dorado = importante / hoy · azul = información · neutro = sin significado
+
+// Chip de color: chip('L 2,400 vencido', 'rojo')
+export function chip(texto, color = 'neutro', props = {}) {
+  return h('span', { ...props, class: `chip-color chip-${color}${props.class ? ' ' + props.class : ''}` }, texto);
+}
+
+// Burbuja de ícono: cuadrito redondeado de color suave con el ícono adentro.
+export function burbuja(nombre, color = 'azul', props = {}) {
+  return h('span', { ...props, class: `burbuja burbuja-${color}${props.class ? ' ' + props.class : ''}` }, icono(nombre));
+}
+
+// Tarjeta de cifra: ícono + etiqueta, monto grande y abajo un chip y una nota.
+// tarjetaCifra({ dato: 'ventas_hoy', icono: 'sube', color: 'verde', etiqueta: 'Vendí hoy',
+//                valor: 'L 8,450.00', chip: chip(...), nota: '14 ventas' })
+export function tarjetaCifra({ dato, icono: ic, color = 'azul', etiqueta, valor, chip: c = null, nota = null }) {
+  return h('div', { class: 'tarjeta tarjeta-cifra', dataset: dato ? { dato } : null },
+    h('div', { class: `cifra-cabeza texto-${color}` }, icono(ic), h('p', { class: 'cifra-titulo' }, etiqueta)),
+    h('p', { class: 'cifra-valor' }, valor),
+    c || nota ? h('p', { class: 'cifra-nota' }, c, c && nota ? ' ' : null, nota) : null);
+}
+
+// Botón grande de acción (enlace): burbuja de ícono + texto. principal = fondo del color del negocio.
+export function botonAccion({ href, icono: ic, texto, color = 'azul', principal = false, id = null }) {
+  return h('a', { class: 'accion' + (principal ? ' accion-principal' : ''), href, id, dataset: { accion: id || ic } },
+    burbuja(ic, principal ? 'acento' : color), h('span', {}, texto));
+}
+
+// Fila con burbuja de ícono: filaIcono({ icono, color, titulo, detalle, derecha, abajo })
+export function filaIcono({ icono: ic, color = 'azul', burbuja: b = null, titulo, detalle = null, derecha = null, abajo = null, props = {} }) {
+  return h('div', { ...props, class: 'fila-icono' + (props.class ? ' ' + props.class : '') },
+    b || burbuja(ic, color),
+    h('div', { class: 'fila-icono-texto' }, h('div', { class: 'fila-icono-titulo' }, titulo),
+      detalle ? h('div', { class: 'fila-icono-detalle' }, detalle) : null, abajo),
+    derecha ? h('div', { class: 'fila-icono-derecha' }, derecha) : null);
+}
+
+// Gráfica de barras simple (sin librería): barras = [{ etiqueta, valor, texto, textoCorto, destacado }].
+// textoCorto: el número que se ve en el celular (más angosto).
+// Cada barra lleva su número escrito arriba (no depende solo del color ni del alto).
+export function graficaBarras(barras, { titulo = 'Gráfica', alto = 150 } = {}) {
+  const max = Math.max(1, ...barras.map((b) => Number(b.valor) || 0));
+  // Alturas con el.style (CSSOM): sirve aunque la página prohíba estilos escritos en el HTML.
+  const caja = h('div', { class: 'grafica', role: 'list', 'aria-label': titulo },
+    barras.map((b) => {
+      const barra = h('div', { class: 'grafica-barra' });
+      barra.style.height = `${Math.max(2, Math.round(((Number(b.valor) || 0) / max) * 100))}%`;
+      return h('div', { class: 'grafica-col' + (b.destacado ? ' grafica-hoy' : ''), role: 'listitem', dataset: b.dato ? { barra: b.dato } : null },
+        h('span', { class: 'grafica-valor' }, h('span', { class: 'valor-largo' }, b.texto),
+          h('span', { class: 'valor-corto', 'aria-hidden': 'true' }, b.textoCorto || b.texto)),
+        h('div', { class: 'grafica-zona' }, barra),
+        h('span', { class: 'grafica-etiqueta' }, b.etiqueta));
+    }));
+  caja.style.setProperty('--alto-grafica', `${alto}px`);
+  return caja;
+}
+
+// Estado vacío: ícono grande + frase + (opcional) botón. boton = { texto, href } o { texto, onclick }.
+export function estadoVacio({ icono: ic = 'info', titulo = null, texto, boton = null, color = 'azul' }) {
+  return h('div', { class: 'estado-vacio' }, burbuja(ic, color, { class: 'burbuja-grande' }),
+    titulo ? h('p', { class: 'estado-vacio-titulo' }, titulo) : null,
+    h('p', { class: 'vacio' }, texto),
+    boton ? (boton.href ? h('a', { class: 'boton boton-principal', href: boton.href }, boton.texto)
+      : h('button', { type: 'button', class: 'boton boton-principal', onclick: boton.onclick }, boton.texto)) : null);
+}
+
+// Mensaje de éxito, información o error con ícono (dentro de la pantalla, no se quita solo).
+export function mensaje(tipo, texto, detalle = null, props = {}) {
+  return h('div', { ...props, class: `mensaje mensaje-${tipo} con-icono`, role: tipo === 'error' ? 'alert' : 'status' },
+    icono(ICONO_MENSAJE[tipo] || 'info'), h('div', {}, h('p', {}, h('strong', {}, texto)), detalle ? h('p', {}, detalle) : null));
 }

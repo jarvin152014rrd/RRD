@@ -83,11 +83,9 @@ const textoDe = (pagina, sel) => pagina.locator(sel).first().innerText();
     await p.waitForSelector('[data-dato=ventas_hoy]');
     const r = JSON.parse(sql('dueno@demo.hn', `public.resumen_hoy('${EMPRESA}')`));
     const d = JSON.parse(sql('dueno@demo.hn', `public.donde_esta_mi_dinero('${EMPRESA}')`));
-    const esperado = {
-      ventas_hoy: r.ventas_hoy.total_centavos, ganancia_hoy: r.ganancia_hoy.ganancia_bruta_centavos,
-      ganancia_mes: r.ganancia_mes.ganancia_centavos, dinero: r.dinero.disponible_centavos,
-      te_deben: r.te_deben.total_centavos, debes: r.debes.total_centavos,
-    };
+    // "Hay en caja ahora" = cajas de efectivo + caja chica (por tipo, de donde_esta_mi_dinero).
+    const efectivo = (d.por_tipo.efectivo_caja || 0) + (d.por_tipo.caja_chica || 0);
+    const esperado = { ventas_hoy: r.ventas_hoy.total_centavos, en_caja: efectivo, te_deben: r.te_deben.total_centavos, debes: r.debes.total_centavos };
     afirmar(r.ventas_hoy.total_centavos > 0, 'la demo no tiene ventas de hoy');
     for (const [dato, c] of Object.entries(esperado)) {
       const visto = (await textoDe(p, `[data-dato=${dato}] .cifra-valor`)).trim();
@@ -95,23 +93,106 @@ const textoDe = (pagina, sel) => pagina.locator(sel).first().innerText();
     }
     const vencido = await textoDe(p, '[data-dato=te_deben] .cifra-nota');
     afirmar(vencido.includes(lempiras(r.te_deben.vencido_centavos)) && vencido.includes('vencido'), 'no muestra lo vencido aparte');
-    afirmar((await textoDe(p, '[data-dato=total_dinero]')).trim() === lempiras(d.total_centavos), 'total de ¿dónde está mi dinero? distinto');
+    afirmar((await textoDe(p, '[data-dato=ventas_hoy] .cifra-nota')).includes('que ayer'), 'no compara con ayer');
     afirmar((await textoDe(p, '[data-dato=frase]')).trim() === r.frase, 'la frase del día no coincide');
+    // ¿Dónde está mi dinero? ahora vive en Dinero (antes estaba en Inicio).
+    await p.goto(URL_APP + '/#/dinero/donde');
+    await p.waitForSelector('[data-dato=total_dinero]');
+    afirmar((await textoDe(p, '[data-dato=total_dinero]')).trim() === lempiras(d.total_centavos), 'total de ¿dónde está mi dinero? distinto');
+    await p.goto(URL_APP + '/#/inicio/hoy');
+    await p.waitForSelector('[data-dato=ventas_hoy]');
     // Ejemplo a mano: L 5,095.00 = 509500 centavos
     afirmar(lempiras(509500) === 'L 5,095.00' && lempiras(-85917) === '-L 859.17', 'formato de lempiras');
-    const pestanas = await p.locator('.pestanas .pestana').allInnerTexts();
+    const pestanas = (await p.locator('.pestanas .pestana').allInnerTexts()).map((t) => t.trim());
     afirmar(pestanas[pestanas.length - 1] === 'Ajustes', 'Ajustes no es la última pestaña: ' + pestanas.join(', '));
     afirmar(['Dinero', 'Compras', 'Reportes'].every((t) => pestanas.includes(t)), 'al dueño le faltan pestañas');
     afirmar(!(await p.locator('body').innerText()).match(/\b[A-Z]{3,}_[A-Z_]+\b/), 'se ve un código de error crudo');
     await p.screenshot({ path: path.join(CAPTURAS, 'duenio_computadora.png'), fullPage: true });
   });
 
+  await prueba('Inicio (0.5.0): saludo, acciones, gráfica de 7 días, lo más vendido, primeros pasos y campanita', async () => {
+    const p = dueno.p;
+    const saludo = await textoDe(p, '.saludo h1');
+    afirmar(/^Buen(os días|as tardes|as noches), María$/.test(saludo.trim()), 'saludo: ' + saludo);
+    afirmar((await textoDe(p, '[data-info=fecha-caja]')).includes('caja'), 'no dice cómo está la caja');
+    for (const a of ['accion-vender', 'accion-cobrar', 'accion-gasto', 'accion-turno']) {
+      afirmar(await p.locator(`#${a}`).count() === 1, 'falta el botón ' + a);
+    }
+    afirmar((await textoDe(p, '#accion-turno')).includes('Abrir mi caja'), 'sin turno debe decir "Abrir mi caja"');
+    const alturas = await p.locator('.accion').evaluateAll((els) => els.map((e) => e.getBoundingClientRect().height));
+    afirmar(alturas.every((x) => x >= 44), 'botones de acción de menos de 44 px');
+    // Gráfica: 7 barras, la última es Hoy (dorada) y el total = suma de v_ventas_por_dia de esos 7 días.
+    const barras = await p.locator('#grafica-ventas .grafica-col').count();
+    afirmar(barras === 7, 'barras: ' + barras);
+    afirmar((await textoDe(p, '#grafica-ventas .grafica-col:last-child .grafica-etiqueta')).trim() === 'Hoy', 'la última barra no es Hoy');
+    afirmar(await p.locator('#grafica-ventas .grafica-col:last-child.grafica-hoy').count() === 1, 'Hoy no está resaltado');
+    const total7 = Number(sql('dueno@demo.hn', `(SELECT coalesce(sum(total_centavos), 0) FROM public.v_ventas_por_dia
+      WHERE empresa_id = '${EMPRESA}' AND fecha BETWEEN public.hoy_local('${EMPRESA}') - 6 AND public.hoy_local('${EMPRESA}'))`));
+    afirmar((await textoDe(p, '[data-dato=total_7_dias]')).trim() === lempiras(total7), 'total de 7 días: ' + await textoDe(p, '[data-dato=total_7_dias]') + ' / ' + lempiras(total7));
+    // Lo más vendido: el primero es el de más dinero en la semana (a mano con SQL).
+    const top = sql('dueno@demo.hn', `(SELECT producto_id FROM public.v_venta_linea WHERE empresa_id = '${EMPRESA}' AND estado = 'emitida'
+      AND fecha_contable >= public.hoy_local('${EMPRESA}') - 6 GROUP BY producto_id ORDER BY sum(total_centavos) DESC LIMIT 1)`);
+    afirmar(await p.locator('#mas-vendido [data-producto-top]').first().getAttribute('data-producto-top') === top, 'lo más vendido no coincide');
+    // Primeros pasos: lo hecho sale de los datos (estado_arranque, marca y turnos).
+    const ar = JSON.parse(sql('dueno@demo.hn', `public.estado_arranque('${EMPRESA}')`));
+    const hecho = (x) => ar.pasos.find((y) => y.paso === x).estado === 'hecho';
+    const marca = JSON.parse(sql('dueno@demo.hn', `public.marca_empresa('${EMPRESA}')`)).marca || {};
+    const turnos = Number(sql('dueno@demo.hn', `(SELECT count(*) FROM public.v_turno_caja WHERE empresa_id = '${EMPRESA}')`));
+    const n = [Boolean(marca.logo || marca.color_principal || marca.color_acento), turnos > 0, hecho('productos'), hecho('primera_venta'), hecho('usuarios')].filter(Boolean).length;
+    afirmar((await textoDe(p, '[data-dato=pasos-hechos]')).trim() === `${n} de 5`, 'primeros pasos: ' + await textoDe(p, '[data-dato=pasos-hechos]') + ', esperaba ' + n);
+    afirmar(await p.locator('#primeros-pasos [data-hecho=false] a.boton').count() === 5 - n, 'cada paso pendiente debe tener "Hacerlo"');
+    // Campanita = alertas (sin la de "aprobaciones", que ya sale con botones) + aprobaciones pendientes.
+    const alertas = JSON.parse(sql('dueno@demo.hn', `public.alertas_activas('${EMPRESA}')`)).alertas.filter((a) => a.tipo !== 'aprobaciones').length;
+    const aprob = Number(sql('dueno@demo.hn', `(SELECT count(*) FROM public.v_aprobacion WHERE empresa_id = '${EMPRESA}' AND estado = 'pendiente')`));
+    await p.waitForFunction((x) => document.getElementById('campana-numero').textContent === String(x), alertas + aprob);
+    afirmar((await textoDe(p, '[data-contador=pendientes]')).trim() === String(alertas + aprob), 'la subpestaña Pendientes no tiene el número');
+    afirmar(await p.locator('#inicio-pendientes .solicitud').count() >= 1, 'Pendientes no muestra las aprobaciones');
+    await p.screenshot({ path: path.join(CAPTURAS, 'inicio_computadora.png'), fullPage: true });
+  });
+
+  await prueba('menú: todas las pestañas y subpestañas tienen un ícono que existe', async () => {
+    const p = dueno.p;
+    const malos = await p.evaluate(async () => {
+      const m = await import('/js/menu_datos.js');
+      const ic = await import('/js/iconos.js');
+      const faltan = [];
+      for (const x of m.MENU) {
+        if (!ic.existeIcono(x.icono)) faltan.push(x.id);
+        for (const s of x.subs) if (!ic.existeIcono(s.icono)) faltan.push(`${x.id}/${s.id}`);
+      }
+      // Cada ícono: solo trazos simples (path, circle, rect), nada de texto ni enlaces.
+      for (const [n, trazos] of Object.entries(ic.ICONOS)) if (!trazos.length || trazos.some((t) => typeof t !== 'string')) faltan.push('ícono ' + n);
+      return faltan;
+    });
+    afirmar(malos.length === 0, 'sin ícono válido: ' + malos.join(', '));
+    const sinSvg = await p.locator('.pestanas .pestana:not(:has(svg)), .subpestanas .subpestana:not(:has(svg))').count();
+    afirmar(sinSvg === 0, `${sinSvg} pestaña(s) sin ícono en pantalla`);
+  });
+
+  await prueba('rutas viejas llevan a las nuevas (Alertas, Aprobaciones, Excel, Mis alertas)', async () => {
+    const p = dueno.p;
+    for (const [vieja, nueva] of [['inicio/alertas', 'inicio/pendientes'], ['inicio/aprobaciones', 'inicio/pendientes'],
+      ['inventario/excel', 'ajustes/excel'], ['ajustes/mis-alertas', 'ajustes/mi-cuenta'], ['buscar', 'inventario/productos']]) {
+      await p.goto(URL_APP + '/#/' + vieja);
+      await p.waitForURL(new RegExp('#/' + nueva.replace('/', '\\/') + '$'));
+    }
+    await p.goto(URL_APP + '/#/inventario/productos');
+    await p.waitForSelector('#subir-excel');
+    await p.click('#subir-excel');
+    await p.waitForSelector('#excel-descargar');
+    afirmar(await p.locator('#descargar-todo').count() === 1, 'falta la copia de mis datos en Excel');
+    await p.goto(URL_APP + '/#/reportes/ventas');
+    await p.waitForSelector('.en-construccion .estado-vacio');
+    await p.goto(URL_APP + '/#/inicio/hoy');
+    await p.waitForSelector('#inicio-pendientes .solicitud');
+  });
+
   await prueba('aprobar una solicitud (con motivo; sin motivo no deja)', async () => {
     const p = dueno.p;
-    const antes = await p.locator('.columna-angosta .solicitud').count();
+    const antes = await p.locator('#inicio-pendientes .solicitud').count();
     afirmar(antes >= 1, 'no hay solicitudes pendientes en Inicio');
-    const id = await p.locator('.columna-angosta .solicitud').first().getAttribute('data-aprobacion');
-    await p.locator('.columna-angosta .solicitud').first().getByRole('button', { name: 'Aprobar' }).click();
+    const id = await p.locator('#inicio-pendientes .solicitud').first().getAttribute('data-aprobacion');
+    await p.locator('#inicio-pendientes .solicitud').first().getByRole('button', { name: 'Aprobar' }).click();
     await p.waitForSelector('dialog.dialogo[open]');
     await p.fill('dialog.dialogo textarea', 'ok');
     await p.click('dialog.dialogo button[type=submit]');
@@ -123,9 +204,9 @@ const textoDe = (pagina, sel) => pagina.locator(sel).first().innerText();
     afirmar((await textoDe(p, '#avisos .mensaje-ok')).includes('aprobada'), 'no avisó que se aprobó');
     const estado = sql('dueno@demo.hn', `(SELECT estado FROM public.aprobacion WHERE id = '${id}')`);
     afirmar(estado === 'aprobada', 'en la base quedó: ' + estado);
-    await p.waitForFunction((n) => document.querySelectorAll('.columna-angosta .solicitud').length === n - 1, antes);
+    await p.waitForFunction((n) => document.querySelectorAll('#inicio-pendientes .solicitud').length === n - 1, antes);
     // Error del servidor traducido: otra persona ya resolvió la solicitud mientras estaba en pantalla.
-    const otra = p.locator('.columna-angosta .solicitud').first();
+    const otra = p.locator('#inicio-pendientes .solicitud').first();
     const id2 = await otra.getAttribute('data-aprobacion');
     sqlEscribir('dueno@demo.hn', `SELECT public.resolver_aprobacion('${id2}', false, 'Rechazada desde otro equipo', gen_random_uuid())`);
     await otra.getByRole('button', { name: 'Aprobar' }).click();
@@ -179,19 +260,22 @@ const textoDe = (pagina, sel) => pagina.locator(sel).first().innerText();
   });
   await vend.ctx.close();
 
-  await prueba('celular: barra inferior con 4 botones y Ajustes dentro de "Más"', async () => {
+  await prueba('celular: barra inferior con 5 botones con ícono y Ajustes dentro de "Más"', async () => {
     const { ctx, p } = await nueva({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
     await entrar(p, 'dueno@demo.hn');
     await p.waitForSelector('[data-dato=ventas_hoy]');
     afirmar(await p.locator('.barra-inferior').isVisible(), 'no se ve la barra inferior');
     afirmar(!(await p.locator('.pestanas').isVisible()), 'se ven las pestañas de computadora');
     const botones = (await p.locator('.barra-inferior .boton-barra').allInnerTexts()).map((t) => t.trim());
-    afirmar(botones.join(',') === 'Resumen,Vender,Buscar,Más', 'botones: ' + botones.join(','));
+    afirmar(botones.join(',') === 'Inicio,Vender,Caja,Productos,Más', 'botones: ' + botones.join(','));
+    afirmar(await p.locator('.barra-inferior .boton-barra svg').count() === 5, 'botones de la barra sin ícono');
     const ancho = await p.evaluate(() => document.documentElement.scrollWidth);
     afirmar(ancho <= 390, 'la página se sale a lo ancho: ' + ancho);
     const alturas = await p.locator('.barra-inferior .boton-barra').evaluateAll((els) => els.map((e) => e.getBoundingClientRect().height));
     afirmar(alturas.every((a) => a >= 44), 'botones de menos de 44 px');
     await p.screenshot({ path: path.join(CAPTURAS, 'celular.png') });
+    await p.screenshot({ path: path.join(CAPTURAS, 'inicio_celular.png'), fullPage: true });
+    afirmar(await p.locator('#accion-vender').isVisible(), 'en el celular no se ve el botón Vender');
     await p.click('.barra-inferior >> text=Más');
     await p.waitForSelector('.mas-grupo');
     const grupos = await p.locator('.mas-grupo h2').allInnerTexts();
@@ -226,6 +310,18 @@ const textoDe = (pagina, sel) => pagina.locator(sel).first().innerText();
   const caj = await nueva();
   await entrar(caj.p, 'cajero@demo.hn');
 
+  await prueba('cajero: Inicio sin cifras del negocio ni "Primeros pasos", con sus acciones', async () => {
+    const p = caj.p;
+    await p.waitForSelector('#inicio-pendientes');
+    afirmar(await p.locator('[data-dato]').count() === 0, 'el cajero ve cifras del negocio');
+    afirmar(await p.locator('#primeros-pasos').count() === 0, 'el cajero ve Primeros pasos');
+    afirmar(await p.locator('#accion-vender').count() === 1 && await p.locator('#accion-turno').count() === 1, 'faltan acciones del cajero');
+    afirmar(await p.locator('#accion-gasto').count() === 0, 'el cajero ve "Registrar un gasto" sin permiso');
+    for (const palabra of ['Ganancia', 'gané', 'Costo', 'Me deben', 'Aprobar']) {
+      afirmar(!(await p.locator('#contenido').innerText()).includes(palabra), 'el cajero ve ' + palabra);
+    }
+  });
+
   await prueba('vender en efectivo: vuelto correcto, comprobante = base, doble clic no duplica', async () => {
     const p = caj.p;
     await venderCon(p, ['CEM-425']);
@@ -250,6 +346,7 @@ const textoDe = (pagina, sel) => pagina.locator(sel).first().innerText();
     const comp = await textoDe(p, '.comprobante');
     afirmar(comp.includes(v.numero_documento) && comp.includes(lempiras(v.total_centavos)) && comp.includes(lempiras(v.impuesto_centavos)), 'comprobante: ' + comp);
     afirmar(!/[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}]/u.test(comp), 'el comprobante tiene emojis');
+    afirmar(await p.locator('.comprobante svg, .comprobante img.icono, .comprobante .icono').count() === 0, 'el comprobante tiene íconos');
     const wa = await p.getAttribute('[data-accion=whatsapp]', 'href');
     afirmar(wa.startsWith('https://wa.me/') && decodeURIComponent(wa).includes(v.numero_documento), 'enlace de WhatsApp: ' + wa);
     await p.emulateMedia({ media: 'print' });
@@ -317,6 +414,10 @@ const textoDe = (pagina, sel) => pagina.locator(sel).first().innerText();
     await p.fill('#fondo-total', (saldo / 100).toFixed(2));
     await p.click('form.formulario button[type=submit]');
     await p.waitForSelector('#cerrar-turno', { timeout: 15000 });
+    await p.goto(URL_APP + '/#/inicio/hoy');
+    await p.waitForSelector('#accion-turno');
+    afirmar((await textoDe(p, '#accion-turno')).includes('Cerrar mi caja'), 'con turno abierto debe decir "Cerrar mi caja"');
+    afirmar((await textoDe(p, '[data-info=fecha-caja]')).includes('abierta desde'), 'no dice desde cuándo está abierta la caja');
     await venderCon(p, ['CEM-425']);
     afirmar((await textoDe(p, '[data-dato=turno]')).includes('Turno'), 'Vender no muestra el turno');
     await p.click('#cobrar');

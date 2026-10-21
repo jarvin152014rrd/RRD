@@ -529,7 +529,7 @@ function servirArchivo(res, ruta) {
   // armador/ completo; de la app solo el estilo, los íconos y el menú (para que la vista previa sea igual).
   let archivo;
   if (ruta === '/' || ruta === '/index.html') archivo = path.join(DIR_ARMADOR, 'index.html');
-  else if (/^\/app\/(css\/[a-z_]+\.css|iconos\/[a-z0-9_-]+\.(svg|png)|js\/menu_datos\.js)$/.test(ruta)) archivo = path.join(RAIZ, ruta);
+  else if (/^\/app\/(css\/[a-z_]+\.css|iconos\/[a-z0-9_-]+\.(svg|png)|js\/(menu_datos|iconos)\.js)$/.test(ruta)) archivo = path.join(RAIZ, ruta);
   else if (/^\/(css|js)\/[a-z_]+\.(css|js)$/.test(ruta)) archivo = path.join(DIR_ARMADOR, ruta);
   if (!archivo || !fs.existsSync(archivo)) { res.writeHead(404, CABECERAS); return res.end('No existe'); }
   res.writeHead(200, { ...CABECERAS, 'Content-Type': TIPOS[path.extname(archivo)] || 'application/octet-stream' });
