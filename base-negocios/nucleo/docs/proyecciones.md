@@ -14,3 +14,10 @@ el horizonte llega a hoy + días.
 
 Ejemplo (prueba 122, 30 días): disponible 1,200,000 → 656,000 / 176,000 / −724,000 /
 −724,000 / −634,000 con alerta desde la semana 3; 12,345 vencidos aparte.
+
+## 0.16.0
+
+Usuario limitado a su sucursal: dinero de sus cuentas (y las de toda la empresa), cobros de ventas de sus
+sucursales, pagos de compras de sus sucursales y pagos fijos que no salen de una cuenta de otra sucursal.
+Comisiones y dividendos (de toda la empresa) no entran: `ocultos: ["comisiones", "dividendos"]`,
+`solo_mis_sucursales: true` y `nota_sucursal`. Para el dueño, igual que antes.

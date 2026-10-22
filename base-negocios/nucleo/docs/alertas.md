@@ -37,7 +37,8 @@ ni costos. Cada alerta de un módulo apagado no sale.
 - `mis_preferencias_alertas(empresa)`: los tipos que el usuario puede ver, con `recibir` (por defecto sí).
 - `guardar_preferencias_alertas(empresa, {"stock_minimo": false})`: cada usuario las suyas
   (tabla `alerta_preferencia`, no se borra; queda en la bitácora). Los tipos y sus nombres están
-  en la tabla `alerta_tipo`.
+  en la tabla `alerta_tipo`. **0.16.0:** un tipo que su puesto no ve (`interno.puede_ver_alerta`) da
+  `SIN_PERMISO` y no se guarda nada (todo o nada).
 
 **Usuario restringido por sucursal (0.13.1):** solo recibe lo de sus sucursales: CAI de sus cajas, cuentas y
 bancos de sus sucursales (o sin sucursal), depósitos que salen o llegan a ellas, arqueos de sus turnos, crédito

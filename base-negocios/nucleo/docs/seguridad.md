@@ -26,6 +26,9 @@
 - `cambiar_permiso_rol(empresa, rol, permiso, otorgar, motivo)`: motivo
   obligatorio; al dueño no se le quita `permisos.editar`; al contador solo se
   le dan permisos de lectura.
+- **Usuario limitado a su sucursal (047, 052):** políticas RLS restrictivas `por_sucursal` en las tablas con
+  sucursal, bodega o cuenta de dinero; desde 0.16.0 también líneas y pagos de compras, saldos iniciales de
+  proveedor (solo sin restricción, `empresas_sin_restriccion()`) y la conciliación (`sucursales.md`).
 - **Límite honesto:** quien tiene la llave `service_role` o la clave
   `postgres` puede leer todo; eso se regula por contrato y bitácora
   (PROCEDIMIENTOS P-04).

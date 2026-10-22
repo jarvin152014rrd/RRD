@@ -158,3 +158,9 @@ tarjeta a "Tarjetas por liquidar (POS)" y transferencia a "Transferencias por co
 solas la primera vez si no hay una). La transferencia pasa al banco con
 `confirmar_transferencia_venta`; lo del POS, con `trasladar_dinero` (traslado al banco). Al anular
 una venta el dinero sale de la misma cuenta a la que entró.
+
+## 0.16.0
+
+`donde_esta_mi_dinero` a un usuario limitado a su sucursal: cuentas de sus sucursales y de toda la empresa,
+depósitos en tránsito que salen o llegan a ellas, sin "otras cuentas de efectivo sin rastro" y con
+`solo_mis_sucursales: true`. Para el dueño, igual que antes (sin la clave nueva).

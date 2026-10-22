@@ -72,3 +72,9 @@ el módulo apagado).
   base ni costos.
 
 Activar "comisiones" con saldo en 2.1.03.04 que el módulo no explica: `MODULO_CON_SALDO`.
+
+## 0.16.0
+
+`v_comision_vendedor` a un usuario limitado a su sucursal: solo las comisiones de ventas de sus sucursales
+(devengado) y, de ellas, las que ya están en un pago vigente (pagado). Para el dueño y quien no tiene
+restricción, la cuenta de siempre.

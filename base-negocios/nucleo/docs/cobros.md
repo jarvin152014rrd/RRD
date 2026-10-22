@@ -151,3 +151,13 @@ Un vale vencido sigue sin poder usarse (`VALE_VENCIDO`), dado de baja o no.
 
 Con "ventas" apagado se pueden anular cobros, condonaciones y saldos iniciales; con
 "dinero" apagado, confirmar una transferencia ya cobrada.
+
+## Usuario limitado a su sucursal (0.16.0)
+
+- Sin "aplicar" (a la más vieja): el servidor arma "aplicar" con las ventas al crédito de SUS sucursales, de la
+  más vieja a la más nueva, con el candado de la empresa tomado; salta las de otras sucursales y los saldos
+  iniciales (son de toda la empresa). Si en sus sucursales el cliente no debe nada: `COBRO_EXCEDE_SALDO` (si
+  quiere dejar dinero a favor, que sea un anticipo).
+- Con "aplicar": una venta de otra sucursal o un `saldo_inicial_id` da `SUCURSAL_NO_PERMITIDA`.
+- Ejemplo (prueba 133): V4 de la principal (3,000, la más vieja) y V3 de la Norte (6,000). El cajero de la
+  Norte cobra 2,000 a la más vieja: van a V3 (queda 4,000); V4 sigue en 3,000. El dueño cobra 1,000: van a V4.

@@ -6,7 +6,7 @@ La app será una PWA (página web instalable) y los datos vivirán en Supabase
 funciones SQL que guardan todo o nada. El navegador solo muestra y llama
 esas funciones.
 
-Versión del núcleo: ver `VERSION_NUCLEO` (hoy 0.15.0). Cambios: `CHANGELOG.md`.
+Versión del núcleo: ver `VERSION_NUCLEO` (hoy 0.16.0). Cambios: `CHANGELOG.md`.
 Subir a un proyecto real de Supabase + Netlify, paso a paso: `docs/SUPABASE.md`.
 
 ## Carpetas
@@ -206,11 +206,12 @@ Si algo falla, termina con error (código distinto de 0).
 | `dar_baja_vales_vencidos(empresa, datos, motivo, id_operacion)` (0.9.1) | vales vencidos a otros ingresos | cobros.baja_vales (solo dueño) |
 | `crear_apartado` / `abonar_apartado` / `completar_apartado` / `cancelar_apartado` | apartados con anticipo (`apartados.md`) | apartados.registrar / apartados.cancelar |
 | `configurar_comisiones` / `fijar_porcentaje_comision` / `pagar_comisiones` / `anular_pago_comisiones` | comisiones (`comisiones.md`) | comisiones.configurar (dueño) / comisiones.pagar |
-| `cerrar_mes(empresa, año, mes, motivo?)` / `historial_cierres` / `ver_cierre` (0.10.0) | cierre con foto y versiones (`cierres.md`) | periodos.cerrar / contabilidad.ver |
+| `cerrar_mes(empresa, año, mes, motivo?, id_operacion?)` / `historial_cierres` / `ver_cierre` (0.10.0) | cierre con foto y versiones (`cierres.md`) | periodos.cerrar / contabilidad.ver |
 | `estado_resultados` / `balance_general` / `flujo_efectivo` / `saldos_cuentas_mes` / `cuentas_por_cobrar_mes` / `cuentas_por_pagar_mes` / `inventario_mes` / `dinero_mes` / `isv_mes` / `exportar_mes` (0.10.0) | estados por mes, preliminar si está abierto (`estados.md`) | contabilidad.ver |
 | `guardar_socio` / `crear_fondo` / `editar_fondo` / `guardar_regla_distribucion` (0.10.0) | socios, fondos y regla (`fondos.md`) | fondos.configurar (dueño) |
 | `distribuir_utilidades` / `anular_distribucion` / `usar_fondo` / `pagar_dividendos` / `anular_pago_dividendos` / `estado_fondos` (0.10.0) | reparto de utilidades, fondos y dividendos | fondos.distribuir / fondos.usar / fondos.pagar_dividendos / fondos.ver |
 | `proyeccion_flujo(empresa, dias, 'semana')` (0.10.0) | proyección de flujo (`proyecciones.md`) | contabilidad.ver |
+| `totales_compras` / `totales_gastos` / `mas_vendido` (0.16.0) | totales de un rango, por sucursal si el usuario es limitado (`totales.md`) | compras.ver / dinero.ver / ventas.ver |
 
 Vistas: `v_existencia` (inventario.ver; costos solo con inventario.costos),
 `v_kardex` (inventario.costos), `v_cxp_documento` y `v_cxp_proveedor` (compras.ver),

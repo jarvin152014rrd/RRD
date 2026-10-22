@@ -57,3 +57,8 @@ Vistas `v_fondo_movimiento` (rastro con saldo corrido), `v_distribucion`, `v_div
 
 Apagado: no se reparte, usa ni paga; se anula un reparto o un pago. La reserva y 2.1.01.03
 siguen sin asientos manuales. Activar con saldo en 2.1.01.03 que no explica: `MODULO_CON_SALDO`.
+
+## 0.16.0
+
+`estado_fondos` a un usuario limitado a su sucursal: el saldo de la cuenta de dinero de un fondo que está en
+otra sucursal llega en `null` (`solo_mis_sucursales: true`). Los fondos, socios y reservas se ven igual.

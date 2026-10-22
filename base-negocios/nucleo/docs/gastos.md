@@ -84,3 +84,8 @@ demás puestos 0 (todo gasto suyo pide aprobación y no aprueban).
   dinero no se mueve hasta la segunda; el dueño aprueba solo; un rechazo basta. Las solicitudes de
   antes de activarla siguen con una. `v_aprobacion` muestra la primera aprobación.
 - `resolver_aprobacion` también resuelve ventas (descuento / crédito) y anulaciones de venta (ver `ventas.md`).
+
+## 0.16.0
+
+- `totales_gastos(empresa, desde, hasta, categoria?, cuenta_dinero?)` (dinero.ver): gastado y en espera de un
+  rango, con los mismos gastos que ve `v_gasto` (ver `totales.md`).

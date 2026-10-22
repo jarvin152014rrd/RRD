@@ -72,3 +72,9 @@ cierra sin pendientes en 913,984 = libros.
 Un usuario restringido por sucursal solo concilia bancos de sus sucursales o de toda la empresa
 (sin sucursal): importar, emparejar (automático y a mano), deshacer, marcar anteriores, crear diferencias
 y cerrar dan `SUCURSAL_NO_PERMITIDA` con el banco de otra sucursal.
+
+## 0.16.0
+
+Usuario limitado a su sucursal: las tablas de la conciliación (`conciliacion`, `banco_movimiento`,
+`banco_importacion`, `conciliacion_pareja`, `banco_diferencia`) y `v_conciliacion` solo traen bancos de sus
+sucursales o de toda la empresa; `ver_conciliacion` de otro banco da `SUCURSAL_NO_PERMITIDA`.

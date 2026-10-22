@@ -39,3 +39,12 @@ año?, mes?)` lista las versiones; `ver_cierre(cierre)` muestra cualquiera compl
 Ejemplo (prueba 120): enero cerrado (v1) con un depósito en tránsito de 50,000 como
 advertencia; febrero cerrado, reabierto ("Falta una factura"), se agrega un gasto de
 1,000 y se cierra otra vez: v1 superada con utilidad 8,087 y v2 vigente con 7,087.
+
+## `id_operacion` opcional (0.16.0)
+
+`cerrar_mes(empresa, año, mes, motivo?, id_operacion?)` y `reabrir_periodo(empresa, año, mes, motivo,
+id_operacion?)`. Sin id: igual que antes (el reintento ya era seguro por el estado del mes: `ya_estaba`).
+Con id: el mismo id devuelve la misma respuesta con `"duplicado": true` sin hacer nada más; el mismo id para
+otro mes o para la otra operación da `ID_OPERACION_USADO`. Cada operación con id queda en la tabla
+`periodo_operacion` (no se edita ni se borra; la lee quien tiene `contabilidad.ver`). Las funciones de
+siempre pasaron a `interno.cerrar_mes_base` / `interno.reabrir_periodo_base` sin cambios.

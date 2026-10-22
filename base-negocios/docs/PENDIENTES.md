@@ -1,10 +1,29 @@
-# Pendientes (núcleo 0.15.0, 132 pruebas OK; también con probar.sh --paquete)
+# Pendientes (núcleo 0.16.0, 135 pruebas OK; también con probar.sh --paquete)
 
 Estado: etapa 2 terminada. Las correcciones de la revisión de la etapa 2 están
 HECHAS en la migración 038 (núcleo 0.9.1) y las de la revisión de 0.9.1 en la
 migración 039 (núcleo 0.9.2), cada una con su prueba (falla contra la versión
 anterior y pasa con la nueva). Falta que el revisor las confirme antes de la
 etapa 3.
+
+## Pendientes del núcleo que anotó la app (HECHOS en 0.16.0, migración 052, pruebas 133-135)
+
+- HECHO: el usuario limitado a su sucursal recibe solo lo suyo en `donde_esta_mi_dinero`, `v_comision_vendedor`,
+  `estado_fondos`, `v_conciliacion` (y sus tablas), `proyeccion_flujo`, `v_cxp_documento`, saldos iniciales de
+  proveedor, `pago_proveedor`, `pago_proveedor_anulacion` y `compra_linea`. El dueño ve lo mismo que antes.
+- HECHO: sucursal al pagar y anular pagos a proveedores (saldo inicial: solo sin restricción).
+- HECHO: cobro "a la más vieja" de un limitado solo en sus sucursales; "aplicar" a otra sucursal se rechaza.
+- HECHO: `guardar_preferencias_alertas` rechaza tipos que el puesto no ve.
+- HECHO: `totales_compras`, `totales_gastos`, `mas_vendido` (con devoluciones).
+- HECHO: `cerrar_mes` / `reabrir_periodo` con `id_operacion` opcional.
+- HECHO: `dist/actualizar_supabase_0.16.0.sql` para quien ya tiene 0.15.0 (probado como en Supabase, prueba 135).
+- NO SE HACE (decisión técnica, ver `nucleo/docs/sucursales.md`): estado de resultados / balance / `saldo_cuentas`
+  por sucursal. Los libros no asignan cada asiento a una sucursal; usar `reporte_sucursales`.
+- FALTA (menor): `pago_fijo` / `pagos_fijos_proximos`, `v_ventas_por_dia`, `v_ventas_por_vendedor`, `v_cxc_cliente`,
+  `v_saldo_favor`, `bitacora_legible`, libros de ISV y cierres siguen siendo de toda la empresa.
+- FALTA: que el revisor revise 0.16.0. FALTA (dueño): pegar `actualizar_supabase_0.16.0.sql` en su Supabase real.
+- No se pudo consultar a los agentes constructor-maestro y revisor (CLAUDE.md) desde esta sesión: conviene que
+  revisen la 052, sobre todo las políticas nuevas y el cobro del usuario limitado.
 
 ## Etapa 6: subir a Supabase real (PREPARADA en 0.15.0, migración 051, prueba 132)
 

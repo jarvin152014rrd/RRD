@@ -86,3 +86,12 @@ iniciales solo el dueño; el contador solo ve. Cajero y vendedor no ven compras.
 
 **0.7.0:** el ISV de cada línea sale de la tabla de impuestos de la empresa (`impuestos.md`);
 un servicio no se compra al kardex (`PRODUCTO_INVALIDO`).
+
+## 0.16.0 (052): sucursal y totales
+
+- `pagar_proveedor` y `anular_pago_proveedor` exigen la sucursal de la compra a un usuario limitado
+  (`SUCURSAL_NO_PERMITIDA`). Los saldos iniciales de proveedor son de toda la empresa: solo los ven y los
+  pagan usuarios sin restricción (se guardan con la primera sucursal solo para el asiento).
+- RLS: `compra_linea`, `pago_proveedor`, `pago_proveedor_anulacion` y `cxp_saldo_inicial` siguen la sucursal
+  de su compra; `v_cxp_documento` queda filtrada sola. Ver `sucursales.md`.
+- `totales_compras(empresa, desde, hasta, proveedor?)` (compras.ver): ver `totales.md`.

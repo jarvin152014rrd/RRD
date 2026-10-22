@@ -3,7 +3,7 @@
 Guía paso a paso para el dueño. Hágala con calma, en una computadora, en orden.
 Tiempo: más o menos 1 hora la primera vez.
 
-**Qué va a tener al final:** la base de datos en Supabase (con el núcleo 0.15.0), la empresa
+**Qué va a tener al final:** la base de datos en Supabase (con el núcleo 0.16.0), la empresa
 creada con su usuario dueño, las 2 funciones de usuarios publicadas y la app en internet
 (Netlify), instalada en su celular.
 
@@ -22,8 +22,9 @@ En la carpeta `base-negocios`, abra una terminal y corra:
 bash herramientas/armar_instalacion.sh
 ```
 
-Debe decir `Listo: 13 partes del núcleo 0.15.0 en .../dist`. En la carpeta `dist/` quedan:
-`instalar_supabase_parte01.sql` … `parte13.sql`, `verificar_instalacion.sql` y `LEEME.txt`.
+Debe decir `Listo: 14 partes del núcleo 0.16.0 en .../dist`. En la carpeta `dist/` quedan:
+`instalar_supabase_parte01.sql` … `parte14.sql`, `verificar_instalacion.sql`, `actualizar_supabase_0.16.0.sql`
+(solo para quien ya lo tenía instalado, ver más abajo) y `LEEME.txt`.
 (El número de partes puede cambiar con versiones nuevas; siga el que diga.)
 
 ---
@@ -69,7 +70,7 @@ Repita esto con **cada parte, en orden** (01, 02, 03, …):
 3. Pegue en el SQL Editor (**Ctrl+V**) y toque **Run** (o **Ctrl+Enter**).
 4. Si Supabase pregunta por "operaciones destructivas" o "potentially destructive", toque
    **Run this query**: es normal (las funciones traen la palabra DELETE/DROP por dentro).
-5. Debe salir abajo una tabla que dice **Parte 1 de 13 lista** y "Siga con la parte 02".
+5. Debe salir abajo una tabla que dice **Parte 1 de 14 lista** y "Siga con la parte 02".
 6. Borre el texto del editor (o abra otro **New query**) y siga con la parte siguiente.
 
 Cada parte tarda unos segundos. Si una sale en rojo, no siga: vea "Qué hacer si algo falla".
@@ -78,7 +79,7 @@ Si por error pega una parte dos veces, no pasa nada: lo ya instalado se salta.
 ## 6. Comprobar que quedó bien
 
 1. **SQL Editor** > **New query**, pegue `dist/verificar_instalacion.sql` y **Run**.
-2. Debe decir: **resultado = TODO BIEN**, **version = 0.15.0**, **migraciones = 51** (igual a
+2. Debe decir: **resultado = TODO BIEN**, **version = 0.16.0**, **migraciones = 52** (igual a
    "migraciones_esperadas"). Si dice "FALTAN PARTES", corra las que faltan en orden.
 
 ## 7. Crear el usuario dueño
@@ -158,6 +159,36 @@ Queda la carpeta `dist/app-<cliente>/`. Si por error pega la llave secreta, la h
 
 ---
 
+## Actualizar de 0.15.0 a 0.16.0 (si YA lo tenía instalado)
+
+Si usted ya instaló el sistema antes (con las partes 01 a 13 y la versión 0.15.0), **no** vuelva a pegar las
+partes. Solo hay que pegar **un archivo**. Tarda unos segundos y los datos de su negocio no se tocan.
+
+1. **Haga un respaldo primero** (vea "Respaldos" más abajo). Es por si acaso.
+2. En la computadora del proyecto, en la carpeta `base-negocios`, abra una terminal y corra:
+   `bash herramientas/armar_instalacion.sh`
+   En la carpeta `dist/` aparece el archivo **`actualizar_supabase_0.16.0.sql`**.
+3. Entre a Supabase > **SQL Editor** > **New query** (revise que arriba a la derecha diga el rol **postgres**).
+4. Abra `actualizar_supabase_0.16.0.sql` con el Bloc de notas, seleccione todo (**Ctrl+A**), copie (**Ctrl+C**),
+   péguelo en el editor (**Ctrl+V**) y toque **Run**.
+5. Si Supabase pregunta por "operaciones destructivas", toque **Run this query** (es normal).
+6. Abajo debe salir: **resultado = ACTUALIZADO A 0.16.0**, **version = 0.16.0**, **migraciones = 52**.
+7. Listo. Después suba la app nueva a Netlify (paso 10 y 11). La app vieja sigue funcionando mientras tanto.
+
+Si sale un error en rojo, **no se cambió nada**:
+
+| Lo que sale | Qué hacer |
+|---|---|
+| `FALTA_VERSION_ANTERIOR` | Su base no tiene la 0.15.0 completa. Corra primero las partes que falten (paso 5) y repita. |
+| `FALTA_NUCLEO` | Esa base no tiene el sistema. Haga la instalación completa (paso 5), no la actualización. |
+| `PAQUETE_VIEJO` | Su base ya tiene algo más nuevo. No haga nada y avise a su proveedor. |
+| `MIGRACION_DISTINTA` | No siga. Avise a su proveedor. |
+| `ROL_EQUIVOCADO` | Arriba a la derecha elija el rol **postgres** y vuelva a correr. |
+
+Si la pega dos veces no pasa nada: la segunda vez dice igual **ACTUALIZADO A 0.16.0** sin cambiar nada.
+
+---
+
 ## Respaldos (IMPORTANTE: el plan gratis no los deja descargar)
 
 El plan gratis de Supabase **no tiene respaldos que usted pueda descargar**. Haga uno a mano
@@ -202,7 +233,7 @@ Otros límites del plan gratis: si **nadie usa** el proyecto por 7 días, Supaba
 
 - [ ] Contraseña de la base guardada en lugar seguro (no en el celular sin clave, no en chats).
 - [ ] "Allow new users to sign up" apagado (paso 4).
-- [ ] `verificar_instalacion.sql` dice **TODO BIEN**, versión **0.15.0**, **51** migraciones.
+- [ ] `verificar_instalacion.sql` dice **TODO BIEN**, versión **0.16.0**, **52** migraciones.
 - [ ] El dueño existe en Authentication > Users (confirmado).
 - [ ] La empresa salió con **Empresa creada** y la licencia con su fecha.
 - [ ] Edge Functions `crear-usuario` y `cerrar-sesion-remota` publicadas (Verify JWT encendido).
@@ -219,7 +250,7 @@ Otros límites del plan gratis: si **nadie usa** el proyecto por 7 días, Supaba
 Revisadas en la etapa 6 (núcleo 0.15.0). Se probó el paquete en un "mini Supabase" local
 (`bash herramientas/probar.sh --paquete`): rol dueño **sin superusuario** (como `postgres` en
 Supabase), esquema `auth` de otro dueño, `auth.uid()` con la definición de Supabase, pgcrypto en
-`extensions`, cada parte en **una sola petición** como el SQL Editor; las 132 pruebas pasan encima.
+`extensions`, cada parte en **una sola petición** como el SQL Editor; las pruebas pasan encima (135 en 0.16.0).
 No se pudo probar con la imagen oficial `supabase/postgres` (Docker Hub respondió 429 y el espejo
 de AWS estaba bloqueado desde este entorno) ni contra un proyecto real (sin red a supabase.co).
 
@@ -239,3 +270,4 @@ de AWS estaba bloqueado desde este entorno) ni contra un proyecto real (sin red 
 | Transacción | `migrar.sh`: una por archivo | SQL Editor: el texto entero en una | Cada parte es todo-o-nada; se probó así (`sql_una_peticion.py`). |
 | Huella de migraciones | `migrar.sh` | paquete | Misma tabla `interno._migraciones` y misma sha256: después se puede seguir con `migrar.sh`. |
 | Llaves nuevas (`sb_publishable_`, `sb_secret_`) | — | proyectos nuevos | La app acepta la publishable; las funciones mandan la secreta solo en `apikey` si no es JWT; `armar_app.sh` rechaza llaves secretas. |
+| Actualizar una versión | `migrar.sh` | `actualizar_supabase_<versión>.sql` | Solo las migraciones nuevas, en una petición, con la misma huella; revisa que esté la anterior (`FALTA_VERSION_ANTERIOR`). Probado desde 0.15.0 instalado por partes (prueba 135). |

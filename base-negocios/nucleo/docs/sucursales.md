@@ -67,13 +67,43 @@ vez. Si llegó menos, se anota en la nota y se hace un ajuste en la bodega desti
 - Las ventas, apartados y devoluciones con cambio toman el precio de la sucursal de su caja.
   Cotizaciones: precio general.
 
+## 0.16.0 (migración 052): más lecturas y operaciones por sucursal
+
+El usuario limitado recibe del servidor SOLO lo suyo (antes la app lo escondía, pero el dato llegaba al
+navegador). El dueño y quien no tiene restricción reciben exactamente lo mismo que antes (prueba 135: foto
+antes y después de actualizar).
+
+| Qué | Usuario limitado |
+|---|---|
+| `compra_linea`, `pago_proveedor`, `pago_proveedor_anulacion` (RLS) | solo de compras de sus sucursales |
+| `cxp_saldo_inicial` (RLS) y sus pagos | nada: son de toda la empresa (se guardan con la primera sucursal solo para el asiento) |
+| `v_cxp_documento`, `v_cxp_proveedor` | quedan filtradas por lo anterior |
+| `v_comision_vendedor` | devengado = comisiones de ventas de sus sucursales; pagado = las de esas que ya están en un pago vigente |
+| `donde_esta_mi_dinero` | cuentas de sus sucursales y las de toda la empresa; depósitos que salen o llegan a ellas; sin "otras cuentas de efectivo" de los libros; `solo_mis_sucursales: true` |
+| `estado_fondos` | los fondos y socios sí (son de la empresa); el saldo de una cuenta de dinero de otra sucursal va en `null` |
+| `proyeccion_flujo` | su dinero, cobros de ventas de sus sucursales, pagos de compras de sus sucursales, pagos fijos que no salen de una cuenta de otra sucursal; comisiones y dividendos NO (van en `ocultos`) |
+| `conciliacion`, `banco_movimiento`, `banco_importacion`, `conciliacion_pareja`, `banco_diferencia` (RLS), `v_conciliacion`, `ver_conciliacion` | solo bancos de sus sucursales o de toda la empresa |
+| `pagar_proveedor`, `anular_pago_proveedor` | solo compras de sus sucursales; un saldo inicial: `SUCURSAL_NO_PERMITIDA` |
+| `registrar_cobro` sin "aplicar" (a la más vieja) | solo ventas al crédito de SUS sucursales (salta las demás y los saldos iniciales); si ahí no debe nada: `COBRO_EXCEDE_SALDO` |
+| `registrar_cobro` con "aplicar" | una venta de otra sucursal o un saldo inicial de cliente: `SUCURSAL_NO_PERMITIDA` |
+| `totales_compras`, `totales_gastos`, `mas_vendido` (nuevas, `totales.md`) | solo sus sucursales |
+
+Ayudante para políticas: `empresas_sin_restriccion()` (empresas donde el usuario conectado ve todas las
+sucursales; el dueño siempre).
+
 ## Pendiente (honesto)
 
 - HECHO en 0.13.1: `resumen_hoy`, `alertas_activas` y `exportar_plantilla` ya filtran por sucursal (ver
   `alertas.md` y `excel.md`; cuentas por cobrar = ventas al crédito emitidas en sus sucursales) y la
-  conciliación exige la sucursal del banco.
-- Los demás reportes de toda la empresa (estado de resultados, libros de ISV, `donde_esta_mi_dinero`,
-  cierres) NO se filtran por sucursal: dé esos permisos solo a usuarios sin restricción. Vistas que solo suman (`v_ventas_por_dia`, `v_ventas_por_vendedor`, `v_cxc_cliente`,
-  `v_saldo_favor`, `v_comision_vendedor`) tampoco.
+  conciliación exige la sucursal del banco. HECHO en 0.16.0: la tabla de arriba.
+- **Estado de resultados, balance y `saldo_cuentas` por sucursal: NO se hacen (decisión técnica 0.16.0).** Los
+  libros no asignan cada asiento a una sucursal: los asientos manuales, los gastos pagados desde un banco de toda
+  la empresa, las comisiones, los saldos iniciales y los repartos no tienen sucursal (o tienen la primera solo por
+  orden). Un "estado de resultados de la Norte" saldría incompleto y un balance por sucursal no cuadraría (bancos,
+  proveedores y patrimonio son de toda la empresa). Para comparar sucursales use `reporte_sucursales` (ventas,
+  costo, gastos y dinero de cada una). Esos reportes siguen siendo de toda la empresa: dé `contabilidad.ver` solo
+  a usuarios sin restricción. Lo mismo `bitacora_legible`, `historial_cierres`/`exportar_mes`, libros de ISV.
+- Vistas que solo suman de toda la empresa: `v_ventas_por_dia`, `v_ventas_por_vendedor`, `v_cxc_cliente`,
+  `v_saldo_favor`. Pagos fijos (`pago_fijo`, `pagos_fijos_proximos`) tampoco se limitan.
 - Los envíos de dinero sin recibir no salen todavía en `alertas_activas` (sí en `pendientes_entre_sucursales`).
 - Traslados entre sucursales: la mercadería cuenta en el destino desde que sale (no hay bodega "en camino").

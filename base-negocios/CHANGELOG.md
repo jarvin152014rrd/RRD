@@ -4,6 +4,35 @@ Formato: versión (fecha) y lista de cambios. La versión vive en `VERSION_NUCLE
 y queda guardada en cada base al migrar (vista `version_esquema`).
 Números: MAYOR.MENOR.ARREGLO (ver `docs/CONVENCIONES.md`).
 
+## 0.16.0 (2026-10-22) — Cada sucursal recibe solo lo suyo; totales en el servidor
+
+Migración nueva 052 (las 001-051 no se tocaron). 135 pruebas (nuevas 133, 134 y 135). Todas pasan también con
+`probar.sh --paquete`. Para quien ya tiene 0.15.0 en Supabase: `dist/actualizar_supabase_0.16.0.sql` (una sola
+pegada; ver `docs/SUPABASE.md`, "Actualizar de 0.15.0 a 0.16.0").
+
+- **Usuario limitado a su sucursal: el dato ya no llega al navegador** (`nucleo/docs/sucursales.md`). RLS nueva en
+  `compra_linea`, `pago_proveedor`, `pago_proveedor_anulacion`, `cxp_saldo_inicial` (de toda la empresa: solo sin
+  restricción) y las 5 tablas de la conciliación; así `v_cxp_documento`, `v_cxp_proveedor` y `v_conciliacion`
+  quedan filtradas. Filtradas también `v_comision_vendedor`, `donde_esta_mi_dinero`, `estado_fondos` (saldo de la
+  cuenta del fondo), `proyeccion_flujo` (sin comisiones ni dividendos de la empresa) y `ver_conciliacion`. El dueño
+  y quien no tiene restricción reciben exactamente lo mismo que antes (prueba 135 compara antes y después).
+- **Pagos a proveedores:** `pagar_proveedor` y `anular_pago_proveedor` exigen la sucursal de la compra; un saldo
+  inicial de proveedor solo lo paga quien trabaja con todas las sucursales (`SUCURSAL_NO_PERMITIDA`).
+- **Cobro "a la más vieja" de un usuario limitado:** solo a ventas al crédito de sus sucursales (salta las demás y
+  los saldos iniciales); "aplicar" a una venta de otra sucursal o a un saldo inicial: `SUCURSAL_NO_PERMITIDA`.
+- **`guardar_preferencias_alertas`** rechaza (`SIN_PERMISO`) los tipos que el puesto no ve.
+- **Lecturas de totales nuevas** (`nucleo/docs/totales.md`): `totales_compras` (comprado, contado, crédito, por
+  pagar y vencido), `totales_gastos` (gastado y en espera) y `mas_vendido` (cantidad e importe, restando
+  devoluciones). Respetan empresa, permiso y sucursal; cuadran con la suma de filas (prueba 133).
+- **`cerrar_mes` y `reabrir_periodo` aceptan `id_operacion` opcional** al final (las llamadas de antes siguen
+  igual). Reintento = misma respuesta con `duplicado`; tabla `periodo_operacion` (prueba 134).
+- **NO se hizo (decisión técnica):** estado de resultados / balance / `saldo_cuentas` por sucursal: los libros no
+  asignan cada asiento a una sucursal y el resultado saldría incompleto o descuadrado. Para comparar sucursales:
+  `reporte_sucursales`.
+- **Paquete:** `armar_instalacion.sh` deja también `dist/actualizar_supabase_<versión>.sql` (solo lo nuevo, revisa
+  que esté la migración anterior, todo-o-nada, termina con "ACTUALIZADO A <versión>"; se parte si pasa de 200 KB).
+  La instalación nueva queda en 14 partes y `verificar_instalacion.sql` espera 52 migraciones.
+
 ## 0.15.0 (2026-10-12) — Listo para Supabase real (etapa 6)
 
 Migración nueva 051 (las 001-050 no se tocaron). 132 pruebas (nueva 132). Todas pasan también con
