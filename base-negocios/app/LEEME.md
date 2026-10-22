@@ -14,7 +14,8 @@ bash herramientas/demo_app.sh
 Abra http://127.0.0.1:8080 — usuarios `dueno@demo.hn`, `admin@demo.hn`,
 `cajero@demo.hn`, `vendedor@demo.hn`, clave `demo1234`. Es una ferretería falsa
 (ventas, clientes con deuda vencida, cajas, bancos, depósito en tránsito, dos
-gastos esperando aprobación y dos promociones para la pintura). Cada vez que se corre, la demo empieza de cero.
+gastos esperando aprobación y dos promociones para la pintura; desde 0.8.0 también comisiones, un turno de caja
+con faltante y una venta anulada con motivo). Cada vez que se corre, la demo empieza de cero.
 
 Pruebas en el navegador: `bash herramientas/probar_app.sh` (capturas en
 `app-pruebas/capturas/`, no van a git).
@@ -88,6 +89,28 @@ cierra en la base y además borra sus sesiones de Supabase Auth). Sin `modo` (la
    (un nombre de `js/iconos.js`); la prueba falla si falta. Si cambia una ruta, agregue la vieja a `RUTAS_VIEJAS`.
 3. Agregue el archivo a `CASCARON` en `sw.js` y suba `VERSION`.
 4. Agregue su prueba en `app-pruebas/probar_app.cjs` (Compras y Dinero: `app-pruebas/probar_compras_dinero.cjs`).
+
+## Cómo se usan Reportes y el cierre de mes (0.8.0)
+
+Reportes es para mirar: no mueve dinero (solo el cierre cambia algo). Cada reporte tiene **Descargar Excel** e
+**Imprimir** (la hoja impresa lleva el logo, texto y líneas; sin íconos, emojis ni colores).
+
+- **¿Gané o perdí?:** elija el mes (u "Otras fechas…"). Arriba dice en una frase cuánto ganó y si fue más o menos
+  que el mes anterior. Debajo: lo que vendió, lo que le costó, los gastos por categoría y la ganancia. La
+  "ganancia cobrada" es la que ya entró como dinero (la que se reparte). **Ver en formato contable (NIIF)** muestra
+  el estado de resultados y el balance formales.
+- **Ventas:** por día, semana o mes, con gráfica; por forma de pago, por vendedor y lo más vendido. Es lo
+  facturado: no resta devoluciones (se muestran aparte).
+- **Inventario valorizado:** cuánto vale lo que tiene (al costo y a precio de venta), por categoría, lo que está
+  bajo el mínimo y lo que no se vende hace 30, 60 o 90 días.
+- **Empleados y comisiones:** lo que vendió cada uno, sus comisiones (solo sobre lo cobrado) y los faltantes y
+  sobrantes de cada turno de caja.
+- **Quién hizo qué:** la bitácora en palabras sencillas, con filtros. Arriba dice si está completa.
+- **Cierre de mes:** cada mes con su estado (Abierto, En revisión, Cerrado; Con reparto o Sin reparto). Elija el
+  mes: si falta cerrarlo, sale la revisión ("Listo" o "Falta", con un botón para ir a arreglarlo) y el resumen.
+  **Cerrar** deja los números firmes; un error después se corrige con un movimiento en contra en un mes abierto.
+  Solo el dueño **reabre**, con motivo, y nunca un mes que ya repartió su utilidad. Después de cerrar, reparta en
+  Dinero > Fondos y socios. Abajo están los **libros de ISV** del mes (pantalla y Excel).
 
 ## Cómo se usa Compras (0.7.0)
 

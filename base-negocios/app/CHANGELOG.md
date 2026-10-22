@@ -1,5 +1,44 @@
 # Cambios de la app
 
+## app 0.8.0 (núcleo 0.15.0, sin migraciones nuevas) — Reportes y cierre de mes funcionando
+
+### Parte 1: Reportes (solo mirar)
+- **¿Gané o perdí?:** un mes (`estado_resultados`, con su comparativo) u otras fechas (`saldo_cuentas`, con la
+  misma cuenta del núcleo, comparado con los mismos días de antes). Frase sencilla ("En octubre ganó L …, L … más
+  que en septiembre"), cifras grandes en verde y rojo, gastos por categoría, ganancia cobrada y tabla comparada.
+  Con la contabilidad visible: **Ver en formato contable (NIIF)** (estado de resultados y `balance_general`).
+- **Ventas:** por día, semana o mes con gráfica, por forma de pago (`v_ventas_por_caja`), por vendedor
+  (`v_ventas_por_vendedor`) y lo más vendido (`v_venta_linea`, hasta 1,000 líneas). Dice que es lo facturado y
+  que NO resta devoluciones (las muestra aparte, de `v_devolucion`).
+- **Inventario valorizado:** al costo (`v_existencia`) y a precio de venta sin ISV, por categoría y bodega, bajo
+  el mínimo y sin ventas en 30/60/90 días (`v_kardex`).
+- **Empleados y comisiones:** `vigilancia_empleados` (ventas, ganancia, descuentos, anulaciones, diferencias),
+  comisiones del período y lo que se les debe (`v_comision`, `v_comision_vendedor`; solo sobre lo cobrado) y
+  faltantes y sobrantes por turno (`v_turno_caja`). Cada parte sale solo con su permiso.
+- **Quién hizo qué:** `bitacora_legible` con filtros por fecha, persona y tipo, de 100 en 100, con el motivo; y
+  "Bitácora completa" o sus problemas (`verificar_bitacora`).
+- **Descargar Excel** (SheetJS de `vendor/`, una hoja por parte, montos en lempiras) e **Imprimir** (hoja A4 con
+  logo, texto y líneas; sin íconos, emojis ni colores; `js/reportes.js` + `imprimible.js`).
+### Parte 2: Cierre de mes
+- Lista de meses con chips (Abierto, En revisión, Cerrado; Con reparto, Sin reparto). Pre-cierre con las
+  advertencias del núcleo (`exportar_mes`) como lista "Listo / Falta" con botón a la pantalla donde se arregla
+  (caja, depósitos, pendientes, cuentas, cuadrar con el banco), si el mes terminó, si el anterior está cerrado y si
+  los libros cuadran; resumen del mes. **Cerrar** (`cerrar_mes`) con confirmación clara; **Reabrir**
+  (`reabrir_periodo`) solo el dueño, con motivo, en orden y nunca con reparto (lo explica). Después del cierre lleva
+  a Dinero > Fondos y socios para repartir. **Libros de ISV** del mes (`libros_isv`) en pantalla y Excel.
+- `cerrar_mes` y `reabrir_periodo` no reciben `id_operacion` en el núcleo: la app arma la operación una vez y la
+  repite una sola vez con los mismos datos si se corta el internet (el núcleo reconoce el reintento: "ya_estaba").
+  Probado: con un corte, un solo cierre.
+- Menú: Inventario valorizado pide además `inventario.ver`; Cierre de mes, `contabilidad.ver` (lo exige el núcleo).
+### Parte 3: comas
+- `aNumero` y `aPorcentaje` en `formato.js`: porcentaje de impuestos, topes de descuento, mínimo del producto,
+  campos extra numéricos, cantidades de Traslados y conteo físico rechazan "2,5" con "Use punto para los decimales".
+### Pruebas y demo
+- `app-pruebas/probar_reportes.cjs` (16; la corre `probar_app.sh`): cifras contra la base y a mano, permisos,
+  celular, Excel, impresión, comas y el cierre (rechazo con reparto, reabrir con motivo, revisión, cerrar con corte).
+  `probar_app.cjs`: lo impreso de los reportes sin emojis. Demo: comisiones (Juan 5 %, Ana 3 %), turno de Ana con
+  faltante de L 50.00 y una venta anulada con motivo. Cascarón `cascaron-0.8.0`.
+
 ## app 0.7.1 (núcleo 0.15.0, sin migraciones nuevas) — Arreglos de la revisión de Compras y Dinero
 
 - **Grave: la coma en los montos.** `aCentavos`, `aCosto` y `aCantidad` borraban todas las comas: "150,50" se

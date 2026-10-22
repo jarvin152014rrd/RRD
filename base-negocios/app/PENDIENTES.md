@@ -1,12 +1,28 @@
-# Pendientes de la app (0.7.1)
+# Pendientes de la app (0.8.0)
 
-- Comas: unos pocos campos que NO usan `aCentavos`/`aCantidad` todavía toman la coma como decimal ("2,5" = 2.5):
-  porcentaje de impuestos, topes en Reglas, mínimo del producto y cantidades de Traslados de inventario. Pasarlos
-  a la misma regla (coma solo de miles) en la próxima ronda.
+- HECHO (0.8.0): comas en impuestos, topes, mínimo, traslados y conteo. Quedan los campos `type=number`
+  (arqueo por billetes, devoluciones, plazos), que el navegador ya no deja escribir con coma.
+- Reportes (0.8.0), lo que falta o es dudoso:
+  - NÚCLEO (usuario limitado a su sucursal): `estado_resultados`, `saldo_cuentas`, `balance_general`,
+    `bitacora_legible`, `verificar_bitacora`, `historial_cierres`/`exportar_mes` y `v_ventas_por_vendedor` /
+    `v_ventas_por_dia` son de TODA la empresa. La app no muestra ¿Gané o perdí?, Quién hizo qué, Cierre de mes ni
+    las ventas por vendedor a un usuario limitado. Falta la versión por sucursal en el núcleo.
+  - Ventas, lo más vendido, valorizado, comisiones y turnos leen hasta 1,000 filas (se avisa). Falta una lectura
+    de totales en el núcleo para períodos largos.
+  - Lo más vendido no resta devoluciones (falta una lectura de devoluciones por producto).
+  - "Sin ventas en N días" mira solo salidas por venta del kardex; si hay más de 1,000 en esos días no lista nada.
+  - "Gastos por categoría" agrupa por la cuenta contable (6.1…), no por la categoría de gasto de Dinero.
+  - El pre-cierre usa las advertencias del núcleo; el "conteo pendiente" sale como solicitud pendiente. No hay
+    una lectura del núcleo que dé la lista "listo / falta" completa ni el descuadre por asiento antes de cerrar.
+  - Reabrir un mes con reparto: primero hay que anular el reparto (`anular_distribucion`), que todavía no está en
+    pantalla (lo hace el proveedor). Tampoco hay pantalla para anular un pago de dividendos.
+  - `cerrar_mes` y `reabrir_periodo` no reciben `id_operacion` (el reintento es seguro por el estado del mes).
+  - Ventas por vendedor para un usuario limitado y el PDF del cierre (hoy: Imprimir y Excel).
+  - Los formatos NIIF y los libros de ISV los debe validar un contador hondureño.
 - Cifras de Compras y Gastos: suman hasta 300 filas (se avisa). Falta una lectura de totales en el núcleo.
 
-- Pantallas en construcción (con su estado vacío amable): apartados, cajas abiertas, reportes y cierre de mes.
-  HECHO (0.7.0): Compras (compras, proveedores, pagar a proveedores) y Dinero (gastos, depósitos y traslados,
+- Pantallas en construcción (con su estado vacío amable): apartados y cajas abiertas.
+  HECHO (0.8.0): Reportes y cierre de mes. HECHO (0.7.0): Compras (compras, proveedores, pagar a proveedores) y Dinero (gastos, depósitos y traslados,
   pagos fijos, fondos y socios, cuadrar con el banco, proyección).
 - Fondos: el núcleo no tiene "aporte de capital" de un socio (solo repartos de utilidad y su pago). Faltan en
   pantalla: guardar socios y la regla de reparto, editar o desactivar un fondo y anular un reparto o un pago a
@@ -67,7 +83,7 @@
 - Productos y clientes se leen completos (hasta 1,000) y se buscan en el navegador; con catálogos más grandes
   hará falta una búsqueda en el servidor.
 - Vender no muestra existencias por bodega ni deja cambiar el precio (el núcleo no lo permite: solo descuento).
-- La lista de "Ventas del día" no suma totales (eso es de Reportes, con `v_ventas_por_dia`).
+- HECHO (0.8.0): totales de ventas en Reportes > Ventas.
 - Venta y cobro sin internet (cola local con id_operacion y rango CAI por caja). Hoy sin internet solo
   se ve el aviso; no se guarda nada.
 - Modo sencillo (perfil pequeño con pocas pestañas): falta decidir qué pestañas quedan.
