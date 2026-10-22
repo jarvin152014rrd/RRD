@@ -112,7 +112,7 @@ export async function mostrar(vista, ctx) {
     graf.id = 'grafica-rventas';
     if (muchas) graf.classList.add('grafica-densa');
 
-    const avisoTope = [porCaja, porVendedor || [], lineas].some(llegoAlTope);
+    const avisoTope = [porCaja, porVendedor || [], lineas, devs].some(llegoAlTope);
     zona.replaceChildren(...[
       mensaje('info', 'Estas cifras son lo facturado (con ISV): no restan las devoluciones.',
         totalDev ? `En estas fechas hubo devoluciones por ${dinero(totalDev)}. Las ventas sin devoluciones están en "¿Gané o perdí?".` : 'En estas fechas no hubo devoluciones. Las ventas anuladas no se cuentan.',

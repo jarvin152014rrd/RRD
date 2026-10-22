@@ -1,5 +1,26 @@
 # Cambios de la app
 
+## app 0.8.1 (núcleo 0.15.0, sin migraciones nuevas) — Arreglos de la revisión de Reportes y cierre
+
+- **Empleados y comisiones:** a un usuario limitado a su sucursal ya no se le pide `v_comision_vendedor` (es de toda
+  la empresa): sin la columna "Se le debe hoy" y sin vendedores sacados de esa vista. Aviso del tope de 1,000 también
+  en los turnos (pantalla y Excel). Una persona sin ventas visibles sale igual si tiene diferencias de caja o
+  anulaciones, con "—" en las columnas de ventas.
+- **Cierre de mes:** el pre-cierre busca, como `cerrar_periodo`, el mes abierto MÁS VIEJO anterior con asientos y lo
+  nombra ("Falta: cerrar agosto de 2026 primero"); los meses vacíos de en medio no cuentan.
+- **Ventas:** el aviso del tope de 1,000 filas también cuenta las devoluciones.
+- **Quién hizo qué:** si hay más páginas, el Excel y lo impreso dicen "Solo las primeras N filas; hay más con estos filtros".
+- **Productos:** los campos extra numéricos usan `aNumero` (0 o más, coma solo de miles) y los enteros piden número
+  entero; nunca se manda un valor vacío en silencio.
+- **`aNumero`** ya no acepta una "L" delante ("l5" se rechaza, igual que `aCantidad`).
+- **¿Gané o perdí?:** el mes en curso se compara con los MISMOS días del mes anterior (`saldo_cuentas`); la tabla
+  comparada trae "Otros gastos" (y "Otros ingresos") cuando hay, así la tarjeta de Gastos cuadra con la tabla.
+- **Inventario valorizado:** los totales salen de las mismas filas que se muestran; un producto en negativo va
+  aparte con su aviso. "Sin ventas" mira solo salidas con origen venta.
+- Pruebas: `probar_reportes.cjs` 18 (nuevas: empleado sin ventas y tope de turnos, mes viejo abierto con el
+  intermedio vacío; ampliadas: mismos días, tarjeta de gastos, totales del valorizado, "l5", limitado sin deuda de
+  comisiones, bitácora impresa con más páginas). Cascarón `cascaron-0.8.1`.
+
 ## app 0.8.0 (núcleo 0.15.0, sin migraciones nuevas) — Reportes y cierre de mes funcionando
 
 ### Parte 1: Reportes (solo mirar)

@@ -169,10 +169,14 @@ export async function mostrar(vista, ctx) {
   async function detalleAbierto(m) {
     const ant = mesAnterior(m.anio, m.mes);
     const mAnt = meses.find((x) => x.anio === ant.anio && x.mes === ant.mes);
+    // Como cerrar_periodo (núcleo 004): el mes abierto MÁS VIEJO antes de este que tenga asientos impide cerrar
+    // (los meses vacíos se cierran solos). Se revisa cada mes abierto anterior (meses viene del más nuevo al más viejo).
+    const abiertosAntes = meses.filter((x) => !x.cerrado && (x.anio < m.anio || (x.anio === m.anio && x.mes < m.mes))).reverse();
     const conBanco = tieneModulo('conciliacion') && puede('conciliacion.ver') && puede('dinero.ver');
     const [x, movAnt, concs, cuentas] = await Promise.all([
       rpc('exportar_mes', { p_empresa_id: empresaId(), p_anio: m.anio, p_mes: m.mes }),
-      mAnt && !mAnt.cerrado ? leer('v_asiento', { empresa_id: empresaId(), fecha_contable: { gte: rangoMes(ant.anio, ant.mes).desde, lte: rangoMes(ant.anio, ant.mes).hasta } }, { limite: 1 }) : [],
+      Promise.all(abiertosAntes.map((x) => leer('v_asiento', { empresa_id: empresaId(), fecha_contable: { gte: rangoMes(x.anio, x.mes).desde, lte: rangoMes(x.anio, x.mes).hasta } }, { limite: 1 })
+        .then((l) => (l.length ? x : null)))).then((l) => l.find(Boolean) || null),
       conBanco ? leer('v_conciliacion', { empresa_id: empresaId(), anio: m.anio, mes: m.mes }) : [],
       conBanco ? cuentasDinero(true) : [],
     ]);
@@ -188,8 +192,9 @@ export async function mostrar(vista, ctx) {
     const items = [
       { clave: 'terminado', bloquea: true, listo: m.terminado, texto: 'El mes ya terminó',
         falta: `El mes todavía no termina: se puede cerrar desde el 1 de ${MESES[sig.mes - 1]}.` },
-      ...(mAnt ? [{ clave: 'anterior', bloquea: true, listo: mAnt.cerrado || movAnt.length === 0, texto: `${mayus(mAnt.texto)} está cerrado`,
-        falta: `Primero cierre ${mAnt.texto}.`, accion: { texto: `Ir a ${mAnt.texto}`, onclick: () => { elegido = mAnt.valor; pintarLista(); verMes(); } } }] : []),
+      ...(mAnt ? [{ clave: 'anterior', bloquea: true, listo: !movAnt, texto: 'Los meses anteriores están cerrados',
+        falta: movAnt ? `Falta: cerrar ${movAnt.texto} primero (tiene movimientos y sigue abierto).` : '',
+        accion: movAnt ? { texto: `Ir a ${movAnt.texto}`, onclick: () => { elegido = movAnt.valor; pintarLista(); verMes(); } } : null }] : []),
       { clave: 'cuadra', bloquea: true, listo: bg.cuadra !== false, texto: 'Los libros cuadran (lo que se debe y lo que se tiene)',
         falta: `Los libros no cuadran por ${dinero(bg.diferencia_centavos)}. Avise a su proveedor del programa.` },
       { clave: 'turnos', listo: !de('turnos_abiertos').length, texto: 'Las cajas están cerradas', falta: de('turnos_abiertos').map((a) => a.mensaje).join(' '),

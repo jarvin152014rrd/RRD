@@ -8,7 +8,7 @@ import { leer, rpc } from '../api.js';
 import { empresaId, puede, tieneModulo } from '../sesion.js';
 import { dinero, fecha, fechaHora } from '../formato.js';
 import { h, cajaError, titulo, tarjetaCifra, monto, chip, estadoVacio, mensaje, tabla, filaIcono } from '../ui.js';
-import { reiniciarAlSalir } from '../datos.js';
+import { alcance, reiniciarAlSalir } from '../datos.js';
 import { selectorPeriodo, periodoInicial, datosPeriodo, botonesReporte, hastaHoy, TOPE_FILAS, llegoAlTope } from '../reportes.js';
 
 let periodo = periodoInicial();
@@ -32,6 +32,10 @@ export function comisionesPorVendedor(movs) {
 }
 
 export async function mostrar(vista, ctx) {
+  const al = await alcance();
+  if (!ctx.sigueVigente()) return;
+  // v_comision_vendedor (lo que se debe hoy) es de toda la empresa: a un usuario limitado no se le pide (PENDIENTES).
+  const veoDeuda = !al.limitado;
   const veoVigilancia = puede('bitacora.ver');
   const veoComisiones = tieneModulo('comisiones') && puede('comisiones.ver');
   const veoTurnos = tieneModulo('dinero') && puede('dinero.ver');
@@ -52,20 +56,25 @@ export async function mostrar(vista, ctx) {
       [vig, movs, porPagar, turnos] = await Promise.all([
         veoVigilancia ? rpc('vigilancia_empleados', { p_empresa_id: empresaId(), p_desde: dp.desde, p_hasta: hasta }) : null,
         veoComisiones ? leer('v_comision', { empresa_id: empresaId(), fecha_contable: { gte: dp.desde, lte: hasta } }, { orden: 'fecha_contable.asc', limite: TOPE_FILAS }) : [],
-        veoComisiones ? leer('v_comision_vendedor', { empresa_id: empresaId() }, { orden: 'vendedor.asc' }) : [],
+        veoComisiones && veoDeuda ? leer('v_comision_vendedor', { empresa_id: empresaId() }, { orden: 'vendedor.asc' }) : [],
         veoTurnos ? leer('v_turno_caja', { empresa_id: empresaId(), fecha_cierre: { gte: dp.desde, lte: hasta } }, { orden: 'cerrado_en.desc', limite: TOPE_FILAS }) : [],
       ]);
     } catch (err) { zona.replaceChildren(await cajaError(err)); return; }
     if (!ctx.sigueVigente()) return;
 
     const empleados = vig ? (vig.empleados || []) : [];
-    const conVentas = empleados.filter((e) => e.ventas && (e.ventas.cantidad || e.descuentos.ventas_con_descuento || e.anulaciones_pedidas.cantidad || e.diferencias_caja.turnos));
+    // Sin permiso de ver ventas, el núcleo manda ventas y descuentos en null: la persona sale igual si tiene
+    // diferencias de caja o anulaciones, con "—" en las columnas de ventas.
+    const conVentas = empleados.filter((e) => (e.ventas && (e.ventas.cantidad || (e.descuentos && e.descuentos.ventas_con_descuento)))
+      || (e.anulaciones_pedidas && e.anulaciones_pedidas.cantidad) || (e.diferencias_caja && e.diferencias_caja.turnos));
+    const raya = '—';
     const costosOcultos = !vig || vig.costos_ocultos;
     const com = comisionesPorVendedor(movs);
     for (const p of porPagar) if (!com.has(p.vendedor_id) && Number(p.por_pagar_centavos)) com.set(p.vendedor_id, { vendedor_id: p.vendedor_id, nombre: p.vendedor, ganado: 0, ajustes: 0, ventas: new Set() });
     const comisiones = [...com.values()].map((c) => ({ ...c, porPagar: Number((porPagar.find((p) => p.vendedor_id === c.vendedor_id) || {}).por_pagar_centavos) || 0 }))
       .sort((a, b) => (b.ganado + b.ajustes) - (a.ganado + a.ajustes));
     const cerrados = turnos.filter((t) => t.estado !== 'abierto');
+    const topeTurnos = llegoAlTope(turnos);
     const faltante = cerrados.reduce((s, t) => s + Math.min(0, Number(t.diferencia_centavos) || 0), 0);
     const sobrante = cerrados.reduce((s, t) => s + Math.max(0, Number(t.diferencia_centavos) || 0), 0);
 
@@ -77,9 +86,9 @@ export async function mostrar(vista, ctx) {
           columnas: [{ titulo: 'Empleado' }, { titulo: 'Ventas', num: true }, { titulo: 'Vendió', num: true }, ...(costosOcultos ? [] : [{ titulo: 'Ganancia', num: true }]),
             { titulo: 'Descuentos dados', num: true }, { titulo: 'Anulaciones pedidas', num: true }, { titulo: 'Diferencia de caja', num: true }],
           filas: conVentas.map((e) => [h('span', {}, h('strong', {}, e.nombre), ' ', h('span', { class: 'detalle' }, ROL[e.rol] || e.rol)),
-            String(e.ventas.cantidad), monto(dinero(e.ventas.total_centavos), { dato: `vendio-${e.usuario_id}` }),
+            e.ventas ? String(e.ventas.cantidad) : raya, e.ventas ? monto(dinero(e.ventas.total_centavos), { dato: `vendio-${e.usuario_id}` }) : raya,
             ...(costosOcultos ? [] : [monto(dinero(e.ganancia_centavos), { negativo: Number(e.ganancia_centavos) < 0 })]),
-            `${dinero(e.descuentos.total_centavos)} (${e.descuentos.ventas_con_descuento})`,
+            e.descuentos ? `${dinero(e.descuentos.total_centavos)} (${e.descuentos.ventas_con_descuento})` : raya,
             `${e.anulaciones_pedidas.cantidad}${e.anulaciones_pedidas.aprobadas ? ` (${e.anulaciones_pedidas.aprobadas} aprobadas)` : ''}`,
             monto(dinero(e.diferencias_caja.neto_centavos), { negativo: Number(e.diferencias_caja.neto_centavos) < 0 })]),
           filaProps: (i) => ({ dataset: { empleado: conVentas[i].usuario_id } }) })
@@ -89,10 +98,11 @@ export async function mostrar(vista, ctx) {
       veoComisiones ? [
         h('h2', { class: 'titulo-chico' }, 'Comisiones'),
         h('p', { class: 'ayuda', dataset: { info: 'comision-cobrado' } }, 'Se ganan solo sobre lo cobrado: una venta al crédito da comisión cuando se termina de cobrar, y lo que se perdonó al cliente no cuenta. Las devoluciones las rebajan, aunque ya se hayan pagado.'),
-        comisiones.length ? tabla({ props: { id: 'tabla-comisiones' }, columnas: [{ titulo: 'Vendedor' }, { titulo: 'Ganó en estas fechas', num: true }, { titulo: 'Ajustes', num: true }, { titulo: 'Se le debe hoy', num: true }],
+        comisiones.length ? tabla({ props: { id: 'tabla-comisiones' }, columnas: [{ titulo: 'Vendedor' }, { titulo: 'Ganó en estas fechas', num: true }, { titulo: 'Ajustes', num: true }, ...(veoDeuda ? [{ titulo: 'Se le debe hoy', num: true }] : [])],
           filas: comisiones.map((c) => [h('strong', {}, c.nombre), monto(dinero(c.ganado), { sentido: c.ganado ? 'entra' : null, dato: `comision-${c.vendedor_id}` }),
-            c.ajustes ? monto(dinero(c.ajustes), { negativo: c.ajustes < 0 }) : dinero(0), monto(dinero(c.porPagar), { dato: `por-pagar-${c.vendedor_id}` })]) })
+            c.ajustes ? monto(dinero(c.ajustes), { negativo: c.ajustes < 0 }) : dinero(0), ...(veoDeuda ? [monto(dinero(c.porPagar), { dato: `por-pagar-${c.vendedor_id}` })] : [])]) })
           : estadoVacio({ icono: 'credencial', chico: true, texto: 'No hay comisiones en estas fechas.' }),
+        !veoDeuda ? h('p', { class: 'ayuda', dataset: { info: 'deuda-limitado' } }, 'Lo que se le debe hoy a cada vendedor es de toda la empresa; usted trabaja solo con sus sucursales, por eso no lo ve.') : null,
         llegoAlTope(movs) ? mensaje('info', `Se leyeron los primeros ${TOPE_FILAS.toLocaleString('en-US')} movimientos de comisiones.`, 'Acorte las fechas para ver todo.') : null,
       ] : null,
 
@@ -101,6 +111,7 @@ export async function mostrar(vista, ctx) {
         h('div', { class: 'cifras-dos' },
           tarjetaCifra({ dato: 'faltantes', icono: 'baja', color: faltante ? 'rojo' : 'neutro', etiqueta: 'Faltó', valor: dinero(Math.abs(faltante)) }),
           tarjetaCifra({ dato: 'sobrantes', icono: 'sube', color: sobrante ? 'dorado' : 'neutro', etiqueta: 'Sobró', valor: dinero(sobrante) })),
+        topeTurnos ? mensaje('info', `Se leyeron los primeros ${TOPE_FILAS.toLocaleString('en-US')} turnos: lo que faltó y sobró puede ser más.`, 'Acorte las fechas para ver todo.', { dataset: { info: 'tope-turnos' } }) : null,
         cerrados.length ? h('div', { class: 'lista-filas', id: 'lista-turnos' }, cerrados.map((t) => {
           const dif = Number(t.diferencia_centavos) || 0;
           return filaIcono({ icono: 'caja', color: dif < 0 ? 'rojo' : dif > 0 ? 'dorado' : 'verde',
@@ -119,15 +130,16 @@ export async function mostrar(vista, ctx) {
         ...(veoVigilancia ? [{ titulo: 'Ventas por empleado', columnas: [{ titulo: 'Empleado' }, { titulo: 'Puesto' }, { titulo: 'Ventas', tipo: 'numero' }, { titulo: 'Vendió', tipo: 'dinero' },
           ...(costosOcultos ? [] : [{ titulo: 'Ganancia', tipo: 'dinero' }]), { titulo: 'Descuentos dados', tipo: 'dinero' }, { titulo: 'Anulaciones pedidas', tipo: 'numero' },
           { titulo: 'Faltante', tipo: 'dinero' }, { titulo: 'Sobrante', tipo: 'dinero' }],
-          filas: conVentas.map((e) => [e.nombre, ROL[e.rol] || e.rol, e.ventas.cantidad, e.ventas.total_centavos, ...(costosOcultos ? [] : [e.ganancia_centavos]),
-            e.descuentos.total_centavos, e.anulaciones_pedidas.cantidad, e.diferencias_caja.faltante_centavos, e.diferencias_caja.sobrante_centavos]) }] : []),
-        ...(veoComisiones ? [{ titulo: 'Comisiones', columnas: [{ titulo: 'Vendedor' }, { titulo: 'Ganó en estas fechas', tipo: 'dinero' }, { titulo: 'Ajustes', tipo: 'dinero' }, { titulo: 'Se le debe hoy', tipo: 'dinero' }],
-          filas: comisiones.map((c) => [c.nombre, c.ganado, c.ajustes, c.porPagar]), total: ['Total', null, null, null] }] : []),
+          filas: conVentas.map((e) => [e.nombre, ROL[e.rol] || e.rol, e.ventas ? e.ventas.cantidad : null, e.ventas ? e.ventas.total_centavos : null, ...(costosOcultos ? [] : [e.ganancia_centavos]),
+            e.descuentos ? e.descuentos.total_centavos : null, e.anulaciones_pedidas.cantidad, e.diferencias_caja.faltante_centavos, e.diferencias_caja.sobrante_centavos]) }] : []),
+        ...(veoComisiones ? [{ titulo: 'Comisiones', columnas: [{ titulo: 'Vendedor' }, { titulo: 'Ganó en estas fechas', tipo: 'dinero' }, { titulo: 'Ajustes', tipo: 'dinero' }, ...(veoDeuda ? [{ titulo: 'Se le debe hoy', tipo: 'dinero' }] : [])],
+          filas: comisiones.map((c) => [c.nombre, c.ganado, c.ajustes, ...(veoDeuda ? [c.porPagar] : [])]) }] : []),
         ...(veoTurnos ? [{ titulo: 'Turnos de caja', columnas: [{ titulo: 'Turno', tipo: 'numero' }, { titulo: 'Caja' }, { titulo: 'Cajero' }, { titulo: 'Cerró' }, { titulo: 'Diferencia', tipo: 'dinero' }, { titulo: 'Qué se decidió' }],
-          filas: cerrados.map((t) => [t.numero, t.caja, t.cajero, fecha(t.fecha_cierre), t.diferencia_centavos, resolucion(t)]) }] : []),
+          filas: cerrados.map((t) => [t.numero, t.caja, t.cajero, fecha(t.fecha_cierre), t.diferencia_centavos, resolucion(t)]),
+          notas: topeTurnos ? [`Solo los primeros ${TOPE_FILAS} turnos; hay más en estas fechas.`] : [] }] : []),
       ] };
     const seccionCom = doc.secciones.find((s) => s.titulo === 'Comisiones');
-    if (seccionCom) seccionCom.total = ['Total', comisiones.reduce((s, c) => s + c.ganado, 0), comisiones.reduce((s, c) => s + c.ajustes, 0), comisiones.reduce((s, c) => s + c.porPagar, 0)];
+    if (seccionCom) seccionCom.total = ['Total', comisiones.reduce((s, c) => s + c.ganado, 0), comisiones.reduce((s, c) => s + c.ajustes, 0), ...(veoDeuda ? [comisiones.reduce((s, c) => s + c.porPagar, 0)] : [])];
   }
   await cargar();
 }

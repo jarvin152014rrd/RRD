@@ -191,8 +191,16 @@ async function formulario(vista, ctx, p) {
     for (const { x, ctl } of extras) {
       const t = ctl.value.trim();
       if (!t) { if (p && p.campos_extra && x.clave in p.campos_extra) ce[x.clave] = null; continue; }
-      if (['numero', 'entero'].includes(x.tipo) && comaInvalida(t)) { zonaError.append(errorSimple(`${x.etiqueta || x.clave}: ${MENSAJE_COMA}`)); return; }
-      ce[x.clave] = x.tipo === 'si_no' ? t === 'true' : ['numero', 'entero'].includes(x.tipo) ? Number(t.replace(/,/g, '')) : t;
+      if (['numero', 'entero'].includes(x.tipo)) {
+        // Número de 0 o más (coma solo de miles); entero sin decimales. Nunca se manda vacío en silencio.
+        const n = aNumero(t);
+        const nombreCampo = x.etiqueta || x.clave;
+        if (n === null) { zonaError.append(errorSimple(`${nombreCampo}: ${comaInvalida(t) ? MENSAJE_COMA : 'escriba un número de 0 o más.'}`)); ctl.focus(); return; }
+        if (x.tipo === 'entero' && !Number.isInteger(n)) { zonaError.append(errorSimple(`${nombreCampo}: escriba un número entero, sin decimales.`)); ctl.focus(); return; }
+        ce[x.clave] = n;
+        continue;
+      }
+      ce[x.clave] = x.tipo === 'si_no' ? t === 'true' : t;
     }
     if (Object.keys(ce).length) datos.campos_extra = ce;
     let r;

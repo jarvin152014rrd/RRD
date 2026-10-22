@@ -104,7 +104,11 @@ async function leerExcel(p, descarga) {
     const p = d.p;
     await ir(p, 'reportes/gane', '#gane-frase');
     const er = JSON.parse(sql('dueno@demo.hn', `public.estado_resultados('${EM}', ${A}, ${M})`));
-    const ant = er.comparativo.mes_anterior;
+    // 0.8.1: el mes en curso se compara con los MISMOS días del mes anterior (saldo_cuentas).
+    const ant = await p.evaluate(async ({ e, d, h2 }) => {
+      const api = await import('/js/api.js'); const g = await import('/js/pantallas/rep_gane.js');
+      return g.resultadosDeSaldos(await api.rpc('saldo_cuentas', { p_empresa_id: e, p_desde: d, p_hasta: h2 }));
+    }, { e: EM, d: `${AA}-${String(MA).padStart(2, '0')}-01`, h2: sql(null, `least(('${AA}-${String(MA).padStart(2, '0')}-01'::date + ${Number(HOY.slice(8, 10)) - 1}), ('${AA}-${String(MA).padStart(2, '0')}-01'::date + interval '1 month' - interval '1 day')::date)`) });
     afirmar(Number(await p.getAttribute('#gane-frase', 'data-neta')) === er.utilidad_neta_centavos, 'ganancia neta distinta al núcleo');
     afirmar((await texto(p, '[data-dato=gane-ventas] .cifra-valor')) === lempiras(er.ventas_netas_centavos), 'ventas distintas');
     afirmar((await texto(p, '[data-dato=gane-costo] .cifra-valor')) === lempiras(er.costo_ventas_centavos), 'costo distinto');
@@ -114,9 +118,14 @@ async function leerExcel(p, descarga) {
     afirmar(er.utilidad_neta_centavos === er.utilidad_bruta_centavos - er.gastos_operacion_centavos + er.otros_ingresos_centavos - er.otros_gastos_centavos, 'neta a mano');
     const dif = er.utilidad_neta_centavos - ant.utilidad_neta_centavos;
     const frase = await texto(p, '#gane-frase');
-    afirmar(frase.includes(lempiras(Math.abs(er.utilidad_neta_centavos))) && frase.includes(`${lempiras(Math.abs(dif))} ${dif > 0 ? 'más' : 'menos'} que en`), 'frase: ' + frase);
+    afirmar(frase.includes(lempiras(Math.abs(er.utilidad_neta_centavos))) && frase.includes(`${lempiras(Math.abs(dif))} ${dif > 0 ? 'más' : 'menos'} que en los mismos días de`), 'frase: ' + frase);
     afirmar(await p.locator('[data-info=preliminar]').count() === 1, 'el mes abierto no dice que es preliminar');
-    afirmar(await p.locator('#gane-comparar tr').count() === 6, 'tabla de comparación');
+    afirmar(await p.locator('#gane-comparar tr').count() >= 6, 'tabla de comparación');
+    // La tarjeta de Gastos (operación + otros gastos) cuadra con la tabla.
+    const filasTabla = await p.locator('#gane-comparar tbody tr').allInnerTexts();
+    const ahora = (t) => { const f = filasTabla.find((x) => x.startsWith(t)); return f ? Math.round(Number(f.split('\t')[1].replace(/[^0-9.-]/g, '')) * 100) : 0; };
+    afirmar(ahora('Gastos de operación') + ahora('Otros gastos') === er.gastos_operacion_centavos + er.otros_gastos_centavos
+      && (await texto(p, '[data-dato=gane-gastos] .cifra-valor')) === lempiras(er.gastos_operacion_centavos + er.otros_gastos_centavos), 'la tarjeta de gastos no cuadra con la tabla');
   });
 
   await prueba('¿Gané o perdí?: "Otras fechas" (saldo_cuentas) da lo mismo que el núcleo para el mes pasado; formato NIIF con balance que cuadra', async () => {
@@ -166,10 +175,10 @@ async function leerExcel(p, descarga) {
   await prueba('Inventario valorizado: valor al costo igual a la base, a precio de venta hecho a mano, bajo el mínimo', async () => {
     const p = d.p;
     await ir(p, 'reportes/valorizado', '[data-dato=valor-costo]');
-    const costo = num('dueno@demo.hn', `(SELECT coalesce(sum(valor_centavos), 0) FROM public.v_existencia WHERE empresa_id = '${EM}')`);
+    const costo = num('dueno@demo.hn', `(SELECT coalesce(sum(v), 0) FROM (SELECT sum(valor_centavos) AS v FROM public.v_existencia WHERE empresa_id = '${EM}' GROUP BY producto_id HAVING sum(cantidad) > 0) x)`);
     afirmar((await texto(p, '[data-dato=valor-costo] .cifra-valor')) === lempiras(costo), 'valor al costo distinto a la base');
     // A mano: cada fila round(cantidad x precio sin ISV).
-    const venta = num('dueno@demo.hn', `(SELECT coalesce(sum(round(e.cantidad * p.precio_sin_isv_centavos)), 0) FROM public.v_existencia e JOIN public.v_producto p ON p.producto_id = e.producto_id WHERE e.empresa_id = '${EM}')`);
+    const venta = num('dueno@demo.hn', `(SELECT coalesce(sum(v), 0) FROM (SELECT sum(round(e.cantidad * p.precio_sin_isv_centavos)) AS v FROM public.v_existencia e JOIN public.v_producto p ON p.producto_id = e.producto_id WHERE e.empresa_id = '${EM}' GROUP BY e.producto_id HAVING sum(e.cantidad) > 0) x)`);
     afirmar((await texto(p, '[data-dato=valor-venta] .cifra-valor')) === lempiras(venta), 'valor a precio de venta');
     const bajos = num('dueno@demo.hn', `(SELECT count(*) FROM (SELECT p.producto_id FROM public.v_producto p LEFT JOIN public.v_existencia e ON e.producto_id = p.producto_id
       WHERE p.empresa_id = '${EM}' AND p.activo AND p.tipo <> 'servicio' AND p.stock_minimo > 0 GROUP BY p.producto_id, p.stock_minimo HAVING coalesce(sum(e.cantidad), 0) < p.stock_minimo) x)`);
@@ -237,7 +246,7 @@ async function leerExcel(p, descarga) {
     await ir(p, 'reportes/valorizado', '[data-dato=valor-costo]');
     const [d2] = await Promise.all([p.waitForEvent('download'), p.click('#valor-excel')]);
     const x2 = await leerExcel(p, d2);
-    const costo = num('dueno@demo.hn', `(SELECT coalesce(sum(valor_centavos), 0) FROM public.v_existencia WHERE empresa_id = '${EM}')`);
+    const costo = num('dueno@demo.hn', `(SELECT coalesce(sum(v), 0) FROM (SELECT sum(valor_centavos) AS v FROM public.v_existencia WHERE empresa_id = '${EM}' GROUP BY producto_id HAVING sum(cantidad) > 0) x)`);
     const tot = x2.celdas.Productos.find((f) => f[1] === 'Total');
     afirmar(tot && Math.round(tot[5] * 100) === costo, 'total al costo en el Excel');
   });
@@ -253,6 +262,8 @@ async function leerExcel(p, descarga) {
       await p.waitForFunction(() => window.__impreso, null, { timeout: 15000 });
       const r = await p.evaluate(() => { const x = window.__impreso; return { t: x.textContent, svg: x.querySelectorAll('svg, .icono, .chip-color, .burbuja').length, tablas: x.querySelectorAll('table').length }; });
       afirmar(!EMOJI_RE.test(r.t) && r.svg === 0 && r.tablas > 0 && r.t.includes('Ferretería El Roble'), `${ruta}: lo impreso ${JSON.stringify({ svg: r.svg, tablas: r.tablas })}`);
+      // 0.8.1: la bitácora con más páginas lo dice en lo impreso.
+      if (ruta === 'reportes/bitacora' && await p.locator('#bit-mas').count()) afirmar(/Solo las primeras \d+ filas; hay más/.test(r.t), 'lo impreso de la bitácora no avisa que hay más');
       await p.emulateMedia({ media: 'print' });
       const vis = await p.evaluate(() => ({ hoja: getComputedStyle(document.querySelector('.reporte-impreso')).display, app: getComputedStyle(document.getElementById('app')).display }));
       await p.emulateMedia({ media: 'screen' });
@@ -289,6 +300,11 @@ async function leerExcel(p, descarga) {
       await ir(p, ruta, '#contenido .estado-vacio');
       afirmar((await texto(p, '#contenido')).includes('toda la empresa'), `${ruta} no explica que es de toda la empresa`);
     }
+    // 0.8.1: lo que se les debe hoy a los vendedores (v_comision_vendedor) es de toda la empresa: no se pide ni se muestra.
+    const pedidas = [];
+    p.on('request', (q) => pedidas.push(q.url()));
+    await ir(p, 'reportes/empleados', '[data-info=deuda-limitado]');
+    afirmar(!pedidas.some((u) => u.includes('v_comision_vendedor')) && !(await texto(p, '#contenido')).includes('Se le debe hoy'), 'el limitado ve lo que se debe a los vendedores');
     await ir(p, 'reportes/ventas', '[data-info=vendedor-limitado]');
     afirmar(await p.locator('#tabla-vendedores').count() === 0, 'el limitado ve las ventas por vendedor');
     await ctx.close();
@@ -315,10 +331,10 @@ async function leerExcel(p, descarga) {
     const p = d.p;
     const r = await p.evaluate(async () => {
       const f = await import('/js/formato.js');
-      return { n: ['2.5', '0', '1,500', '2,5', '-1', '', 'abc', '1,234.5678', '1.23456'].map((x) => f.aNumero(x)),
+      return { n: ['2.5', '0', '1,500', '2,5', '-1', '', 'abc', '1,234.5678', '1.23456', 'l5', 'L5', ' 7 '].map((x) => f.aNumero(x)),
         pct: ['15', '12.5', '12,5', '150', '100', '0', '18 %', '-3'].map((x) => f.aPorcentaje(x)) };
     });
-    afirmar(JSON.stringify(r.n) === JSON.stringify([2.5, 0, 1500, null, null, null, null, 1234.5678, null]), 'aNumero: ' + JSON.stringify(r.n));
+    afirmar(JSON.stringify(r.n) === JSON.stringify([2.5, 0, 1500, null, null, null, null, 1234.5678, null, null, null, 7]), 'aNumero: ' + JSON.stringify(r.n));
     afirmar(JSON.stringify(r.pct) === JSON.stringify([15, 12.5, null, null, 100, 0, 18, null]), 'aPorcentaje: ' + JSON.stringify(r.pct));
     const coma = async (que) => {
       await p.waitForSelector('#contenido .mensaje-error', { timeout: 10000 });
@@ -357,6 +373,57 @@ async function leerExcel(p, descarga) {
     await p.locator('#tras-buscar').locator('xpath=ancestor::form').locator('button[type=submit]').click();
     await coma('traslados');
     afirmar(num('dueno@demo.hn', `(SELECT count(*) FROM public.inventario_documento WHERE empresa_id = '${EM}')`) === nDoc, 'guardó el traslado');
+  });
+
+  // ============================ 0.8.1: arreglos de la revisión ============================
+  await prueba('0.8.1: empleado sin ventas visibles sale con "—" si tiene diferencias; tope de 1,000 turnos avisado (pantalla y Excel)', async () => {
+    const { ctx, p } = await nueva();
+    await p.route('**/rest/v1/rpc/vigilancia_empleados', (rr) => rr.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({
+      desde: desdeMes, hasta: HOY, costos_ocultos: true, empleados: [{ usuario_id: 'u1', nombre: 'Cajera Prueba', rol: 'cajero', activo: true, ventas: null, descuentos: null,
+        ganancia_centavos: null, anulaciones_pedidas: { cantidad: 0, aprobadas: 0, monto_centavos: null },
+        diferencias_caja: { turnos: 2, turnos_con_diferencia: 1, faltante_centavos: -1000, sobrante_centavos: 0, neto_centavos: -1000 }, horario_uso: [] }] }) }));
+    const turno = (i) => ({ turno_id: 't' + i, numero: i, estado: 'cerrado', caja: 'Caja', cajero: 'Ana', fecha_cierre: HOY, cerrado_en: null, diferencia_centavos: -100, diferencia_estado: 'pendiente' });
+    await p.route(/\/rest\/v1\/v_turno_caja\?/, (rr) => rr.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(Array.from({ length: 1000 }, (_, i) => turno(i + 1))) }));
+    await entrar(p, 'dueno@demo.hn');
+    await ir(p, 'reportes/empleados', '[data-info=tope-turnos]');
+    const fila = await texto(p, '#tabla-empleados [data-empleado=u1]');
+    afirmar(fila.includes('Cajera Prueba') && fila.includes('—') && fila.includes('-L 10.00'), 'fila sin ventas: ' + fila);
+    const [desc] = await Promise.all([p.waitForEvent('download'), p.click('#empleados-excel')]);
+    const x = await leerExcel(p, desc);
+    afirmar(JSON.stringify(x.celdas['Turnos de caja']).includes('Solo los primeros 1000 turnos'), 'el Excel no avisa el tope de turnos');
+    await ctx.close();
+  });
+
+  await prueba('0.8.1: pre-cierre nombra el mes abierto MÁS VIEJO con movimientos (el intermedio vacío no cuenta)', async () => {
+    const MESES = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
+    const atras = (n) => { let a = A, m = M - n; while (m < 1) { m += 12; a -= 1; } return { a, m, v: `${a}-${String(m).padStart(2, '0')}`, d: `${a}-${String(m).padStart(2, '0')}-01` }; };
+    const viejo = atras(3), vacio = atras(2), revisar = atras(1);
+    const { ctx, p } = await nueva();
+    // Respuestas simuladas: la empresa empezó hace 3 meses, ningún mes cerrado, solo el más viejo tiene asientos.
+    await p.route('**/rest/v1/rpc/mi_perfil', async (rr) => {
+      const res = await rr.fetch(); const j = await res.json();
+      if (j && j.empresa) j.empresa.fecha_inicio = viejo.d;
+      await rr.fulfill({ response: res, body: JSON.stringify(j) });
+    });
+    await p.route(/\/rest\/v1\/periodo\?/, (rr) => rr.fulfill({ status: 200, contentType: 'application/json', body: '[]' }));
+    await p.route(/\/rest\/v1\/v_distribucion\?/, (rr) => rr.fulfill({ status: 200, contentType: 'application/json', body: '[]' }));
+    await p.route('**/rest/v1/rpc/historial_cierres', (rr) => rr.fulfill({ status: 200, contentType: 'application/json', body: '[]' }));
+    const pedidos = [];
+    await p.route(/\/rest\/v1\/v_asiento\?/, (rr) => {
+      const u = decodeURIComponent(rr.request().url());
+      pedidos.push(u);
+      rr.fulfill({ status: 200, contentType: 'application/json', body: u.includes(`gte.${viejo.d}`) ? '[{"id":"x"}]' : '[]' });
+    });
+    await entrar(p, 'dueno@demo.hn');
+    await ir(p, 'reportes/cierre', `#cierre-meses [data-mes="${revisar.v}"]`);
+    await p.click(`#cierre-meses [data-mes="${revisar.v}"] button`);
+    await p.waitForSelector(`#cierre-detalle section[data-mes="${revisar.v}"] [data-revision=anterior]`);
+    afirmar(await p.getAttribute('[data-revision=anterior]', 'data-listo') === 'false', 'no ve el mes viejo abierto');
+    const t = await texto(p, '[data-revision=anterior]');
+    afirmar(t.includes(`Falta: cerrar ${MESES[viejo.m - 1]} de ${viejo.a} primero`) && !t.includes(MESES[vacio.m - 1]), 'no nombra el mes más viejo: ' + t);
+    afirmar(pedidos.some((u) => u.includes(`gte.${vacio.d}`)), 'no revisó el mes intermedio');
+    afirmar(await p.locator('#cierre-cerrar[disabled]').count() === 1, 'deja cerrar con un mes viejo abierto');
+    await ctx.close();
   });
 
   // ============================ Cierre de mes (cambia la base: va al final) ============================

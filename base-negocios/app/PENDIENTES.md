@@ -1,4 +1,4 @@
-# Pendientes de la app (0.8.0)
+# Pendientes de la app (0.8.1)
 
 - HECHO (0.8.0): comas en impuestos, topes, mínimo, traslados y conteo. Quedan los campos `type=number`
   (arqueo por billetes, devoluciones, plazos), que el navegador ya no deja escribir con coma.
@@ -7,6 +7,8 @@
     `bitacora_legible`, `verificar_bitacora`, `historial_cierres`/`exportar_mes` y `v_ventas_por_vendedor` /
     `v_ventas_por_dia` son de TODA la empresa. La app no muestra ¿Gané o perdí?, Quién hizo qué, Cierre de mes ni
     las ventas por vendedor a un usuario limitado. Falta la versión por sucursal en el núcleo.
+  - NÚCLEO: `v_comision_vendedor` (lo que se debe hoy a cada vendedor) no se limita por sucursal; la app no la pide
+    a un usuario limitado (0.8.1). Conviene filtrarla en el núcleo.
   - Ventas, lo más vendido, valorizado, comisiones y turnos leen hasta 1,000 filas (se avisa). Falta una lectura
     de totales en el núcleo para períodos largos.
   - Lo más vendido no resta devoluciones (falta una lectura de devoluciones por producto).

@@ -62,7 +62,7 @@ export async function mostrar(vista, ctx) {
       [exis, productos, salidas] = await Promise.all([
         leer('v_existencia', filtro, { orden: 'nombre.asc', limite: TOPE_FILAS }),
         leer('v_producto', { empresa_id: empresaId() }, { orden: 'nombre.asc', limite: TOPE_FILAS }),
-        leer('v_kardex', { ...filtro, tipo: 'salida', fecha_contable: { gte: desde } }, { orden: 'fecha_contable.desc', limite: TOPE_FILAS }),
+        leer('v_kardex', { ...filtro, tipo: 'salida', origen: 'venta', fecha_contable: { gte: desde } }, { orden: 'fecha_contable.desc', limite: TOPE_FILAS }),
       ]);
     } catch (err) { zona.replaceChildren(await cajaError(err)); return; }
     if (!ctx.sigueVigente()) return;
@@ -77,7 +77,10 @@ export async function mostrar(vista, ctx) {
       }
     }
     const conExistencia = lista.filter((x) => x.cantidad > 0);
-    const costo = lista.reduce((s, x) => s + x.costo, 0), venta = lista.reduce((s, x) => s + x.venta, 0);
+    // Los totales salen de las mismas filas que se muestran (productos con existencia). Un producto en negativo
+    // (vendido sin existencia, si el dueño lo permite) va aparte con su aviso: no rebaja lo que vale el inventario.
+    const costo = conExistencia.reduce((s, x) => s + x.costo, 0), venta = conExistencia.reduce((s, x) => s + x.venta, 0);
+    const negativos = lista.filter((x) => x.cantidad < 0);
     const cats = new Map();
     for (const x of conExistencia) {
       const c = cats.get(x.categoria) || { nombre: x.categoria, productos: 0, costo: 0, venta: 0 };
@@ -94,6 +97,8 @@ export async function mostrar(vista, ctx) {
 
     zona.replaceChildren(...[
       llegoAlTope(exis) || llegoAlTope(productos) ? mensaje('info', `Se leyeron las primeras ${TOPE_FILAS.toLocaleString('en-US')} filas: las cifras pueden estar incompletas.`, 'Elija una bodega para ver menos productos.', { dataset: { info: 'tope-filas' } }) : null,
+      negativos.length ? mensaje('error', `${negativos.length} ${negativos.length === 1 ? 'producto está' : 'productos están'} en negativo (se vendió más de lo que había).`,
+        `${negativos.map((x) => `${x.nombre}: ${cantidad(x.cantidad)} ${x.unidad || ''}`.trim()).join(' · ')}. No se suman arriba; registre la compra o el conteo que falta.`, { dataset: { info: 'negativos' } }) : null,
       h('div', { class: 'cifras' },
         tarjetaCifra({ dato: 'valor-costo', icono: 'inventario', color: 'azul', etiqueta: 'Vale al costo', valor: dinero(costo),
           nota: `${conExistencia.length} ${conExistencia.length === 1 ? 'producto' : 'productos'} con existencia` }),
@@ -121,7 +126,7 @@ export async function mostrar(vista, ctx) {
     ].flat().filter(Boolean));
 
     const nombreBodega = bodega ? (bods.find((b) => b.id === bodega) || {}).nombre : 'Todas las bodegas';
-    doc = { titulo: 'Inventario valorizado', periodo: `Al ${fecha(hoy())} · ${nombreBodega}`, notas: ['Al costo = costo promedio del inventario. A precio de venta = sin ISV.'],
+    doc = { titulo: 'Inventario valorizado', periodo: `Al ${fecha(hoy())} · ${nombreBodega}`, notas: ['Al costo = costo promedio del inventario. A precio de venta = sin ISV.', ...negativos.map((x) => `En negativo (no se suma): ${x.nombre} ${cantidad(x.cantidad)} ${x.unidad || ''}`.trim())],
       secciones: [
         { titulo: 'Productos', columnas: [{ titulo: 'Código' }, { titulo: 'Producto' }, { titulo: 'Categoría' }, { titulo: 'Cantidad', tipo: 'numero' }, { titulo: 'Mínimo', tipo: 'numero' },
           { titulo: 'Al costo', tipo: 'dinero' }, { titulo: 'A precio de venta', tipo: 'dinero' }],

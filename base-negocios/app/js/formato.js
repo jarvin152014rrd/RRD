@@ -96,9 +96,9 @@ export function aCantidad(texto) {
 }
 
 // Número de 0 o más escrito a mano (mínimo de un producto, cantidad contada): hasta 4 decimales, la coma solo
-// como separador de miles (app 0.8.0). "2.5" -> 2.5; "0" -> 0; "1,500" -> 1500; "2,5", "-1" o texto raro -> null.
+// como separador de miles (app 0.8.0). "2.5" -> 2.5; "0" -> 0; "1,500" -> 1500; "2,5", "-1", "L5" o texto raro -> null.
 export function aNumero(texto) {
-  const t = limpiarNumero(texto);
+  const t = limpiarNumero(String(texto ?? '').trim().replace(/^L/i, 'x')); // una cantidad no lleva "L" (igual que aCantidad)
   if (t === null || !/^\d{1,12}(?:\.\d{0,4})?$/.test(t)) return null;
   return Number(t);
 }

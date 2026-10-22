@@ -1,6 +1,6 @@
 // Reportes · "¿Gané o perdí?" (app 0.8.0). Solo mirar: no mueve nada.
 //   Un mes: estado_resultados (núcleo 040; mes cerrado = la foto del cierre; mes abierto = en vivo y
-//   "preliminar") con su comparativo contra el mes anterior.
+//   "preliminar"). Se compara con el mes anterior (saldo_cuentas, núcleo 011; si el mes está en curso, con los mismos días).
 //   Otras fechas: saldo_cuentas (núcleo 011) y la misma cuenta que hace el núcleo para el estado de
 //   resultados (resultadosDeSaldos), comparado con los mismos días justo antes.
 // Con la contabilidad visible: "Ver en formato contable (NIIF)" con el estado de resultados y el balance
@@ -8,11 +8,12 @@
 // Es de TODA la empresa: a un usuario limitado a su sucursal no se le muestra (ver PENDIENTES).
 import { rpc } from '../api.js';
 import { empresaId, perfilActual } from '../sesion.js';
-import { dinero, fecha } from '../formato.js';
+import { dinero, fecha, sumarDias } from '../formato.js';
 import { h, icono, cajaError, titulo, tarjetaCifra, chip, monto, estadoVacio, mensaje, tabla } from '../ui.js';
 import { alcance, reiniciarAlSalir } from '../datos.js';
+import { hoy } from '../formularios.js';
 import { selectorPeriodo, periodoInicial, datosPeriodo, botonesReporte, barraParte, ganoPerdio, nombreMes, mesAnterior, MESES,
-  periodoAnterior, hastaHoy } from '../reportes.js';
+  periodoAnterior, hastaHoy, rangoMes } from '../reportes.js';
 
 let periodo = periodoInicial();
 reiniciarAlSalir(() => { periodo = periodoInicial(); });
@@ -78,9 +79,16 @@ export async function mostrar(vista, ctx) {
       if (periodo.modo === 'mes') {
         er = await rpc('estado_resultados', { p_empresa_id: empresaId(), p_anio: periodo.anio, p_mes: periodo.mes });
         r = er;
+        // Mes anterior con saldo_cuentas (la misma cuenta del núcleo, con "otros gastos"). Si el mes está en curso,
+        // se compara con los MISMOS días del mes anterior (del 1 al día de hoy), no con el mes completo.
         const ma = mesAnterior(periodo.anio, periodo.mes);
-        ant = er.comparativo && er.comparativo.mes_anterior ? er.comparativo.mes_anterior : null;
-        textoAnt = `en ${MESES[ma.mes - 1]}`;
+        const rm = rangoMes(ma.anio, ma.mes);
+        const enCurso = hastaHoy(dp.hasta) !== dp.hasta;
+        const dia = Number(hoy().slice(8, 10));
+        const hastaAnt = enCurso ? (sumarDias(rm.desde, dia - 1) < rm.hasta ? sumarDias(rm.desde, dia - 1) : rm.hasta) : rm.hasta;
+        const inicio = perfilActual().empresa.fecha_inicio;
+        if (rm.hasta >= inicio) ant = resultadosDeSaldos(await rpc('saldo_cuentas', { p_empresa_id: empresaId(), p_desde: rm.desde, p_hasta: hastaAnt }));
+        textoAnt = enCurso ? `en los mismos días de ${MESES[ma.mes - 1]} (del 1 al ${Number(hastaAnt.slice(8, 10))})` : `en ${MESES[ma.mes - 1]}`;
       } else {
         const pa = periodoAnterior(dp.desde, dp.hasta);
         const inicio = perfilActual().empresa.fecha_inicio;
@@ -105,6 +113,9 @@ export async function mostrar(vista, ctx) {
       ['Costo de lo vendido', 'costo_ventas_centavos', 'sale'],
       ['Ganancia bruta', 'utilidad_bruta_centavos', null],
       ['Gastos de operación', 'gastos_operacion_centavos', 'sale'],
+      // Con "otros gastos" la tarjeta de Gastos cuadra con la tabla (salen solo si hay algo).
+      ...(Number(r.otros_gastos_centavos) || (ant && Number(ant.otros_gastos_centavos)) ? [['Otros gastos', 'otros_gastos_centavos', 'sale']] : []),
+      ...(Number(r.otros_ingresos_centavos) || (ant && Number(ant.otros_ingresos_centavos)) ? [['Otros ingresos', 'otros_ingresos_centavos', 'entra']] : []),
       ['Ganancia neta', 'utilidad_neta_centavos', null],
     ];
     const vacio = !Number(r.ventas_netas_centavos) && !Number(r.costo_ventas_centavos) && !totalGastos && !otrosI;
@@ -130,7 +141,7 @@ export async function mostrar(vista, ctx) {
       filasGasto.length ? h('div', { class: 'lista-filas', id: 'gane-gastos-lista' }, filasGasto.map((g) => h('div', { class: 'fila-parte' },
         h('div', { class: 'fila' }, h('span', {}, g.nombre), monto(dinero(g.monto_centavos), { sentido: 'sale' })),
         barraParte(g.monto_centavos, totalGastos)))) : estadoVacio({ icono: 'recibo', chico: true, texto: 'No hubo gastos en estas fechas.' }),
-      h('h2', { class: 'titulo-chico' }, ant ? (periodo.modo === 'mes' ? `Comparado con ${textoAnt.replace(/^en /, '')}` : `Comparado con los días anteriores (${textoAnt})`) : 'Comparado con antes'),
+      h('h2', { class: 'titulo-chico' }, ant ? (periodo.modo === 'mes' ? `Comparado con ${textoAnt.replace(/^en (los )?/, (x, y) => (y ? 'los ' : ''))}` : `Comparado con los días anteriores (${textoAnt})`) : 'Comparado con antes'),
       ant ? tabla({ props: { id: 'gane-comparar' }, columnas: [{ titulo: 'Concepto' }, { titulo: 'Ahora', num: true }, { titulo: 'Antes', num: true }, { titulo: 'Diferencia', num: true }],
         filas: comparar.map(([t, k, s]) => {
           const dif = Number(r[k]) - Number(ant[k]);

@@ -55,7 +55,8 @@ export async function mostrar(vista, ctx) {
         h('div', { class: 'campo' }, h('label', { for: 'bit-tipo' }, 'Tipo'), tipo)),
       zonaError),
     botonesReporte('bitacora', () => ({ titulo: 'Quién hizo qué', periodo: `del ${fecha(filtros.desde)} al ${fecha(filtros.hasta)}`,
-      notas: [persona.value ? `Persona: ${persona.selectedOptions[0].textContent}` : null, tipo.value ? `Tipo: ${TIPOS[tipo.value][0]}` : null].filter(Boolean),
+      notas: [persona.value ? `Persona: ${persona.selectedOptions[0].textContent}` : null, tipo.value ? `Tipo: ${TIPOS[tipo.value][0]}` : null,
+        siguiente ? `Solo las primeras ${filas.length} filas; hay más con estos filtros (toque "Ver más" antes de descargar o imprimir).` : null].filter(Boolean),
       secciones: [{ titulo: 'Bitácora', columnas: [{ titulo: 'Fecha' }, { titulo: 'Hora' }, { titulo: 'Persona' }, { titulo: 'Tipo' }, { titulo: 'Qué hizo' }],
         filas: filas.map((f) => [fecha(f.fecha), f.hora, f.persona, (TIPOS[f.tipo] || [f.tipo])[0], textoFila(f)]) }] })),
     zona);
