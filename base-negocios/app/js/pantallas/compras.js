@@ -4,7 +4,7 @@
 // ver el detalle (líneas, pagos) y anular con motivo (anular_compra: nada se borra, el núcleo hace la
 // contrapartida, saca los productos del inventario y devuelve el dinero a la misma cuenta).
 // Las compras son solo de productos que se guardan en inventario: un servicio se registra como gasto.
-import { leer, escribir, nuevoId } from '../api.js';
+import { leer, escribir, nuevoId, rpcSiExiste } from '../api.js';
 import { empresaId, puede, tieneModulo } from '../sesion.js';
 import { dinero, fecha, cantidad, aCosto, aCantidad, aCentavos, sumarDias } from '../formato.js';
 import { h, icono, aviso, cajaError, errorSimple, campo, conBoton, confirmar, pedirMotivo, titulo, filaIcono, chipEstado, monto,
@@ -55,16 +55,31 @@ export async function mostrar(vista, ctx) {
     zona.replaceChildren(h('p', { class: 'cargando', role: 'status' }, 'Cargando…'));
     const f = { empresa_id: empresaId(), fecha_contable: { gte: filtros.desde || '2000-01-01', lte: filtros.hasta || '2100-12-31' } };
     if (filtros.proveedor) f.proveedor_id = filtros.proveedor;
-    let compras;
-    try { compras = await leer('compra', f, { orden: 'numero.desc', limite: LIMITE }); } catch (err) { zona.replaceChildren(await cajaError(err)); return; }
-    // Las cifras de arriba suman lo que llegó: si llegaron LIMITE filas puede haber más (no hay lectura de totales en el núcleo).
-    tope.replaceChildren(compras.length >= LIMITE ? mensaje('info', `Se muestran las últimas ${LIMITE} compras y las cifras suman solo esas.`, 'Acorte las fechas para ver el total exacto.', { dataset: { info: 'tope-filas' } }) : '');
-    const vigentes = compras.filter((c) => !c.anulada_en);
-    const porPagar = vigentes.reduce((s, c) => s + Number((porDoc.get(c.id) || {}).saldo_centavos || 0), 0);
+    let compras, tot;
+    try {
+      // Núcleo 0.16.0: los totales los suma el servidor (todas las compras del rango, no solo las que llegan).
+      [compras, tot] = await Promise.all([leer('compra', f, { orden: 'numero.desc', limite: LIMITE }),
+        rpcSiExiste('totales_compras', { p_empresa_id: empresaId(), p_desde: filtros.desde || '2000-01-01', p_hasta: filtros.hasta || '2100-12-31',
+          p_proveedor_id: filtros.proveedor || null })]);
+    } catch (err) { zona.replaceChildren(await cajaError(err)); return; }
+    if (!ctx.sigueVigente()) return;
+    let total, porPagar, cuantas;
+    if (tot) {
+      total = Number(tot.total_centavos); porPagar = Number(tot.por_pagar_centavos); cuantas = Number(tot.cantidad);
+      tope.replaceChildren(compras.length >= LIMITE ? mensaje('info', `Se muestran las últimas ${LIMITE} compras; las cifras de arriba son de todas las del rango.`, '', { dataset: { info: 'tope-filas' } }) : '');
+    } else {
+      // Núcleo viejo (sin totales_compras): se suma lo que llegó; con LIMITE filas puede haber más.
+      tope.replaceChildren(compras.length >= LIMITE ? mensaje('info', `Se muestran las últimas ${LIMITE} compras y las cifras suman solo esas.`, 'Acorte las fechas para ver el total exacto.', { dataset: { info: 'tope-filas' } }) : '');
+      const vigentes = compras.filter((c) => !c.anulada_en);
+      total = vigentes.reduce((s, c) => s + Number(c.total_centavos), 0);
+      porPagar = vigentes.reduce((s, c) => s + Number((porDoc.get(c.id) || {}).saldo_centavos || 0), 0);
+      cuantas = compras.length;
+    }
+    resumen.dataset.fuente = tot ? 'servidor' : 'navegador';
     resumen.replaceChildren(
-      cifraChica('Compré en estas fechas', dinero(vigentes.reduce((s, c) => s + Number(c.total_centavos), 0)), { dato: 'compras-total' }),
+      cifraChica('Compré en estas fechas', dinero(total), { dato: 'compras-total' }),
       cifraChica('De eso, debo todavía', dinero(porPagar), { dato: 'compras-debo', clase: porPagar ? 'monto-sale' : '' }),
-      cifraChica('Compras', String(compras.length), { dato: 'compras-cuantas' }));
+      cifraChica('Compras', String(cuantas), { dato: 'compras-cuantas' }));
     zona.replaceChildren(compras.length ? h('div', { class: 'lista-filas', id: 'lista-compras' }, compras.map((c) => {
       const e = estadoCompra(c, porDoc.get(c.id));
       return filaIcono({

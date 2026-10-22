@@ -1,6 +1,6 @@
 // Listas que varias pantallas usan (productos, clientes, cajas, cuentas de dinero).
 // Se leen del servidor (RLS decide qué filas) y se guardan SOLO en memoria un rato.
-import { leer, rpc } from './api.js';
+import { leer, rpc, olvidarFuncionesFaltantes } from './api.js';
 import { empresaId } from './sesion.js';
 import { sinTildes } from './formato.js';
 
@@ -19,7 +19,11 @@ const reinicios = new Set();
 export function reiniciarAlSalir(fn) { reinicios.add(fn); }
 export function reiniciarTodo() { for (const fn of reinicios) { try { fn(); } catch { /* nada */ } } }
 
-export function olvidarDatos(clave = null) { if (clave) memoria.delete(clave); else memoria.clear(); }
+export function olvidarDatos(clave = null) {
+  if (clave) { memoria.delete(clave); return; }
+  memoria.clear();
+  olvidarFuncionesFaltantes();   // si el núcleo se actualizó, se vuelven a probar las lecturas nuevas
+}
 
 export const productos = (fresco) => guardado('productos', () =>
   leer('v_producto', { empresa_id: empresaId(), activo: true }, { orden: 'nombre.asc', limite: 1000 }), fresco);
@@ -49,6 +53,18 @@ export const alcance = () => guardado('alcance', () => rpc('mi_estado_sesion', {
   limitado: Boolean(e && e.todas_las_sucursales === false),
   sucursales: ((e && e.sucursales) || []).map((x) => x.sucursal_id),
 })));
+
+// Versión del núcleo instalada (vista version_esquema), p. ej. "0.16.0". '' si no se pudo leer.
+export const versionNucleo = () => guardado('version_nucleo', () =>
+  leer('version_esquema', {}, { limite: 1 }).then((x) => String((x && x[0] && x[0].version_nucleo) || '')).catch(() => ''));
+// ¿El núcleo es esta versión o más nueva? (compara número por número: 0.16.0 >= 0.15.2)
+export function versionAlMenos(v, minima) {
+  const a = String(v || '').split('.').map(Number), b = minima.split('.').map(Number);
+  for (let i = 0; i < 3; i++) { if ((a[i] || 0) !== (b[i] || 0)) return (a[i] || 0) > (b[i] || 0); }
+  return true;
+}
+// Núcleo 0.16.0: el servidor ya filtra por sucursal proyección, comisiones, dinero, fondos y compras.
+export const nucleoFiltraSucursal = () => versionNucleo().then((v) => versionAlMenos(v, '0.16.0'));
 
 // Cuentas de las que se puede pagar (caja de efectivo, caja chica o banco), ya leídas con cuentasDinero.
 export const TIPOS_QUE_PAGAN = ['efectivo_caja', 'caja_chica', 'banco'];

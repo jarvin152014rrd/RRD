@@ -8,7 +8,7 @@ import { leer, rpc } from '../api.js';
 import { empresaId, puede, tieneModulo } from '../sesion.js';
 import { dinero, fecha, fechaHora } from '../formato.js';
 import { h, cajaError, titulo, tarjetaCifra, monto, chip, estadoVacio, mensaje, tabla, filaIcono } from '../ui.js';
-import { alcance, reiniciarAlSalir } from '../datos.js';
+import { alcance, reiniciarAlSalir, nucleoFiltraSucursal } from '../datos.js';
 import { selectorPeriodo, periodoInicial, datosPeriodo, botonesReporte, hastaHoy, TOPE_FILAS, llegoAlTope } from '../reportes.js';
 
 let periodo = periodoInicial();
@@ -33,9 +33,11 @@ export function comisionesPorVendedor(movs) {
 
 export async function mostrar(vista, ctx) {
   const al = await alcance();
+  // v_comision_vendedor (lo que se debe hoy): desde el núcleo 0.16.0 el servidor la limita a las sucursales del
+  // usuario; con un núcleo anterior era de toda la empresa y a un usuario limitado no se le pide.
+  const filtra = al.limitado ? await nucleoFiltraSucursal() : true;
   if (!ctx.sigueVigente()) return;
-  // v_comision_vendedor (lo que se debe hoy) es de toda la empresa: a un usuario limitado no se le pide (PENDIENTES).
-  const veoDeuda = !al.limitado;
+  const veoDeuda = !al.limitado || filtra;
   const veoVigilancia = puede('bitacora.ver');
   const veoComisiones = tieneModulo('comisiones') && puede('comisiones.ver');
   const veoTurnos = tieneModulo('dinero') && puede('dinero.ver');
@@ -102,7 +104,8 @@ export async function mostrar(vista, ctx) {
           filas: comisiones.map((c) => [h('strong', {}, c.nombre), monto(dinero(c.ganado), { sentido: c.ganado ? 'entra' : null, dato: `comision-${c.vendedor_id}` }),
             c.ajustes ? monto(dinero(c.ajustes), { negativo: c.ajustes < 0 }) : dinero(0), ...(veoDeuda ? [monto(dinero(c.porPagar), { dato: `por-pagar-${c.vendedor_id}` })] : [])]) })
           : estadoVacio({ icono: 'credencial', chico: true, texto: 'No hay comisiones en estas fechas.' }),
-        !veoDeuda ? h('p', { class: 'ayuda', dataset: { info: 'deuda-limitado' } }, 'Lo que se le debe hoy a cada vendedor es de toda la empresa; usted trabaja solo con sus sucursales, por eso no lo ve.') : null,
+        !veoDeuda ? h('p', { class: 'ayuda', dataset: { info: 'deuda-limitado' } }, 'Lo que se le debe hoy a cada vendedor es de toda la empresa; usted trabaja solo con sus sucursales, por eso no lo ve.')
+          : al.limitado ? h('p', { class: 'ayuda', dataset: { info: 'deuda-sucursal' } }, 'Lo que se le debe hoy cuenta solo las ventas de sus sucursales.') : null,
         llegoAlTope(movs) ? mensaje('info', `Se leyeron los primeros ${TOPE_FILAS.toLocaleString('en-US')} movimientos de comisiones.`, 'Acorte las fechas para ver todo.') : null,
       ] : null,
 

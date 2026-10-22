@@ -137,6 +137,24 @@ export function rpc(funcion, args = {}) {
   });
 }
 
+// Lectura que solo existe en un núcleo más nuevo (app 0.9.0: totales de 0.16.0). Si el servidor no tiene
+// esa función (núcleo viejo: PostgREST responde 404 / PGRST202) devuelve null y la pantalla usa el método
+// de antes. Se recuerda en memoria para no volver a preguntar en cada pantalla.
+const sinFuncion = new Set();
+export function olvidarFuncionesFaltantes() { sinFuncion.clear(); }
+export async function rpcSiExiste(funcion, args = {}) {
+  if (sinFuncion.has(funcion)) return null;
+  try {
+    return await rpc(funcion, args);
+  } catch (e) {
+    if (e.http === 404 && (e.sqlstate === 'PGRST202' || /PGRST202|Could not find the function/i.test(e.message))) {
+      sinFuncion.add(funcion);
+      return null;
+    }
+    throw e;
+  }
+}
+
 // Llama una función que ESCRIBE: siempre con id_operacion (uuid). Si se corta el internet a
 // medio camino, reintenta UNA vez con el MISMO id: el servidor reconoce el reintento y no duplica.
 export async function escribir(funcion, args = {}) {

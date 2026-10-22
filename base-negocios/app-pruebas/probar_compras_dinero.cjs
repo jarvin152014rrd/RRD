@@ -102,6 +102,10 @@ const existencia = (prod, bod = 'B1') => num('dueno@demo.hn', `(SELECT coalesce(
     afirmar(await p.locator('#lista-compras [data-compra]').count() === n, 'cantidad de compras distinta a la base: ' + n);
     const totalBase = num('dueno@demo.hn', `(SELECT coalesce(sum(total_centavos), 0) FROM public.compra WHERE ${filtro} AND anulada_en IS NULL)`);
     afirmar((await texto(p, '[data-dato=compras-total]')).trim() === lempiras(totalBase), 'total comprado distinto a la base');
+    // 0.9.0: las cifras las suma el servidor (totales_compras) y cuadran con la base.
+    afirmar(await p.locator('.cifras[data-fuente=servidor] [data-dato=compras-total]').count() === 1, 'las cifras no salen de totales_compras');
+    const debe = num('dueno@demo.hn', `(SELECT coalesce(sum(d.saldo_centavos), 0) FROM public.v_cxp_documento d JOIN public.compra c ON c.id = d.compra_id WHERE c.${filtro.replace(/ AND fecha/, ' AND c.fecha')})`);
+    afirmar((await texto(p, '[data-dato=compras-debo]')).trim() === lempiras(debe), 'lo que se debe distinto a la base');
     // CN-552 (Cementos del Norte, al crédito, 15 días) ya venció: chip rojo "Vencida".
     const cn = sql('dueno@demo.hn', `(SELECT id FROM public.compra WHERE numero_documento = 'CN-552')`);
     afirmar(await p.locator(`[data-compra="${cn}"]`).getAttribute('data-estado') === 'vencida', 'CN-552 no sale vencida');
@@ -331,6 +335,10 @@ const existencia = (prod, bod = 'B1') => num('dueno@demo.hn', `(SELECT coalesce(
     const hoy = sql('dueno@demo.hn', `public.hoy_local('${EM}')`);
     const n = num('dueno@demo.hn', `(SELECT count(*) FROM public.v_gasto WHERE empresa_id = '${EM}' AND fecha_contable BETWEEN '${hoy}'::date - 30 AND '${hoy}')`);
     afirmar(await p.locator('#lista-gastos [data-gasto]').count() === n, 'cantidad de gastos distinta a la base');
+    // 0.9.0: gastado y en espera los suma el servidor (totales_gastos) y cuadran con la base.
+    const g = (e) => num('dueno@demo.hn', `(SELECT coalesce(sum(monto_centavos), 0) FROM public.v_gasto WHERE empresa_id = '${EM}' AND estado = '${e}' AND fecha_contable BETWEEN '${hoy}'::date - 30 AND '${hoy}')`);
+    afirmar(await p.locator('.cifras[data-fuente=servidor]').count() === 1 && (await texto(p, '[data-dato=gastos-total]')).trim() === lempiras(g('aplicado'))
+      && (await texto(p, '[data-dato=gastos-espera]')).trim() === lempiras(g('pendiente_aprobacion')), 'cifras de gastos distintas a la base');
     await p.selectOption('#gastos-categoria', id('CAT_LUZ'));
     await p.waitForFunction(() => [...document.querySelectorAll('#lista-gastos [data-gasto]')].every((x) => x.innerText.includes('Energía')));
     await p.selectOption('#gastos-categoria', '');
@@ -541,12 +549,17 @@ const existencia = (prod, bod = 'B1') => num('dueno@demo.hn', `(SELECT coalesce(
     await entrar(p, 'admin@demo.hn');
     await ir(p, 'dinero/fondos', '#lista-fondos');
     afirmar(await p.locator('#repartir-utilidad, #nuevo-fondo, #usar-fondo').count() === 0, 'el admin ve acciones solo del dueño');
-    // Limitado a su sucursal (respuesta simulada de mi_estado_sesion): la proyección es de toda la empresa y no se muestra.
+    // Limitado a su sucursal (respuesta simulada de mi_estado_sesion). Núcleo 0.16.0: el servidor la limita y se muestra.
     await p.route('**/rest/v1/rpc/mi_estado_sesion', (r) => r.fulfill({ status: 200, contentType: 'application/json',
       body: JSON.stringify({ activo: true, todas_las_sucursales: false, sucursales: [{ sucursal_id: 'S1' }] }) }));
     await p.evaluate(async () => (await import('/js/datos.js')).olvidarDatos());
+    await ir(p, 'dinero/proyeccion', '#grafica-proyeccion');
+    // Núcleo 0.15.0 (simulado): era de toda la empresa y no se muestra.
+    await p.route(/\/rest\/v1\/version_esquema\?/, (r) => r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify([{ version_nucleo: '0.15.0' }]) }));
+    await p.evaluate(async () => (await import('/js/datos.js')).olvidarDatos());
+    await ir(p, 'dinero/gastos', null);
     await ir(p, 'dinero/proyeccion', '#contenido .estado-vacio');
-    afirmar((await texto(p, '#contenido')).includes('La proyección es de toda la empresa') && await p.locator('#grafica-proyeccion').count() === 0, 'el limitado ve la proyección');
+    afirmar((await texto(p, '#contenido')).includes('La proyección es de toda la empresa') && await p.locator('#grafica-proyeccion').count() === 0, 'núcleo viejo: el limitado ve la proyección');
     await ctx.close();
   });
 
@@ -661,6 +674,25 @@ const existencia = (prod, bod = 'B1') => num('dueno@demo.hn', `(SELECT coalesce(
     await p.locator(`[data-documento="${doc.documento_id}"] button`).click();
     await p.waitForSelector('#pago-fecha');
     afirmar(await p.getAttribute('#pago-fecha', 'min') === doc.minimo, 'fecha mínima del pago');
+  });
+
+  await prueba('0.9.0: con un núcleo 0.15.0 (sin totales_compras ni totales_gastos) las cifras se suman como antes', async () => {
+    const { ctx, p } = await nueva();
+    for (const f of ['totales_compras', 'totales_gastos']) {
+      await p.route(`**/rest/v1/rpc/${f}`, (rr) => rr.fulfill({ status: 404, contentType: 'application/json',
+        body: JSON.stringify({ code: 'PGRST202', message: `Could not find the function public.${f} in the schema cache` }) }));
+    }
+    await entrar(p, 'dueno@demo.hn');
+    const hoy = sql('dueno@demo.hn', `public.hoy_local('${EM}')`);
+    await ir(p, 'compras/compras', '.cifras[data-fuente=navegador]');
+    const totalBase = num('dueno@demo.hn', `(SELECT coalesce(sum(total_centavos), 0) FROM public.compra WHERE empresa_id = '${EM}'
+      AND fecha_contable BETWEEN '${hoy}'::date - 60 AND '${hoy}' AND anulada_en IS NULL)`);
+    afirmar((await texto(p, '[data-dato=compras-total]')).trim() === lempiras(totalBase), 'núcleo viejo: total comprado distinto');
+    await ir(p, 'dinero/gastos', '.cifras[data-fuente=navegador]');
+    const gastado = num('dueno@demo.hn', `(SELECT coalesce(sum(monto_centavos), 0) FROM public.v_gasto WHERE empresa_id = '${EM}' AND estado = 'aplicado'
+      AND fecha_contable BETWEEN '${hoy}'::date - 30 AND '${hoy}')`);
+    afirmar((await texto(p, '[data-dato=gastos-total]')).trim() === lempiras(gastado), 'núcleo viejo: gastado distinto');
+    await ctx.close();
   });
 
   await prueba('0.7.1: al salir los filtros vuelven a los de siempre; "Todos los gastos" sin dinero.ver explica el permiso', async () => {

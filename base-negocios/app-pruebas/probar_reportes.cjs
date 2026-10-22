@@ -170,6 +170,28 @@ async function leerExcel(p, descarga) {
     const suma = semanas.reduce((s, t) => s + Math.round(Number(t.replace(/[^0-9.-]/g, '')) * 100), 0);
     afirmar(suma === tot, `las semanas suman ${suma} y el total es ${tot}`);
     await p.selectOption('#ventas-agrupar', 'dia');
+    // 0.9.0: lo más vendido lo suma el servidor (mas_vendido) y resta devoluciones: igual a la base.
+    const mv = JSON.parse(sql('dueno@demo.hn', `public.mas_vendido('${EM}', '${desdeMes}', '${HOY}', 10)`));
+    await p.waitForSelector('#tabla-rventas');
+    await p.waitForSelector('[data-info=top-con-devoluciones]', { timeout: 20000 }).catch(() => {});
+    afirmar(await p.locator('[data-info=top-con-devoluciones]').count() === 1, 'no dice que resta devoluciones: ' + (await texto(p, '#contenido')).slice(0, 300));
+    const tops = await p.locator('#ventas-top [data-top-total]').evaluateAll((els) => els.map((e) => Number(e.dataset.topTotal)));
+    afirmar(JSON.stringify(tops) === JSON.stringify(mv.filas.map((x) => Number(x.total_neto_centavos))), 'lo más vendido distinto a mas_vendido: ' + JSON.stringify(tops));
+    // A mano con SQL: lo vendido menos lo devuelto del primero.
+    const pid = mv.filas[0].producto_id;
+    const neto = num('dueno@demo.hn', `(SELECT coalesce((SELECT sum(l.total_centavos) FROM public.venta_linea l JOIN public.venta v ON v.id = l.venta_id
+      WHERE ${f.replace(/estado/g, 'v.estado').replace(/fecha_contable/g, 'v.fecha_contable').replace(/empresa_id/g, 'v.empresa_id')} AND l.producto_id = '${pid}'), 0)
+      - coalesce((SELECT sum(l.total_centavos) FROM public.devolucion_linea l JOIN public.devolucion x ON x.id = l.devolucion_id
+      WHERE x.empresa_id = '${EM}' AND x.estado = 'aplicada' AND x.fecha_contable BETWEEN '${desdeMes}' AND '${HOY}' AND l.producto_id = '${pid}'), 0))`);
+    afirmar(tops[0] === neto, `el primero: ${tops[0]} y a mano ${neto}`);
+    // Núcleo 0.15.0 (sin mas_vendido): se suma en el navegador, sin restar devoluciones.
+    await p.route('**/rest/v1/rpc/mas_vendido', (rr) => rr.fulfill({ status: 404, contentType: 'application/json',
+      body: JSON.stringify({ code: 'PGRST202', message: 'Could not find the function public.mas_vendido without parameters in the schema cache' }) }));
+    await ir(p, 'reportes/ventas', '[data-info=top-sin-devoluciones]');
+    const viejo = num('dueno@demo.hn', `(SELECT max(s) FROM (SELECT sum(total_centavos) AS s FROM public.v_venta_linea WHERE ${f} GROUP BY producto_id) x)`);
+    afirmar(Number(await p.locator('#ventas-top [data-top-total]').first().getAttribute('data-top-total')) === viejo, 'núcleo viejo: el primero no es el de antes');
+    await p.unroute('**/rest/v1/rpc/mas_vendido');
+    await p.evaluate(async () => (await import('/js/datos.js')).olvidarDatos());   // olvida también "no existe mas_vendido"
   });
 
   await prueba('Inventario valorizado: valor al costo igual a la base, a precio de venta hecho a mano, bajo el mínimo', async () => {
@@ -300,11 +322,18 @@ async function leerExcel(p, descarga) {
       await ir(p, ruta, '#contenido .estado-vacio');
       afirmar((await texto(p, '#contenido')).includes('toda la empresa'), `${ruta} no explica que es de toda la empresa`);
     }
-    // 0.8.1: lo que se les debe hoy a los vendedores (v_comision_vendedor) es de toda la empresa: no se pide ni se muestra.
+    // 0.9.0: con el núcleo 0.16.0 el servidor limita v_comision_vendedor a sus sucursales: se pide y se muestra.
     const pedidas = [];
     p.on('request', (q) => pedidas.push(q.url()));
+    await ir(p, 'reportes/empleados', '[data-info=deuda-sucursal]');
+    afirmar(pedidas.some((u) => u.includes('v_comision_vendedor')) && (await texto(p, '#contenido')).includes('Se le debe hoy'), 'con núcleo 0.16.0 el limitado no ve lo suyo');
+    // Núcleo 0.15.0 (simulado): v_comision_vendedor era de toda la empresa: no se pide ni se muestra (como 0.8.1).
+    await p.route(/\/rest\/v1\/version_esquema\?/, (rr) => rr.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify([{ version_nucleo: '0.15.0' }]) }));
+    await p.evaluate(async () => (await import('/js/datos.js')).olvidarDatos());
+    pedidas.length = 0;
     await ir(p, 'reportes/empleados', '[data-info=deuda-limitado]');
-    afirmar(!pedidas.some((u) => u.includes('v_comision_vendedor')) && !(await texto(p, '#contenido')).includes('Se le debe hoy'), 'el limitado ve lo que se debe a los vendedores');
+    afirmar(!pedidas.some((u) => u.includes('v_comision_vendedor')) && !(await texto(p, '#contenido')).includes('Se le debe hoy'), 'núcleo viejo: el limitado ve lo que se debe a los vendedores');
+    await p.unroute(/\/rest\/v1\/version_esquema\?/);
     await ir(p, 'reportes/ventas', '[data-info=vendedor-limitado]');
     afirmar(await p.locator('#tabla-vendedores').count() === 0, 'el limitado ve las ventas por vendedor');
     await ctx.close();

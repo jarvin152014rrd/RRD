@@ -1,4 +1,4 @@
-# Pendientes de la app (0.8.1)
+# Pendientes de la app (0.9.0)
 
 - HECHO (0.8.0): comas en impuestos, topes, mínimo, traslados y conteo. Quedan los campos `type=number`
   (arqueo por billetes, devoluciones, plazos), que el navegador ya no deja escribir con coma.
@@ -7,21 +7,22 @@
     `bitacora_legible`, `verificar_bitacora`, `historial_cierres`/`exportar_mes` y `v_ventas_por_vendedor` /
     `v_ventas_por_dia` son de TODA la empresa. La app no muestra ¿Gané o perdí?, Quién hizo qué, Cierre de mes ni
     las ventas por vendedor a un usuario limitado. Falta la versión por sucursal en el núcleo.
-  - NÚCLEO: `v_comision_vendedor` (lo que se debe hoy a cada vendedor) no se limita por sucursal; la app no la pide
-    a un usuario limitado (0.8.1). Conviene filtrarla en el núcleo.
-  - Ventas, lo más vendido, valorizado, comisiones y turnos leen hasta 1,000 filas (se avisa). Falta una lectura
-    de totales en el núcleo para períodos largos.
-  - Lo más vendido no resta devoluciones (falta una lectura de devoluciones por producto).
+  - HECHO (0.9.0, núcleo 0.16.0): `v_comision_vendedor` se limita por sucursal en el servidor y el limitado la ve.
+    NO SE HARÁ en el núcleo la versión por sucursal de estados/saldo de cuentas (ver nucleo/docs/sucursales.md).
+  - HECHO (0.9.0): lo más vendido con `mas_vendido` (suma el servidor y resta devoluciones). Ventas por forma de
+    pago, valorizado, comisiones y turnos siguen leyendo hasta 1,000 filas (se avisa).
+  - Con un núcleo 0.15.0 lo más vendido sigue sin restar devoluciones (método viejo).
   - "Sin ventas en N días" mira solo salidas por venta del kardex; si hay más de 1,000 en esos días no lista nada.
   - "Gastos por categoría" agrupa por la cuenta contable (6.1…), no por la categoría de gasto de Dinero.
   - El pre-cierre usa las advertencias del núcleo; el "conteo pendiente" sale como solicitud pendiente. No hay
     una lectura del núcleo que dé la lista "listo / falta" completa ni el descuadre por asiento antes de cerrar.
   - Reabrir un mes con reparto: primero hay que anular el reparto (`anular_distribucion`), que todavía no está en
     pantalla (lo hace el proveedor). Tampoco hay pantalla para anular un pago de dividendos.
-  - `cerrar_mes` y `reabrir_periodo` no reciben `id_operacion` (el reintento es seguro por el estado del mes).
+  - Núcleo 0.16.0: `cerrar_mes` y `reabrir_periodo` aceptan `id_operacion` opcional; la app todavía no lo manda
+    (con 0.15.0 fallaría; el reintento ya es seguro por el estado del mes).
   - Ventas por vendedor para un usuario limitado y el PDF del cierre (hoy: Imprimir y Excel).
   - Los formatos NIIF y los libros de ISV los debe validar un contador hondureño.
-- Cifras de Compras y Gastos: suman hasta 300 filas (se avisa). Falta una lectura de totales en el núcleo.
+- HECHO (0.9.0, núcleo 0.16.0): cifras de Compras y Gastos con `totales_compras` / `totales_gastos` (con 0.15.0, como antes).
 
 - Pantallas en construcción (con su estado vacío amable): apartados y cajas abiertas.
   HECHO (0.8.0): Reportes y cierre de mes. HECHO (0.7.0): Compras (compras, proveedores, pagar a proveedores) y Dinero (gastos, depósitos y traslados,
@@ -35,10 +36,9 @@
   un movimiento (pendiente en el núcleo). La lectura del CSV cubre formatos comunes; probar con los CSV reales de
   BAC, Atlántida, Ficohsa y Banpaís.
 - Gastos: la foto del comprobante, sin Storage, queda solo como nombre en la descripción (como en Caja).
-- NÚCLEO (usuario limitado a su sucursal): `proyeccion_flujo` es de toda la empresa (la app no la muestra a un
-  usuario limitado); `pagos_fijos_proximos` y `pago_fijo` tampoco se limitan (la app oculta los que se pagan desde
-  una cuenta que no ve); `estado_fondos` trae el saldo de cuentas de otra sucursal (la app no lo muestra);
-  `v_conciliacion` trae bancos de otras sucursales (la app solo muestra los bancos que el usuario ve).
+- HECHO (núcleo 0.16.0): `proyeccion_flujo` (la app ya la muestra al limitado), `estado_fondos` y `v_conciliacion`
+  se limitan en el servidor. La app conserva sus filtros para cuando el núcleo es 0.15.0. Falta (núcleo):
+  `pagos_fijos_proximos` y `pago_fijo` (la app oculta los que se pagan desde una cuenta que no ve).
 - Compras: solo de productos que se guardan en inventario (así es `registrar_compra` del núcleo: un servicio da
   `PRODUCTO_INVALIDO`). Un servicio comprado (flete, reparación) se registra como gasto en Dinero.
 - Compras: el total de la pantalla es aproximado (calculado en el navegador con la tasa de cada producto); el
@@ -49,11 +49,9 @@
   marcar como proveedor a alguien que ya es cliente.
 - Saldos iniciales de proveedores (`registrar_saldo_inicial_cxp`, solo el dueño): se pagan desde la app, pero
   todavía se cargan solo por Excel o SQL.
-- NÚCLEO (usuario limitado a su sucursal): `v_cxp_documento` deja fuera las compras de otras sucursales (RLS de
-  `compra`) pero NO los saldos iniciales, y las tablas `pago_proveedor`, `compra_linea` y
-  `pago_proveedor_anulacion` no se limitan por sucursal. La app ya quita en pantalla los de otra sucursal
-  (`cuentasPorPagar` y la ficha del proveedor), pero el dato llega al navegador; tampoco hay revisión de sucursal
-  al pagar un saldo inicial. Conviene filtrarlo en el núcleo (próxima migración).
+- HECHO (núcleo 0.16.0): `v_cxp_documento`, saldos iniciales, `pago_proveedor`, `compra_linea` y
+  `pago_proveedor_anulacion` se limitan en el servidor y pagar un saldo inicial exige no tener restricción. La app
+  conserva su filtro (`cuentasPorPagar` y la ficha del proveedor) para el núcleo 0.15.0.
 - HECHO (0.6.0): "Alertas que recibo" y el estilo nuevo en todas las pantallas. Falta: notificaciones al celular.
 - Excel: los nombres con emojis se descargan tal cual (si se quitaran, al volver a subir el archivo saldrían
   como "cambios"). Solo lo impreso y lo que se manda por WhatsApp va sin emojis.
@@ -63,20 +61,15 @@
   compartido entre empresas distintas, la pantalla de entrar muestra la marca del último negocio. Son datos
   públicos del negocio, no sensibles. En un equipo nuevo usa `nombreNegocio` de `config.js` (lo pone
   `armar_app.sh` desde la ficha) o "Mi Negocio".
-- NÚCLEO (próxima migración): `guardar_preferencias_alertas` no revisa `interno.puede_ver_alerta`
-  (045_alertas_resumen.sql, líneas 320-328): un usuario podría guardar preferencias de tipos que no ve. No hace
-  daño (esas alertas no le llegan igual), pero conviene rechazarlo en el servidor.
-- Cobro de un usuario limitado a su sucursal: falta una prueba automática del saldo restante (hoy se calcula en
-  la app como lo que debía en su sucursal menos lo aplicado).
+- HECHO (núcleo 0.16.0): `guardar_preferencias_alertas` rechaza los tipos que el puesto no ve.
+- HECHO (núcleo 0.16.0, prueba 133): cobro de un limitado "a la más vieja" solo en su sucursal y el saldo restante
+  por factura (`saldo_restante_centavos`).
 - Vista previa del Armador: su burbuja de logo sigue en 36 px (la app pasó a 44 px).
-- Inicio: "Lo más vendido" se calcula en el navegador con las últimas 1,000 líneas de venta (si hay más en la
-  semana, lo dice). Con mucho volumen convendrá una función del núcleo que ya lo sume.
-- NÚCLEO: `donde_esta_mi_dinero` devuelve las cuentas de TODA la empresa a un usuario limitado a sucursal. La app
-  ya solo muestra las suyas (0.5.1), pero el dato llega al navegador: corregirlo en el núcleo (filtrar con
-  `interno.sucursal_permitida`, como `resumen_hoy`).
-- "Lo más vendido" no resta devoluciones (lo dice en pantalla); falta una lectura de devoluciones por producto.
-- Inicio: a un usuario restringido por sucursal no se le muestran la gráfica ni lo más vendido (las vistas son de
-  toda la empresa).
+- HECHO (0.9.0, núcleo 0.16.0): Inicio "Lo más vendido" con `mas_vendido` (resta devoluciones; al limitado, su
+  sucursal). Con núcleo 0.15.0: como antes (1,000 líneas, sin restar devoluciones).
+- HECHO (núcleo 0.16.0): `donde_esta_mi_dinero` ya trae solo sus cuentas al limitado (la app conserva su filtro).
+- Inicio: a un usuario restringido por sucursal no se le muestra la gráfica de 7 días (`v_ventas_por_dia` es de toda
+  la empresa).
 - Fotos de productos: la burbuja de "Lo más vendido" ya está lista para la miniatura.
 - Fotos de comprobantes: se suben a Supabase Storage solo con `bucketComprobantes` en config.js (no probado
   contra Supabase real); en la demo no hay Storage y se guarda solo el nombre de la foto en la descripción.
@@ -103,8 +96,8 @@
 - Falta "reactivar usuario" y "restablecer contraseña" en pantalla (usuario_empresa no guarda el correo).
 - Si "Agregar usuario" usa un correo que YA tenía cuenta en Auth, no se le cambia la clave (se avisa "entra con
   la clave que ya usaba"); si no la recuerda, hoy se cambia desde Authentication > Users.
-- Cobro del cajero restringido por sucursal: la app manda a qué facturas va el abono (solo las de su sucursal); el
-  servidor todavía no rechaza un cobro "a la más vieja" que caiga en otra sucursal si alguien lo llama por fuera.
+- HECHO (núcleo 0.16.0): el servidor aplica "a la más vieja" solo en las sucursales del cajero limitado y rechaza
+  aplicar a otra sucursal.
 - Cajas y bancos: cargar el saldo inicial de una cuenta YA creada (solo al crearla); editar nombre/fondo fijo.
 - Inventario: crear categorías, unidades, campos extra y bodegas en pantalla (hoy: Excel de categorías o SQL);
   carga inicial de existencias en pantalla (hoy: hoja "Existencias iniciales" del Excel); anular ajustes/traslados.

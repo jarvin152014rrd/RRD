@@ -3,7 +3,7 @@
 // pagado desde CUALQUIER caja o banco (registrar_gasto). Respeta los topes del núcleo: si el gasto pasa
 // el tope del puesto queda "en espera de aprobación" y el dinero no sale hasta que lo aprueben.
 // (Caja > "Gasto pagado de esta caja" es el atajo del cajero para la caja chica.)
-import { leer, escribir, nuevoId, subirComprobante, usuarioActual, config } from '../api.js';
+import { leer, escribir, nuevoId, subirComprobante, usuarioActual, config, rpcSiExiste } from '../api.js';
 import { empresaId, puede, perfilActual } from '../sesion.js';
 import { dinero, fecha, aCentavos, sumarDias } from '../formato.js';
 import { h, icono, aviso, cajaError, errorSimple, campo, conBoton, confirmar, pedirMotivo, titulo, filaIcono, chipEstado, monto,
@@ -46,13 +46,25 @@ export async function mostrar(vista, ctx) {
     const f = { empresa_id: empresaId(), fecha_contable: { gte: filtros.desde || '2000-01-01', lte: filtros.hasta || '2100-12-31' } };
     if (filtros.categoria) f.categoria_id = filtros.categoria;
     if (filtros.cuenta) f.cuenta_dinero_id = filtros.cuenta;
-    let gastos;
-    try { gastos = await leer('v_gasto', f, { orden: 'numero.desc', limite: LIMITE }); } catch (err) { zona.replaceChildren(await cajaError(err)); return; }
-    tope.replaceChildren(gastos.length >= LIMITE ? mensaje('info', `Se muestran los últimos ${LIMITE} gastos y las cifras suman solo esos.`, 'Acorte las fechas para ver el total exacto.', { dataset: { info: 'tope-filas' } }) : '');
+    let gastos, tot;
+    try {
+      // Núcleo 0.16.0: los totales los suma el servidor (todos los gastos del rango, no solo los que llegan).
+      [gastos, tot] = await Promise.all([leer('v_gasto', f, { orden: 'numero.desc', limite: LIMITE }),
+        rpcSiExiste('totales_gastos', { p_empresa_id: empresaId(), p_desde: filtros.desde || '2000-01-01', p_hasta: filtros.hasta || '2100-12-31',
+          p_categoria_id: filtros.categoria || null, p_cuenta_dinero_id: filtros.cuenta || null })]);
+    } catch (err) { zona.replaceChildren(await cajaError(err)); return; }
+    if (!ctx.sigueVigente()) return;
     const suma = (e) => gastos.filter((g) => g.estado === e).reduce((s, g) => s + Number(g.monto_centavos), 0);
-    resumen.replaceChildren(cifraChica('Gastado en estas fechas', dinero(suma('aplicado')), { dato: 'gastos-total', clase: 'monto-sale' }),
-      cifraChica('En espera de aprobación', dinero(suma('pendiente_aprobacion')), { dato: 'gastos-espera' }),
-      cifraChica('Gastos', String(gastos.length)));
+    const gastado = tot ? Number(tot.gastado_centavos) : suma('aplicado');
+    const espera = tot ? Number(tot.en_espera_centavos) : suma('pendiente_aprobacion');
+    const cuantos = tot ? Number(tot.cantidad) : gastos.length;
+    tope.replaceChildren(gastos.length < LIMITE ? ''
+      : tot ? mensaje('info', `Se muestran los últimos ${LIMITE} gastos; las cifras de arriba son de todos los del rango.`, '', { dataset: { info: 'tope-filas' } })
+        : mensaje('info', `Se muestran los últimos ${LIMITE} gastos y las cifras suman solo esos.`, 'Acorte las fechas para ver el total exacto.', { dataset: { info: 'tope-filas' } }));
+    resumen.dataset.fuente = tot ? 'servidor' : 'navegador';
+    resumen.replaceChildren(cifraChica('Gastado en estas fechas', dinero(gastado), { dato: 'gastos-total', clase: 'monto-sale' }),
+      cifraChica('En espera de aprobación', dinero(espera), { dato: 'gastos-espera' }),
+      cifraChica('Gastos', String(cuantos)));
     zona.replaceChildren(gastos.length ? h('div', { class: 'lista-filas', id: 'lista-gastos' }, gastos.map((g) => {
       const [est, txt] = ESTADO[g.estado] || [g.estado, null];
       const puedeAnular = (g.estado === 'aplicado' && puede('gastos.anular'))

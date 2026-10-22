@@ -1,12 +1,12 @@
 // Dinero · "Proyección" (app 0.7.0): las próximas semanas con proyeccion_flujo (contabilidad.ver):
 // gráfica del saldo de cada semana, tabla con lo que entra (cobros por vencer) y lo que sale (pagos a
 // proveedores, pagos fijos, comisiones y dividendos), lo vencido aparte y las alertas de semanas en negativo.
-// Es de TODA la empresa: a un usuario limitado a su sucursal no se le muestra (ver PENDIENTES).
+// Núcleo 0.16.0: a un usuario limitado a su sucursal el servidor le manda solo lo suyo; con un núcleo anterior no se le muestra.
 import { rpc } from '../api.js';
 import { empresaId } from '../sesion.js';
 import { dinero, fecha } from '../formato.js';
 import { h, cajaError, titulo, filaIcono, monto, estadoVacio, mensaje, tabla, graficaBarras } from '../ui.js';
-import { alcance, reiniciarAlSalir } from '../datos.js';
+import { alcance, reiniciarAlSalir, nucleoFiltraSucursal } from '../datos.js';
 import { cifraChica } from '../formularios.js';
 
 const TIPO = { cobro: ['Cobro a cliente', 'cobrar'], pago_proveedor: ['Pago a proveedor', 'proveedor'], pago_fijo: ['Pago fijo', 'calendario'],
@@ -19,10 +19,12 @@ const corto = (c) => { const n = Math.round(Number(c) / 100); return `${n < 0 ? 
 
 export async function mostrar(vista, ctx) {
   const al = await alcance();
+  // Desde el núcleo 0.16.0 el servidor limita la proyección a las sucursales del usuario; antes era de toda la empresa.
+  const filtra = al.limitado ? await nucleoFiltraSucursal() : true;
   if (!ctx.sigueVigente()) return;
   const tarjeta = h('section', { class: 'tarjeta', 'aria-labelledby': 't-proy' }, titulo('h1', 'proyeccion', 'Proyección', { id: 't-proy' }));
   vista.append(tarjeta);
-  if (al.limitado) {
+  if (al.limitado && !filtra) {
     tarjeta.append(estadoVacio({ icono: 'proyeccion', titulo: 'La proyección es de toda la empresa',
       texto: 'Usted trabaja solo con sus sucursales, por eso no la ve. Pídasela al dueño.' }));
     return;
@@ -47,6 +49,7 @@ export async function mostrar(vista, ctx) {
         cifraChica('Disponible hoy', dinero(r.disponible_hoy_centavos), { dato: 'disponible-hoy' }),
         cifraChica(`Al final (${dias} días)`, dinero(r.saldo_final_proyectado_centavos), { dato: 'saldo-final', clase: r.saldo_final_proyectado_centavos < 0 ? 'monto-sale' : 'monto-entra' }),
         cifraChica('Cobros vencidos (aparte)', dinero(r.cobros_vencidos_centavos), { dato: 'cobros-vencidos' })),
+      r.solo_mis_sucursales ? mensaje('info', 'Solo sus sucursales', r.nota_sucursal || 'Las comisiones y los dividendos son de toda la empresa y no se incluyen.', { dataset: { info: 'proyeccion-sucursal' } }) : null,
       h('p', { class: 'ayuda', dataset: { info: 'formula' } }, 'Cada semana: lo que había + cobros que vencen − pagos a proveedores − pagos fijos − comisiones y dividendos = lo que queda. Los cobros vencidos no se cuentan (no se sabe si entran).'),
       ...(r.alertas || []).map((a) => mensaje('error', a.mensaje, null, { dataset: { info: 'alerta-negativa' } })),
       Number(r.no_disponible_aun_centavos) ? mensaje('info', `${dinero(r.no_disponible_aun_centavos)} todavía no están disponibles`, 'Depósitos en tránsito, tarjetas por liquidar o transferencias por confirmar: no se suman.') : null,

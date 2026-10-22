@@ -1,5 +1,22 @@
 # Cambios de la app
 
+## app 0.9.0 (núcleo 0.16.0; también funciona con 0.15.0) — Totales del servidor y sucursales
+
+- **Totales que suma el servidor** (núcleo 0.16.0): Compras (`totales_compras`: comprado, lo que se debe y cuántas)
+  y Todos los gastos (`totales_gastos`: gastado y en espera) ya no suman en el navegador: las cifras son de TODO el
+  rango aunque la lista muestre las últimas 300. Lo más vendido en Reportes > Ventas e Inicio sale de
+  `mas_vendido` y **ya resta las devoluciones** (lo dice en pantalla y en el Excel/impreso).
+- **Usuario limitado a su sucursal** (núcleo 0.16.0, que ya filtra en el servidor): ve la Proyección (con el aviso
+  "Solo sus sucursales"), lo que se le debe hoy a cada vendedor (solo ventas de sus sucursales) y lo más vendido en
+  Inicio. La gráfica de 7 días sigue oculta (es de toda la empresa).
+- **Núcleo viejo (0.15.0):** si una lectura nueva no existe (404 / `PGRST202`), la app usa el método de antes
+  (`rpcSiExiste` en `api.js`; se vuelve a probar al cerrar sesión) y, para un limitado, oculta lo que antes ocultaba
+  (`nucleoFiltraSucursal`, por `version_esquema`).
+- Pruebas: `probar_app.cjs` (Inicio con devoluciones restadas, limitado con su lo más vendido, núcleo viejo),
+  `probar_compras_dinero.cjs` (cifras de compras y gastos = base, núcleo viejo, proyección del limitado con núcleo
+  nuevo y viejo), `probar_reportes.cjs` (lo más vendido = `mas_vendido` y a mano, núcleo viejo; deuda de comisiones
+  del limitado). Cascarón `cascaron-0.9.0`.
+
 ## app 0.8.1 (núcleo 0.15.0, sin migraciones nuevas) — Arreglos de la revisión de Reportes y cierre
 
 - **Empleados y comisiones:** a un usuario limitado a su sucursal ya no se le pide `v_comision_vendedor` (es de toda

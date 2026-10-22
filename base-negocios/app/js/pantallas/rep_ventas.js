@@ -1,10 +1,11 @@
 // Reportes · "Ventas" (app 0.8.0). Solo mirar.
 //   Por día, semana o mes con su gráfica y por forma de pago: v_ventas_por_caja (núcleo 029; un usuario
 //   limitado a su sucursal ve solo sus cajas). Por vendedor: v_ventas_por_vendedor (de toda la empresa: a un
-//   usuario limitado no se le muestra). Lo más vendido: v_venta_linea (hasta 1,000 líneas).
+//   usuario limitado no se le muestra). Lo más vendido: mas_vendido (núcleo 0.16.0: suma el servidor y resta
+//   devoluciones); con un núcleo anterior, v_venta_linea (hasta 1,000 líneas, sin restar devoluciones).
 //   Las cifras son lo FACTURADO (ventas emitidas, con ISV): NO restan devoluciones; las devoluciones del
 //   período (v_devolucion, aplicadas) se muestran aparte. Las anuladas no cuentan.
-import { leer } from '../api.js';
+import { leer, rpcSiExiste } from '../api.js';
 import { empresaId } from '../sesion.js';
 import { dinero, fecha, cantidad, sumarDias } from '../formato.js';
 import { h, cajaError, titulo, tarjetaCifra, monto, estadoVacio, mensaje, tabla, graficaBarras, filaIcono } from '../ui.js';
@@ -69,14 +70,16 @@ export async function mostrar(vista, ctx) {
     const dp = datosPeriodo(periodo);
     const hasta = hastaHoy(dp.hasta);
     const f = { empresa_id: empresaId(), fecha: { gte: dp.desde, lte: hasta } };
-    let porCaja, porVendedor, lineas, devs;
+    let porCaja, porVendedor, mv, lineas = [], devs;
     try {
-      [porCaja, porVendedor, lineas, devs] = await Promise.all([
+      [porCaja, porVendedor, mv, devs] = await Promise.all([
         leer('v_ventas_por_caja', f, { orden: 'fecha.asc', limite: TOPE_FILAS }),
         al.limitado ? null : leer('v_ventas_por_vendedor', f, { orden: 'fecha.asc', limite: TOPE_FILAS }),
-        leer('v_venta_linea', { empresa_id: empresaId(), estado: 'emitida', fecha_contable: { gte: dp.desde, lte: hasta } }, { orden: 'fecha_contable.desc', limite: TOPE_FILAS }),
+        desdeHasta(dp.desde, hasta) ? rpcSiExiste('mas_vendido', { p_empresa_id: empresaId(), p_desde: dp.desde, p_hasta: hasta, p_limite: 10 }) : { filas: [] },
         leer('v_devolucion', { empresa_id: empresaId(), estado: 'aplicada', fecha_contable: { gte: dp.desde, lte: hasta } }, { limite: TOPE_FILAS }),
       ]);
+      // Núcleo anterior a 0.16.0 (sin mas_vendido): se suman las líneas en el navegador.
+      if (!mv) lineas = await leer('v_venta_linea', { empresa_id: empresaId(), estado: 'emitida', fecha_contable: { gte: dp.desde, lte: hasta } }, { orden: 'fecha_contable.desc', limite: TOPE_FILAS });
     } catch (err) { zona.replaceChildren(await cajaError(err)); return; }
     if (!ctx.sigueVigente()) return;
 
@@ -96,14 +99,20 @@ export async function mostrar(vista, ctx) {
       vend.set(x.vendedor_id, v);
     }
     const vendedores = [...vend.values()].sort((a, b) => b.total - a.total);
-    // Lo más vendido (por producto)
-    const prods = new Map();
-    for (const l of lineas) {
-      const p = prods.get(l.producto_id) || { nombre: l.descripcion, codigo: l.codigo, cantidad: 0, total: 0 };
-      p.cantidad += Number(l.cantidad) || 0; p.total += Number(l.total_centavos) || 0;
-      prods.set(l.producto_id, p);
+    // Lo más vendido (por producto): del servidor, ya restadas las devoluciones; o sumado aquí (núcleo viejo).
+    let top;
+    if (mv) {
+      top = (mv.filas || []).map((x) => ({ nombre: x.nombre, codigo: x.codigo, cantidad: Number(x.cantidad_neta) || 0, total: Number(x.total_neto_centavos) || 0,
+        devuelto: Number(x.cantidad_devuelta) || 0 }));
+    } else {
+      const prods = new Map();
+      for (const l of lineas) {
+        const p = prods.get(l.producto_id) || { nombre: l.descripcion, codigo: l.codigo, cantidad: 0, total: 0, devuelto: 0 };
+        p.cantidad += Number(l.cantidad) || 0; p.total += Number(l.total_centavos) || 0;
+        prods.set(l.producto_id, p);
+      }
+      top = [...prods.values()].sort((a, b) => b.total - a.total).slice(0, 10);
     }
-    const top = [...prods.values()].sort((a, b) => b.total - a.total).slice(0, 10);
 
     const muchas = grupos.length > 16;
     const graf = graficaBarras(grupos.map((g, i) => ({ etiqueta: muchas && i % Math.ceil(grupos.length / 8) !== 0 ? '' : g.texto, valor: g.total_centavos,
@@ -136,13 +145,15 @@ export async function mostrar(vista, ctx) {
           filas: vendedores.map((v) => [v.nombre, String(v.ventas), monto(dinero(v.total)), dinero(v.credito)]) })
           : estadoVacio({ icono: 'usuarios', chico: true, texto: 'No hay ventas en estas fechas.' }),
       h('h2', { class: 'titulo-chico' }, 'Lo más vendido'),
+      h('p', { class: 'ayuda', dataset: { info: mv ? 'top-con-devoluciones' : 'top-sin-devoluciones' } },
+        mv ? 'Ya restadas las devoluciones de estas fechas.' : 'Sin restar devoluciones.'),
       top.length ? h('div', { class: 'lista-filas', id: 'ventas-top' }, top.map((p, i) => filaIcono({ icono: 'etiqueta', color: i === 0 ? 'dorado' : 'azul',
-        titulo: h('strong', {}, p.nombre), detalle: `${cantidad(p.cantidad)} ${p.cantidad === 1 ? 'vendido' : 'vendidos'}${p.codigo ? ' · ' + p.codigo : ''}`,
-        derecha: monto(dinero(p.total)) }))) : estadoVacio({ icono: 'etiqueta', chico: true, texto: 'No hay productos vendidos en estas fechas.' }),
+        titulo: h('strong', {}, p.nombre), detalle: `${cantidad(p.cantidad)} ${p.cantidad === 1 ? 'vendido' : 'vendidos'}${p.devuelto ? ` (${cantidad(p.devuelto)} devuelto${p.devuelto === 1 ? '' : 's'})` : ''}${p.codigo ? ' · ' + p.codigo : ''}`,
+        derecha: monto(dinero(p.total)), props: { dataset: { topTotal: String(p.total) } } }))) : estadoVacio({ icono: 'etiqueta', chico: true, texto: 'No hay productos vendidos en estas fechas.' }),
     ].filter(Boolean));
 
     doc = { titulo: 'Ventas', periodo: dp.texto, notas: ['Lo facturado con ISV: no resta devoluciones. Las ventas anuladas no se cuentan.',
-      `Devoluciones del período (aparte): ${dinero(totalDev)}.`],
+      `Devoluciones del período (aparte): ${dinero(totalDev)}.`, mv ? 'Lo más vendido: ya restadas las devoluciones.' : 'Lo más vendido: sin restar devoluciones.'],
       secciones: [
         { titulo: `Ventas ${AGRUPAR[agrupar].toLowerCase()}`, columnas: [{ titulo: 'Fecha' }, { titulo: 'Ventas', tipo: 'numero' }, { titulo: 'Total', tipo: 'dinero' }],
           filas: grupos.map((g) => [agrupar === 'dia' ? fecha(g.clave) : g.texto, g.ventas, g.total_centavos]), total: ['Total', nVentas, total] },

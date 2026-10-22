@@ -133,9 +133,15 @@ const textoDe = (pagina, sel) => pagina.locator(sel).first().innerText();
     const total7 = Number(sql('dueno@demo.hn', `(SELECT coalesce(sum(total_centavos), 0) FROM public.v_ventas_por_dia
       WHERE empresa_id = '${EMPRESA}' AND fecha BETWEEN public.hoy_local('${EMPRESA}') - 6 AND public.hoy_local('${EMPRESA}'))`));
     afirmar((await textoDe(p, '[data-dato=total_7_dias]')).trim() === lempiras(total7), 'total de 7 días: ' + await textoDe(p, '[data-dato=total_7_dias]') + ' / ' + lempiras(total7));
-    // Lo más vendido: el primero es el de más dinero en la semana (a mano con SQL).
-    const top = sql('dueno@demo.hn', `(SELECT producto_id FROM public.v_venta_linea WHERE empresa_id = '${EMPRESA}' AND estado = 'emitida'
-      AND fecha_contable >= public.hoy_local('${EMPRESA}') - 6 GROUP BY producto_id ORDER BY sum(total_centavos) DESC LIMIT 1)`);
+    // Lo más vendido (0.9.0: mas_vendido del núcleo 0.16.0): el primero es el de más dinero en la semana, ya
+    // restadas las devoluciones (a mano con SQL).
+    const top = sql('dueno@demo.hn', `(SELECT producto_id FROM (
+        SELECT l.producto_id, sum(l.total_centavos) AS t FROM public.venta_linea l JOIN public.venta v ON v.id = l.venta_id
+         WHERE v.empresa_id = '${EMPRESA}' AND v.estado = 'emitida' AND v.fecha_contable BETWEEN public.hoy_local('${EMPRESA}') - 6 AND public.hoy_local('${EMPRESA}') GROUP BY 1
+        UNION ALL
+        SELECT l.producto_id, -sum(l.total_centavos) FROM public.devolucion_linea l JOIN public.devolucion x ON x.id = l.devolucion_id
+         WHERE x.empresa_id = '${EMPRESA}' AND x.estado = 'aplicada' AND x.fecha_contable BETWEEN public.hoy_local('${EMPRESA}') - 6 AND public.hoy_local('${EMPRESA}') GROUP BY 1) z
+      GROUP BY producto_id ORDER BY sum(t) DESC LIMIT 1)`);
     afirmar(await p.locator('#mas-vendido [data-producto-top]').first().getAttribute('data-producto-top') === top, 'lo más vendido no coincide');
     // Primeros pasos: lo hecho sale de los datos (estado_arranque, marca y turnos).
     const ar = JSON.parse(sql('dueno@demo.hn', `public.estado_arranque('${EMPRESA}')`));
@@ -151,10 +157,10 @@ const textoDe = (pagina, sel) => pagina.locator(sel).first().innerText();
     await p.waitForFunction((x) => document.getElementById('campana-numero').textContent === String(x), alertas + aprob);
     afirmar((await textoDe(p, '[data-contador=pendientes]')).trim() === String(alertas + aprob), 'la subpestaña Pendientes no tiene el número');
     afirmar(await p.locator('#inicio-pendientes .solicitud').count() >= 1, 'Pendientes no muestra las aprobaciones');
-    // 0.5.1: lo más vendido avisa que no resta devoluciones y dice "1 vendido" / "13 vendidos" / "8.5 unidades".
+    // 0.5.1: dice "1 vendido" / "13 vendidos" / "8.5 unidades". 0.9.0: avisa que ya resta las devoluciones.
     const top5 = await textoDe(p, '#mas-vendido');
     afirmar(!top5.includes('vendido(s)') && /\d vendidos?\b|unidades/.test(top5), 'plural de vendidos: ' + top5.replace(/\n/g, ' | '));
-    afirmar(await p.locator('#mas-vendido [data-info=sin-devoluciones]').count() === 1, 'no avisa que no resta devoluciones');
+    afirmar(await p.locator('#mas-vendido [data-info=con-devoluciones]').count() === 1, 'no avisa que resta devoluciones');
     // La fecha de "Hoy" es la del servidor (resumen_hoy), no la del momento de entrar.
     afirmar(await p.evaluate(async () => (await import('/js/sesion.js')).perfilActual().empresa.hoy) === r0.fecha, 'la fecha de hoy no es la del servidor');
     // Próximo pago: la app pide solo lo que vence de una fecha en adelante (filtro gte.), igual que la base.
@@ -910,7 +916,12 @@ const textoDe = (pagina, sel) => pagina.locator(sel).first().innerText();
       afirmar(r.solo_mis_sucursales === true, 'el admin no quedó limitado');
       afirmar((await textoDe(p, '[data-dato=en_caja] .cifra-titulo')).includes('mis sucursales'), 'no dice que es de sus sucursales');
       afirmar((await textoDe(p, '[data-dato=en_caja] .cifra-valor')).trim() === lempiras(r.dinero.disponible_centavos), 'el monto no es el de resumen_hoy');
-      afirmar(await p.locator('#grafica-ventas, #mas-vendido').count() === 0, 've la gráfica de toda la empresa');
+      afirmar(await p.locator('#grafica-ventas').count() === 0, 've la gráfica de toda la empresa');
+      // 0.9.0: lo más vendido sí, porque el servidor (mas_vendido) ya cuenta solo su sucursal.
+      await p.waitForSelector('#mas-vendido [data-info=con-devoluciones]');
+      const mv = JSON.parse(sql('admin@demo.hn', `public.mas_vendido('${EM}', public.hoy_local('${EM}') - 6, public.hoy_local('${EM}'), 5)`));
+      afirmar(mv.solo_mis_sucursales === true && await p.locator('#mas-vendido [data-producto-top]').count() === mv.filas.filter((x) => Number(x.total_neto_centavos) > 0 || Number(x.cantidad_neta) > 0).length,
+        'lo más vendido del limitado no es el de su sucursal');
       await p.goto(URL_APP + '/#/dinero/donde');
       await p.waitForSelector('[data-info=solo-sucursales]');
       // A mano: cuentas de S1 (100.00), S2 (50.00) y sin sucursal (20.00); limitado a S1 -> ve 2 y total L 120.00.
@@ -927,6 +938,18 @@ const textoDe = (pagina, sel) => pagina.locator(sel).first().innerText();
     } finally {
       sqlEscribir('dueno@demo.hn', `SELECT public.asignar_sucursales_usuario('${EM}', '${admin}', ARRAY[]::uuid[], 'Prueba: quitar el límite')`);
     }
+  });
+
+  await prueba('0.9.0: con un núcleo 0.15.0 (sin mas_vendido) Inicio suma lo más vendido como antes', async () => {
+    const { ctx, p } = await nueva();
+    await p.route('**/rest/v1/rpc/mas_vendido', (rr) => rr.fulfill({ status: 404, contentType: 'application/json',
+      body: JSON.stringify({ code: 'PGRST202', message: 'Could not find the function public.mas_vendido in the schema cache' }) }));
+    await entrar(p, 'dueno@demo.hn');
+    await p.waitForSelector('#mas-vendido [data-info=sin-devoluciones]');
+    const top = sql('dueno@demo.hn', `(SELECT producto_id FROM public.v_venta_linea WHERE empresa_id = '${EM}' AND estado = 'emitida'
+      AND fecha_contable >= public.hoy_local('${EM}') - 6 GROUP BY producto_id ORDER BY sum(total_centavos) DESC LIMIT 1)`);
+    afirmar(await p.locator('#mas-vendido [data-producto-top]').first().getAttribute('data-producto-top') === top, 'núcleo viejo: lo más vendido no coincide');
+    await ctx.close();
   });
 
   await prueba('ronda 2: subpestañas junto al saludo (computadora) y arriba (celular); tablas como tarjetas', async () => {

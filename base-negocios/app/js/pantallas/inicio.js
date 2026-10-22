@@ -2,9 +2,10 @@
 // lo más vendido, "Primeros pasos" (dueño y admin) y Pendientes.
 // Todo sale de lecturas que YA existen en el núcleo (no se guarda nada nuevo):
 //   resumen_hoy, donde_esta_mi_dinero, mi_turno, alertas_activas, v_aprobacion,
-//   v_ventas_por_dia, v_venta_linea, v_cxp_documento, estado_arranque, marca_empresa, v_turno_caja.
+//   v_ventas_por_dia, mas_vendido (núcleo 0.16.0; antes v_venta_linea), v_cxp_documento, estado_arranque,
+//   marca_empresa, v_turno_caja.
 // Cada parte sale solo si el servidor la manda (permisos); si una falla, las demás siguen.
-import { rpc, leer } from '../api.js';
+import { rpc, leer, rpcSiExiste } from '../api.js';
 import { empresaId, perfilActual, puede, tieneModulo } from '../sesion.js';
 import { dinero, fechaLarga, porcentaje, cantidad } from '../formato.js';
 import { h, icono, chip, burbuja, cajaError, tarjetaCifra, botonAccion, graficaBarras, filaIcono, estadoVacio, cabezaPantalla } from '../ui.js';
@@ -144,17 +145,33 @@ function vendidos(n) {
   return n === 1 ? '1 vendido' : `${cantidad(n)} vendidos`;
 }
 
-function masVendido(lineas, hoy) {
-  const desde = sumarDias(hoy, -6);
-  const por = new Map();
-  for (const l of lineas) {
-    if (!l.fecha_contable || l.fecha_contable < desde) continue;
-    const x = por.get(l.producto_id) || { id: l.producto_id, nombre: l.descripcion, codigo: l.codigo, servicio: l.es_servicio || l.tipo === 'servicio', cantidad: 0, total: 0 };
-    x.cantidad += Number(l.cantidad) || 0;
-    x.total += Number(l.total_centavos) || 0;
-    por.set(l.producto_id, x);
+// Lo más vendido de los últimos 7 días (hoy - 6 a hoy, con la fecha del servidor). Núcleo 0.16.0: lo suma el
+// servidor (mas_vendido), ya restadas las devoluciones y solo de sus sucursales si el usuario es limitado. Núcleo
+// anterior: se suman aquí las últimas líneas de venta (sin restar devoluciones).
+async function leerMasVendido(e, hoy) {
+  const mv = await rpcSiExiste('mas_vendido', { p_empresa_id: e, p_desde: sumarDias(hoy, -6), p_hasta: hoy, p_limite: 5 });
+  if (mv) return { servidor: true, filas: mv.filas || [] };
+  return { servidor: false, lineas: await leer('v_venta_linea', { empresa_id: e, estado: 'emitida', fecha_contable: { gte: sumarDias(hoy, -7) } },
+    { orden: 'fecha_contable.desc', limite: LIMITE_LINEAS }) };
+}
+
+function masVendido(dato, hoy) {
+  let top;
+  if (dato.servidor) {
+    top = dato.filas.map((x) => ({ id: x.producto_id, nombre: x.nombre, codigo: x.codigo, servicio: x.tipo === 'servicio',
+      cantidad: Number(x.cantidad_neta) || 0, total: Number(x.total_neto_centavos) || 0 })).filter((x) => x.total > 0 || x.cantidad > 0);
+  } else {
+    const desde = sumarDias(hoy, -6);
+    const por = new Map();
+    for (const l of dato.lineas) {
+      if (!l.fecha_contable || l.fecha_contable < desde) continue;
+      const x = por.get(l.producto_id) || { id: l.producto_id, nombre: l.descripcion, codigo: l.codigo, servicio: l.es_servicio || l.tipo === 'servicio', cantidad: 0, total: 0 };
+      x.cantidad += Number(l.cantidad) || 0;
+      x.total += Number(l.total_centavos) || 0;
+      por.set(l.producto_id, x);
+    }
+    top = [...por.values()].sort((a, b) => b.total - a.total).slice(0, 5);
   }
-  const top = [...por.values()].sort((a, b) => b.total - a.total).slice(0, 5);
   const tarjeta = h('section', { class: 'tarjeta', id: 'mas-vendido', 'aria-labelledby': 't-top' },
     h('h2', { id: 't-top', class: 'titulo-icono' }, icono('estrella'), 'Lo más vendido esta semana'));
   if (!top.length) {
@@ -168,9 +185,10 @@ function masVendido(lineas, hoy) {
     derecha: [h('span', { class: 'monto' }, dinero(x.total)), h('span', { class: 'suave' }, vendidos(Math.round(x.cantidad * 10000) / 10000))],
     props: { dataset: { productoTop: x.id } },
   }))));
-  tarjeta.append(h('p', { class: 'ayuda', dataset: { info: 'sin-devoluciones' } },
-    'Ventas de los últimos 7 días, sin restar devoluciones.',
-    lineas.length >= LIMITE_LINEAS ? ` Se cuentan las últimas ${LIMITE_LINEAS.toLocaleString('en-US')} líneas de venta.` : ''));
+  tarjeta.append(dato.servidor
+    ? h('p', { class: 'ayuda', dataset: { info: 'con-devoluciones' } }, 'Ventas de los últimos 7 días, ya restadas las devoluciones.')
+    : h('p', { class: 'ayuda', dataset: { info: 'sin-devoluciones' } }, 'Ventas de los últimos 7 días, sin restar devoluciones.',
+      dato.lineas.length >= LIMITE_LINEAS ? ` Se cuentan las últimas ${LIMITE_LINEAS.toLocaleString('en-US')} líneas de venta.` : ''));
   return tarjeta;
 }
 
@@ -259,15 +277,13 @@ export async function mostrar(vista, ctx) {
   const desdeMargen = sumarDias(hoyDeLaMaquina(), -8);
   const hoyMargen = sumarDias(hoyDeLaMaquina(), -1);
 
-  const [resumen, donde, alertas, aprob, turno, dias, lineas, cxp, arranque, marca, turnos] = await Promise.all([
+  const [resumen, donde, alertas, aprob, turno, dias, cxp, arranque, marca, turnos] = await Promise.all([
     parte(rpc('resumen_hoy', { p_empresa_id: e })),
     verDinero ? parte(rpc('donde_esta_mi_dinero', { p_empresa_id: e })) : null,
     parte(leerAlertas(puede('aprobaciones.ver'))),
     puede('aprobaciones.ver') ? parte(pendientes()) : null,
     verTurno ? parte(rpc('mi_turno', { p_empresa_id: e }).then((r) => (r && r.turno) || null)) : null,
     verVentas ? parte(leer('v_ventas_por_dia', { empresa_id: e, fecha: { gte: desdeMargen } }, { orden: 'fecha.desc', limite: 20 })) : null,
-    verVentas ? parte(leer('v_venta_linea', { empresa_id: e, estado: 'emitida', fecha_contable: { gte: desdeMargen } },
-      { orden: 'fecha_contable.desc', limite: LIMITE_LINEAS })) : null,
     // Próximo pago: solo lo que vence de hoy en adelante, el más cercano primero.
     verCxp ? parte(leer('v_cxp_documento', { empresa_id: e, fecha_vencimiento: { gte: hoyMargen } }, { orden: 'fecha_vencimiento.asc', limite: 20 })) : null,
     esJefe ? parte(rpc('estado_arranque', { p_empresa_id: e })) : null,
@@ -279,6 +295,9 @@ export async function mostrar(vista, ctx) {
   // La fecha de hoy la manda el servidor en cada carga (y se refresca en el perfil).
   const hoy = (resumen.ok && resumen.ok.fecha) || perfil.empresa.hoy;
   if (resumen.ok && resumen.ok.fecha) perfil.empresa.hoy = resumen.ok.fecha;
+  // Lo más vendido necesita la fecha del servidor (de hoy - 6 a hoy).
+  const lineas = verVentas ? await parte(leerMasVendido(e, hoy)) : null;
+  if (!ctx.sigueVigente()) return;
 
   // Saludo, fecha y estado de la caja del usuario
   const nombre = (perfil.usuario.nombre || '').split(' ')[0];
@@ -295,7 +314,8 @@ export async function mostrar(vista, ctx) {
 
   if (resumen.err) vista.append(await cajaError(resumen.err));
   const r = resumen.ok || {};
-  const sucursal = Boolean(r.solo_mis_sucursales); // restringido: la gráfica y el top son de toda la empresa, no se muestran
+  // Restringido: la gráfica es de toda la empresa y no se muestra; lo más vendido solo si lo sumó el servidor (0.16.0: sus sucursales).
+  const sucursal = Boolean(r.solo_mis_sucursales);
 
   const izq = h('div', { class: 'inicio-izq' });
   const der = h('div', { class: 'inicio-der' });
@@ -304,7 +324,7 @@ export async function mostrar(vista, ctx) {
   if (t.length) izq.append(h('div', { class: 'cifras-dos' }, t));
   if (r.frase) izq.append(h('p', { class: 'tarjeta frase', dataset: { dato: 'frase' } }, r.frase));
   if (dias && dias.ok && !sucursal) izq.append(graficaSemana(dias.ok, hoy));
-  if (lineas && lineas.ok && !sucursal) izq.append(masVendido(lineas.ok, hoy));
+  if (lineas && lineas.ok && (!sucursal || lineas.ok.servidor)) izq.append(masVendido(lineas.ok, hoy));
   if (!t.length) { const a = atajos(menu); if (a) izq.append(a); }
 
   if (arranque && arranque.ok && marca && marca.ok) {
