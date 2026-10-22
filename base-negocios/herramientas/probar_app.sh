@@ -10,7 +10,7 @@
 # 3. Corre app-pruebas/probar_app.cjs con Playwright (Chromium ya instalado
 #    en /opt/pw-browsers; no descarga nada).
 # 3b. Corre app-pruebas/probar_compras_dinero.cjs: Compras y Dinero (app 0.7.0), con
-#    la misma base y el mismo servidor.
+#    la misma base y el mismo servidor; después app-pruebas/probar_reportes.cjs (app 0.8.0).
 # 4. Corre app-pruebas/probar_funciones.mjs: las Edge Functions reales de
 #    supabase/functions/ contra el emulador (con una llave de servicio de
 #    prueba) y la app de armar_app.sh con sus cabeceras de Netlify.
@@ -56,8 +56,12 @@ echo
 URL_APP="http://127.0.0.1:$PUERTO_PRUEBA" node "$RAIZ/app-pruebas/probar_compras_dinero.cjs"
 codigo_dinero=$?
 echo
+# 3c. Reportes y cierre de mes (app 0.8.0): va después porque reabre y cierra el mes pasado.
+URL_APP="http://127.0.0.1:$PUERTO_PRUEBA" node "$RAIZ/app-pruebas/probar_reportes.cjs"
+codigo_reportes=$?
+echo
 # 4. Las Edge Functions reales (supabase/functions) contra el mismo emulador, y la app armada
 #    para Netlify (armar_app.sh) con sus cabeceras (CSP) en Chromium.
 URL_APP="http://127.0.0.1:$PUERTO_PRUEBA" node "$RAIZ/app-pruebas/probar_funciones.mjs" 2> >(grep -v ExperimentalWarning >&2)
 codigo_funciones=$?
-[ "$codigo_app" = "0" ] && [ "$codigo_dinero" = "0" ] && [ "$codigo_funciones" = "0" ]
+[ "$codigo_app" = "0" ] && [ "$codigo_dinero" = "0" ] && [ "$codigo_reportes" = "0" ] && [ "$codigo_funciones" = "0" ]

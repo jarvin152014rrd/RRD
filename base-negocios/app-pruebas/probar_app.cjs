@@ -209,7 +209,7 @@ const textoDe = (pagina, sel) => pagina.locator(sel).first().innerText();
       return v.querySelectorAll('#copia-datos #descargar-todo').length;
     });
     afirmar(sinExcel === 1, 'sin la subpestaña de Excel, Mi cuenta no ofrece "Descargar todo"');
-    await p.goto(URL_APP + '/#/reportes/ventas');
+    await p.goto(URL_APP + '/#/caja/cajas');
     await p.waitForSelector('.en-construccion .estado-vacio');
     await p.goto(URL_APP + '/#/inicio/hoy');
     await p.waitForSelector('#inicio-pendientes .solicitud');
@@ -1131,6 +1131,15 @@ const textoDe = (pagina, sel) => pagina.locator(sel).first().innerText();
     afirmar(r.despues === r.conEmoji, 'después de imprimir no volvió el título');
     // La regla de la prueba encuentra emojis de verdad (si no, la prueba no probaría nada).
     afirmar(EMOJI_RE.test(String.fromCodePoint(0x1F600)) && EMOJI_RE.test(String.fromCodePoint(0x2705)) && !EMOJI_RE.test('Ñandú © L 1,000.00 → ok'), 'la regla de emojis');
+    // 0.8.0: la hoja impresa de los reportes (Reportes y Cierre de mes) tampoco lleva emojis ni íconos.
+    const hoja = await p.evaluate(async (emo) => {
+      const rep = await import('/js/reportes.js');
+      const el = rep.hojaImpresa({ titulo: 'Ventas ' + emo[0], periodo: 'octubre ' + emo[1], notas: ['Nota ' + emo[2]],
+        secciones: [{ titulo: 'Por vendedor ' + emo[3], columnas: [{ titulo: 'Vendedor' }, { titulo: 'Total', tipo: 'dinero' }],
+          filas: [['Ana ' + emo[4], 150000], ['Luis ' + emo[5], 2500]], total: ['Total', 152500] }] });
+      return { texto: el.textContent, svg: el.querySelectorAll('svg, .icono, .chip-color, .burbuja').length };
+    }, [E(0x1F4C8), E(0x1F389), E(0x2705) + E(0xFE0F), E(0x1F947), E(0x1F44B) + E(0x1F3FD), E(0x1F468) + E(0x200D) + E(0x1F527)]);
+    afirmar(!EMOJI_RE.test(hoja.texto) && hoja.svg === 0 && hoja.texto.includes('Ana') && hoja.texto.includes('L 1,525.00'), 'reporte impreso con emojis: ' + hoja.texto);
     // El código de lo impreso no usa íconos.
     const fs = require('node:fs');
     const fuente = fs.readFileSync(path.join(__dirname, '..', 'app', 'js', 'comprobante.js'), 'utf8');

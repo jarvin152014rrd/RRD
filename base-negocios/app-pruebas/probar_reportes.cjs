@@ -146,12 +146,13 @@ async function leerExcel(p, descarga) {
     const n = num('dueno@demo.hn', `(SELECT count(*) FROM public.venta WHERE ${f})`);
     afirmar((await texto(p, '[data-dato=ventas-total] .cifra-valor')) === lempiras(tot), 'total vendido distinto a la base');
     afirmar((await texto(p, '[data-dato=ventas-total] .cifra-nota')).startsWith(`${n} venta`), 'cantidad de ventas');
-    const efectivo = num('dueno@demo.hn', `(SELECT coalesce(sum(g.monto_centavos), 0) FROM public.venta_pago g JOIN public.venta v ON v.id = g.venta_id WHERE v.${f.replace(/AND /g, 'AND v.')} AND g.forma = 'efectivo')`);
+    const efectivo = num('dueno@demo.hn', `(SELECT coalesce(sum(g.monto_centavos), 0) FROM public.venta_pago g JOIN public.venta v ON v.id = g.venta_id WHERE v.empresa_id = '${EM}' AND v.estado = 'emitida' AND v.fecha_contable BETWEEN '${desdeMes}' AND '${HOY}' AND g.forma = 'efectivo')`);
     afirmar((await texto(p, '[data-forma=efectivo_centavos] .monto')) === lempiras(efectivo), 'efectivo distinto a la base');
     const credito = num('dueno@demo.hn', `(SELECT coalesce(sum(credito_centavos), 0) FROM public.venta WHERE ${f})`);
     afirmar((await texto(p, '[data-forma=credito_centavos] .monto')) === lempiras(credito), 'crédito distinto');
     afirmar((await texto(p, '[data-info=devoluciones]')).includes('no restan las devoluciones'), 'no aclara las devoluciones');
-    const juan = num('dueno@demo.hn', `(SELECT coalesce(sum(total_centavos), 0) FROM public.venta WHERE ${f} AND vendedor_id = (SELECT id FROM auth.users WHERE email = 'vendedor@demo.hn'))`);
+    const juanId = sql(null, `(SELECT id FROM auth.users WHERE email = 'vendedor@demo.hn')`);
+    const juan = num('dueno@demo.hn', `(SELECT coalesce(sum(total_centavos), 0) FROM public.venta WHERE ${f} AND vendedor_id = '${juanId}')`);
     afirmar(juan > 0 && (await texto(p, '#tabla-vendedores')).includes(lempiras(juan)), 'ventas de Juan');
     // Por semana: la suma de las semanas es el total.
     await p.selectOption('#ventas-agrupar', 'semana');
@@ -190,7 +191,8 @@ async function leerExcel(p, descarga) {
     const vendio = num('dueno@demo.hn', `(SELECT coalesce(sum(total_centavos), 0) FROM public.venta WHERE emitida_por = '${anaId}' AND estado = 'emitida' AND fecha_contable >= '${desdeMes}')`);
     afirmar((await texto(p, `[data-dato=vendio-${anaId}]`)) === lempiras(vendio), 'lo que vendió Ana');
     afirmar(await p.locator('#lista-turnos [data-diferencia="-5000"]').count() === 1, 'no sale el turno con faltante de L 50.00');
-    afirmar((await texto(p, '[data-dato=faltantes] .cifra-valor')) === 'L 50.00', 'total faltante');
+    const faltante = num('dueno@demo.hn', `(SELECT coalesce(-sum(diferencia_centavos), 0) FROM public.v_turno_caja WHERE empresa_id = '${EM}' AND estado <> 'abierto' AND diferencia_centavos < 0 AND fecha_cierre BETWEEN '${desdeMes}' AND '${HOY}')`);
+    afirmar(faltante >= 5000 && (await texto(p, '[data-dato=faltantes] .cifra-valor')) === lempiras(faltante), 'total faltante');
   });
 
   await prueba('Quién hizo qué: cadena íntegra, frases sencillas con motivo y filtros por persona y tipo', async () => {
@@ -198,8 +200,17 @@ async function leerExcel(p, descarga) {
     await ir(p, 'reportes/bitacora', '#lista-bitacora');
     await p.waitForSelector('#bit-integridad [data-estado=integra]', { timeout: 20000 });
     afirmar(num('dueno@demo.hn', `(SELECT count(*) FROM public.verificar_bitacora('${EM}'))`) === 0, 'la base dice que la cadena tiene problemas');
-    const t = await texto(p, '#lista-bitacora');
-    afirmar(/anuló una venta #\d+ · motivo: El cliente se arrepintió/.test(t), 'no sale la anulación con su motivo');
+    // La anulación de la demo (con su motivo), entre los cambios de ventas (se piden más de 100 en 100 si hace falta).
+    await p.selectOption('#bit-tipo', 'ventas');
+    await p.waitForFunction(() => [...document.querySelectorAll('#lista-bitacora [data-tipo]')].every((x) => x.dataset.tipo === 'ventas'), null, { timeout: 15000 });
+    const buscada = /anuló una venta #\d+ · motivo: El cliente se arrepintió/;
+    for (let i = 0; i < 20 && !buscada.test(await texto(p, '#lista-bitacora')) && await p.locator('#bit-mas').count(); i++) {
+      const n = await p.locator('#lista-bitacora [data-secuencia]').count();
+      await p.click('#bit-mas');
+      await p.waitForFunction((k) => document.querySelectorAll('#lista-bitacora [data-secuencia]').length > k, n, { timeout: 15000 });
+    }
+    afirmar(buscada.test(await texto(p, '#lista-bitacora')), 'no sale la anulación con su motivo');
+    await p.selectOption('#bit-tipo', '');
     const anaId = sql(null, `(SELECT id FROM auth.users WHERE email = 'cajero@demo.hn')`);
     await p.selectOption('#bit-persona', anaId);
     await p.waitForFunction(() => document.querySelectorAll('#lista-bitacora [data-secuencia]').length > 0
@@ -311,14 +322,14 @@ async function leerExcel(p, descarga) {
     await p.waitForSelector('[data-info=reabrir-con-reparto]');
     afirmar(await p.locator('#cierre-reabrir').count() === 0, 'ofrece reabrir un mes con reparto');
     const r = JSON.parse(sql('dueno@demo.hn', `(SELECT resumen FROM public.cierre WHERE empresa_id = '${EM}' AND anio = ${AA} AND mes = ${MA} AND estado = 'vigente')`));
-    afirmar((await texto(p, '[data-dato=resumen-neta] .cifra-valor')) === lempiras(r.utilidad_neta_centavos), 'resumen del cierre distinto a la foto');
+    afirmar((await texto(p, '[data-dato=resumen-neta]')) === lempiras(r.utilidad_neta_centavos), 'resumen del cierre distinto a la foto');
     const err = errorSql('dueno@demo.hn', `public.reabrir_periodo('${EM}', ${AA}, ${MA}, 'Probar el rechazo')`);
     afirmar(err && err.includes('MES_CON_REPARTO'), 'el núcleo no rechazó reabrir con reparto: ' + err);
     // Libros de ISV del mes, iguales al núcleo.
     await p.click('#cierre-ver-libros');
     await p.waitForSelector('#libro-ventas');
     const li = JSON.parse(sql('dueno@demo.hn', `public.libros_isv('${EM}', ${AA}, ${MA})`));
-    afirmar((await texto(p, '[data-dato=libro-isv-ventas] .cifra-valor')) === lempiras(li.libro_ventas.totales.isv_centavos), 'ISV de ventas del libro');
+    afirmar((await texto(p, '[data-dato=libro-isv-ventas]')) === lempiras(li.libro_ventas.totales.isv_centavos), 'ISV de ventas del libro');
     afirmar(await p.locator('#libro-ventas tbody tr').count() === li.libro_ventas.filas.length, 'filas del libro de ventas');
     const [desc] = await Promise.all([p.waitForEvent('download'), p.click('#libros-excel')]);
     const x = await leerExcel(p, desc);
@@ -338,6 +349,8 @@ async function leerExcel(p, descarga) {
   await prueba('cierre: reabrir con motivo, revisión antes de cerrar (listo / falta con su botón) y cerrar con un corte de internet (un solo cierre)', async () => {
     const p = d.p;
     // El dueño anula el reparto (lo hace el proveedor; aquí por SQL) para poder reabrir.
+    // Primero se anulan los pagos de dividendos de ese reparto (si alguna prueba anterior pagó a un socio).
+    sql('dueno@demo.hn', `(SELECT count(public.anular_pago_dividendos(id, 'Prueba: reabrir el mes', gen_random_uuid())) FROM public.dividendo_pago WHERE empresa_id = '${EM}' AND anulada_en IS NULL)`, true);
     const dist = sql('dueno@demo.hn', `(SELECT id FROM public.distribucion WHERE empresa_id = '${EM}' AND anio = ${AA} AND mes = ${MA} AND anulada_en IS NULL)`);
     sql('dueno@demo.hn', `public.anular_distribucion('${dist}', 'Prueba: reabrir el mes', gen_random_uuid())`, true);
     await ir(p, 'reportes/cierre', `#cierre-meses [data-mes="${mesPasado}"]`);
@@ -360,7 +373,7 @@ async function leerExcel(p, descarga) {
     if (pend) afirmar(await p.getAttribute('[data-revision=aprobaciones] [data-arreglar]', 'href') === '#/inicio/pendientes', 'el botón no lleva a Pendientes');
     afirmar(await p.locator('[data-revision=banco]').count() === 1, 'falta la revisión del banco');
     const er = JSON.parse(sql('dueno@demo.hn', `public.estado_resultados('${EM}', ${AA}, ${MA})`));
-    afirmar((await texto(p, '[data-dato=resumen-neta] .cifra-valor')) === lempiras(er.utilidad_neta_centavos), 'resumen del mes');
+    afirmar((await texto(p, '[data-dato=resumen-neta]')) === lempiras(er.utilidad_neta_centavos), 'resumen del mes');
     // Cerrar: la confirmación explica que queda firme; el primer envío se corta y la app reintenta UNA vez.
     let llamadas = 0;
     await p.route('**/rest/v1/rpc/cerrar_mes', async (rr) => { llamadas++; if (llamadas === 1) await rr.abort('internetdisconnected'); else await rr.continue(); });

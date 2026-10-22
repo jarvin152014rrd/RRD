@@ -312,7 +312,7 @@ BEGIN
   PERFORM demo.como('cajero@demo.hn');
   t := public.abrir_turno(e, caja1, v_saldo, gen_random_uuid());
   PERFORM public.registrar_venta(e, jsonb_build_object('vendedor_id', u_ana,
-    'lineas', jsonb_build_array(demo.l('CEM', 2), demo.l('VAR', 3)), 'pagos', '[{"forma":"efectivo"}]'::jsonb), gen_random_uuid());
+    'lineas', jsonb_build_array(demo.l('VAR', 3), demo.l('PVC', 2)), 'pagos', '[{"forma":"efectivo"}]'::jsonb), gen_random_uuid());
   v_apr := (public.solicitar_anulacion_venta(v_anul, 'El cliente se arrepintió antes de llevarse el clavo', gen_random_uuid())->>'aprobacion_id')::uuid;
   PERFORM demo.como('dueno@demo.hn');
   v_saldo := (SELECT saldo_centavos FROM public.v_cuenta_dinero WHERE caja_id = caja1);
