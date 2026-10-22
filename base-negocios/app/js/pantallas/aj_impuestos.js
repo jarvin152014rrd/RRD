@@ -3,6 +3,7 @@
 // tasa vale para lo que se registre después; el código nunca cambia.
 import { rpc, leer } from '../api.js';
 import { empresaId, puede } from '../sesion.js';
+import { aPorcentaje, comaInvalida, MENSAJE_COMA } from '../formato.js';
 import { h, icono, aviso, errorSimple, campo, pedirMotivo, titulo, tabla, chipEstado, chip } from '../ui.js';
 
 const CLASES = { gravado: 'Gravado', exento: 'Exento', exonerado: 'Exonerado' };
@@ -39,8 +40,8 @@ export async function mostrar(vista, ctx) {
     form.addEventListener('submit', async (ev) => {
       ev.preventDefault();
       zona.replaceChildren();
-      const p = Number(pct.value.replace(',', '.'));
-      if (!codigo.value.trim() || !nombre.value.trim() || !Number.isFinite(p) || p < 0 || p > 100) { zona.append(errorSimple('Revise código, nombre y tasa (0 a 100).')); return; }
+      const p = aPorcentaje(pct.value);
+      if (!codigo.value.trim() || !nombre.value.trim() || p === null) { zona.append(errorSimple(comaInvalida(pct.value) ? MENSAJE_COMA : 'Revise código, nombre y tasa (0 a 100).')); return; }
       const datos = { codigo: codigo.value.trim().toUpperCase(), nombre: nombre.value.trim(), porcentaje: p, clase: clase.value, predeterminado: pred.checked, activo: activo.checked };
       const ok = await pedirMotivo({ titulo: nuevo ? 'Crear impuesto' : `Cambiar ${datos.codigo}`, textoBoton: 'Guardar',
         explicacion: 'Vale para lo que se registre desde ahora. Lo ya vendido queda con la tasa que usó.',

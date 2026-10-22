@@ -5,6 +5,7 @@
 // Inicio > Aprobaciones; al aprobar ajusta con la diferencia sobre la existencia de ese momento).
 import { rpc, escribir } from '../api.js';
 import { empresaId } from '../sesion.js';
+import { aNumero, comaInvalida, MENSAJE_COMA } from '../formato.js';
 import { h, icono, aviso, errorSimple, campo, conBoton, pedirMotivo, cajaError, titulo, estadoVacio, mensaje } from '../ui.js';
 import { hayEnMenu } from '../menu.js';
 import { filtrar } from '../datos.js';
@@ -49,7 +50,9 @@ export async function mostrar(vista, ctx) {
     for (const f of p.filas) {
       const t = (contado.get(llave(f)) || '').trim();
       if (!t) continue;
-      filas.push({ fila: ++n, codigo: f.codigo, bodega: f.bodega, cantidad_contada: t.replace(',', '.') });
+      const q = aNumero(t);
+      if (q === null) { zonaError.append(errorSimple(comaInvalida(t) ? MENSAJE_COMA : `La cantidad contada de ${f.nombre || f.codigo} no es un número de 0 o más.`)); return; }
+      filas.push({ fila: ++n, codigo: f.codigo, bodega: f.bodega, cantidad_contada: String(q) });
     }
     if (!filas.length) { zonaError.append(errorSimple('Escriba la cantidad contada de al menos un producto.')); return; }
     // Primero la revisión (no guarda nada); si hay errores se muestran y no se envía.

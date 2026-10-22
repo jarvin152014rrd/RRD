@@ -4,7 +4,7 @@
 // Llama crear_producto / editar_producto / cambiar_precio_producto. El servidor revisa todo.
 import { rpc, leer, escribir } from '../api.js';
 import { empresaId, puede, tieneModulo } from '../sesion.js';
-import { dinero, fechaHora, aCentavos, paraCampo, cantidad } from '../formato.js';
+import { dinero, fechaHora, aCentavos, paraCampo, cantidad, aNumero, comaInvalida, MENSAJE_COMA } from '../formato.js';
 import { h, icono, aviso, errorSimple, campo, conBoton, pedirMotivo, confirmar, titulo, filaIcono, burbuja, chipEstado, monto, estadoVacio } from '../ui.js';
 import { hayEnMenu } from '../menu.js';
 import { filtrar, olvidarDatos } from '../datos.js';
@@ -184,14 +184,15 @@ async function formulario(vista, ctx, p) {
     const datos = { codigo: codigo.value.trim().toUpperCase(), codigo_barras: barras.value.trim() || null, nombre: nombre.value.trim(),
       categoria_id: categoria.value || null, unidad_id: unidad.value, tipo_impuesto: impuesto.value,
       permite_fracciones: fracciones.checked };
-    const min = minimo.value.trim() ? Number(minimo.value.replace(',', '.')) : 0;
-    if (!Number.isFinite(min) || min < 0) { zonaError.append(errorSimple('El mínimo debe ser un número de 0 o más.')); return; }
+    const min = minimo.value.trim() ? aNumero(minimo.value) : 0;
+    if (min === null) { zonaError.append(errorSimple(comaInvalida(minimo.value) ? MENSAJE_COMA : 'El mínimo debe ser un número de 0 o más.')); return; }
     datos.stock_minimo = min;
     const ce = {};
     for (const { x, ctl } of extras) {
       const t = ctl.value.trim();
       if (!t) { if (p && p.campos_extra && x.clave in p.campos_extra) ce[x.clave] = null; continue; }
-      ce[x.clave] = x.tipo === 'si_no' ? t === 'true' : ['numero', 'entero'].includes(x.tipo) ? Number(t) : t;
+      if (['numero', 'entero'].includes(x.tipo) && comaInvalida(t)) { zonaError.append(errorSimple(`${x.etiqueta || x.clave}: ${MENSAJE_COMA}`)); return; }
+      ce[x.clave] = x.tipo === 'si_no' ? t === 'true' : ['numero', 'entero'].includes(x.tipo) ? Number(t.replace(/,/g, '')) : t;
     }
     if (Object.keys(ce).length) datos.campos_extra = ce;
     let r;

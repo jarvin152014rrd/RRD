@@ -4,7 +4,7 @@
 // aprobación (configurar_empresa). Todo con motivo y en la bitácora.
 import { rpc, leer } from '../api.js';
 import { empresaId } from '../sesion.js';
-import { dinero, aCentavos, paraCampo } from '../formato.js';
+import { dinero, aCentavos, paraCampo, aPorcentaje, comaInvalida, MENSAJE_COMA } from '../formato.js';
 import { h, aviso, errorSimple, campo, pedirMotivo, titulo, tabla } from '../ui.js';
 
 const PUESTOS = { admin: 'Administrador', cajero: 'Cajero', vendedor: 'Vendedor' };
@@ -71,8 +71,8 @@ export async function mostrar(vista, ctx) {
     zona2.replaceChildren();
     const llamadas = [];
     for (const f of filas) {
-      const s = Number(f.sin.value.replace(',', '.')), a = Number(f.aprueba.value.replace(',', '.'));
-      if (!(s >= 0 && s <= 100 && a >= 0 && a <= 100)) { zona2.append(errorSimple(`Revise los porcentajes de ${PUESTOS[f.rol]} (0 a 100).`)); return; }
+      const s = aPorcentaje(f.sin.value), a = aPorcentaje(f.aprueba.value);
+      if (s === null || a === null) { zona2.append(errorSimple(comaInvalida(f.sin.value) || comaInvalida(f.aprueba.value) ? MENSAJE_COMA : `Revise los porcentajes de ${PUESTOS[f.rol]} (0 a 100).`)); return; }
       const antesS = f.d && f.d.sin_aprobacion_porcentaje !== null ? Number(f.d.sin_aprobacion_porcentaje) : DEFECTO[f.rol][0];
       const antesA = f.d && f.d.aprueba_hasta_porcentaje !== null ? Number(f.d.aprueba_hasta_porcentaje) : DEFECTO[f.rol][1];
       if (s !== antesS || a !== antesA) llamadas.push((m) => rpc('configurar_tope_descuento', { p_empresa_id: E, p_rol: f.rol, p_sin_aprobacion_porcentaje: s, p_aprueba_hasta_porcentaje: a, p_motivo: m }));

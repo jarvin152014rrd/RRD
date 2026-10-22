@@ -310,6 +310,55 @@ async function leerExcel(p, descarga) {
     }
   });
 
+  // ============================ Parte 3: comas pendientes ============================
+  await prueba('comas: porcentaje de impuestos, topes, mínimo del producto, conteo y traslados rechazan "2,5" (coma solo de miles)', async () => {
+    const p = d.p;
+    const r = await p.evaluate(async () => {
+      const f = await import('/js/formato.js');
+      return { n: ['2.5', '0', '1,500', '2,5', '-1', '', 'abc', '1,234.5678', '1.23456'].map((x) => f.aNumero(x)),
+        pct: ['15', '12.5', '12,5', '150', '100', '0', '18 %', '-3'].map((x) => f.aPorcentaje(x)) };
+    });
+    afirmar(JSON.stringify(r.n) === JSON.stringify([2.5, 0, 1500, null, null, null, null, 1234.5678, null]), 'aNumero: ' + JSON.stringify(r.n));
+    afirmar(JSON.stringify(r.pct) === JSON.stringify([15, 12.5, null, null, 100, 0, 18, null]), 'aPorcentaje: ' + JSON.stringify(r.pct));
+    const coma = async (que) => {
+      await p.waitForSelector('#contenido .mensaje-error', { timeout: 10000 });
+      afirmar((await texto(p, '#contenido .mensaje-error')).includes('Use punto para los decimales'), `${que}: no explica la coma`);
+      afirmar(await p.locator('dialog.dialogo[open]').count() === 0, `${que}: siguió adelante con la coma`);
+    };
+    // Impuestos
+    const nImp = num('dueno@demo.hn', `(SELECT count(*) FROM public.impuesto WHERE empresa_id = '${EM}')`);
+    await ir(p, 'ajustes/impuestos', '#tabla-impuestos');
+    await p.getByRole('button', { name: 'Nuevo impuesto' }).click();
+    await p.fill('#imp-codigo', 'PRUEBA'); await p.fill('#imp-nombre', 'Prueba de coma'); await p.fill('#imp-pct', '12,5');
+    await p.waitForSelector('#imp-pct + .aviso-coma');
+    await p.getByRole('button', { name: 'Siguiente' }).click();
+    await coma('impuestos');
+    afirmar(num('dueno@demo.hn', `(SELECT count(*) FROM public.impuesto WHERE empresa_id = '${EM}')`) === nImp, 'guardó un impuesto');
+    // Topes de descuento (Reglas)
+    await ir(p, 'ajustes/reglas', '#topes-guardar');
+    await p.locator('[data-tope]').first().fill('5,5');
+    await p.click('#topes-guardar');
+    await coma('topes');
+    // Mínimo del producto
+    const nProd = num('dueno@demo.hn', `(SELECT count(*) FROM public.producto WHERE empresa_id = '${EM}')`);
+    await ir(p, 'inventario/productos', '#nuevo-producto');
+    await p.click('#nuevo-producto');
+    await p.waitForSelector('#prod-minimo');
+    await p.fill('#prod-codigo', 'COMA-1'); await p.fill('#prod-nombre', 'Producto de prueba'); await p.fill('#prod-precio', '10'); await p.fill('#prod-minimo', '2,5');
+    await p.getByRole('button', { name: 'Crear producto' }).click();
+    await coma('mínimo del producto');
+    afirmar(num('dueno@demo.hn', `(SELECT count(*) FROM public.producto WHERE empresa_id = '${EM}')`) === nProd, 'guardó el producto');
+    // Traslados de inventario
+    const nDoc = num('dueno@demo.hn', `(SELECT count(*) FROM public.inventario_documento WHERE empresa_id = '${EM}')`);
+    await ir(p, 'inventario/traslados', '#tras-buscar');
+    await p.fill('#tras-buscar', 'varilla');
+    await p.locator('#tras-buscar').locator('xpath=ancestor::form').locator('button', { hasText: 'Varilla' }).first().click();
+    await p.locator('#tras-lineas input').first().fill('2,5');
+    await p.locator('#tras-buscar').locator('xpath=ancestor::form').locator('button[type=submit]').click();
+    await coma('traslados');
+    afirmar(num('dueno@demo.hn', `(SELECT count(*) FROM public.inventario_documento WHERE empresa_id = '${EM}')`) === nDoc, 'guardó el traslado');
+  });
+
   // ============================ Cierre de mes (cambia la base: va al final) ============================
   const mesPasado = `${AA}-${String(MA).padStart(2, '0')}`;
   await prueba('cierre: lista de meses con chips; el mes con reparto no se reabre (lo explica y el núcleo lo rechaza)', async () => {

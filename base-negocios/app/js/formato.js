@@ -95,6 +95,20 @@ export function aCantidad(texto) {
   return n > 0 ? n : null;
 }
 
+// Número de 0 o más escrito a mano (mínimo de un producto, cantidad contada): hasta 4 decimales, la coma solo
+// como separador de miles (app 0.8.0). "2.5" -> 2.5; "0" -> 0; "1,500" -> 1500; "2,5", "-1" o texto raro -> null.
+export function aNumero(texto) {
+  const t = limpiarNumero(texto);
+  if (t === null || !/^\d{1,12}(?:\.\d{0,4})?$/.test(t)) return null;
+  return Number(t);
+}
+// Porcentaje de 0 a 100 con hasta 4 decimales (tasa de un impuesto, topes de descuento). "15" -> 15;
+// "12.5" -> 12.5; "12,5", "150" o texto raro -> null.
+export function aPorcentaje(texto) {
+  const n = aNumero(String(texto ?? '').trim().replace(/\s*%$/, ''));
+  return n !== null && n <= 100 ? n : null;
+}
+
 // Fechas "AAAA-MM-DD" sin horas (sin problemas de zona): sumar días y días entre dos fechas.
 export function sumarDias(iso, n) {
   const [a, m, d] = String(iso).split('-').map(Number);

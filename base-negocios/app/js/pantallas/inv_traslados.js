@@ -3,7 +3,7 @@
 // confirmar_recepcion_traslado: solo quien trabaja en la sucursal destino).
 import { rpc, leer, escribir } from '../api.js';
 import { empresaId, perfilActual } from '../sesion.js';
-import { fecha, cantidad } from '../formato.js';
+import { fecha, cantidad, aCantidad, comaInvalida, MENSAJE_COMA } from '../formato.js';
 import { h, aviso, errorSimple, campo, conBoton, confirmar, cajaError, titulo, filaIcono, chip, estadoVacio } from '../ui.js';
 import { filtrar } from '../datos.js';
 
@@ -52,8 +52,10 @@ export async function mostrar(vista, ctx) {
     ev.preventDefault();
     zonaError.replaceChildren();
     if (origen.value === destino.value) { zonaError.append(errorSimple('Elija bodegas distintas.')); return; }
-    const ls = lineas.map((l) => ({ producto_id: l.producto_id, cantidad: Number(l.input.value.replace(',', '.')) }));
-    if (!ls.length || ls.some((l) => !(l.cantidad > 0))) { zonaError.append(errorSimple('Escriba una cantidad mayor que cero en cada producto.')); return; }
+    const ls = lineas.map((l) => ({ producto_id: l.producto_id, cantidad: aCantidad(l.input.value) }));
+    if (!ls.length || ls.some((l) => l.cantidad === null)) {
+      zonaError.append(errorSimple(lineas.some((l) => comaInvalida(l.input.value)) ? MENSAJE_COMA : 'Escriba una cantidad mayor que cero en cada producto.')); return;
+    }
     const txt = `${ls.length} producto(s) de ${origen.selectedOptions[0].textContent} a ${destino.selectedOptions[0].textContent}.`;
     if (!await confirmar({ titulo: 'Trasladar mercadería', texto: txt, textoBoton: 'Sí, trasladar' })) return;
     const r = await conBoton(boton, zonaError, () => escribir('trasladar_inventario', { p_empresa_id: E, p_bodega_origen_id: origen.value,
