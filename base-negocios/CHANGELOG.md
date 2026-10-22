@@ -18,6 +18,10 @@ pegada; ver `docs/SUPABASE.md`, "Actualizar de 0.15.0 a 0.16.0").
   y quien no tiene restricción reciben exactamente lo mismo que antes (prueba 135 compara antes y después).
 - **Pagos a proveedores:** `pagar_proveedor` y `anular_pago_proveedor` exigen la sucursal de la compra; un saldo
   inicial de proveedor solo lo paga quien trabaja con todas las sucursales (`SUCURSAL_NO_PERMITIDA`).
+- **Lado de clientes (revisión de 0.16.0, dentro de la misma 052):** RLS en `cxc_saldo_inicial` (de toda la
+  empresa), `cxc_aplicacion`, `cxc_condonacion`, `cobro_pago`, `saldo_favor` y `saldo_favor_uso`;
+  `condonar_saldo_cxc` exige la sucursal de la venta. Las reglas dejan pasar primero a quien ve toda la empresa.
+  En `donde_esta_mi_dinero`, el banco destino de un depósito de otra sucursal va en null.
 - **Cobro "a la más vieja" de un usuario limitado:** solo a ventas al crédito de sus sucursales (salta las demás y
   los saldos iniciales); "aplicar" a una venta de otra sucursal o a un saldo inicial: `SUCURSAL_NO_PERMITIDA`.
 - **`guardar_preferencias_alertas`** rechaza (`SIN_PERMISO`) los tipos que el puesto no ve.

@@ -695,6 +695,35 @@ const existencia = (prod, bod = 'B1') => num('dueno@demo.hn', `(SELECT coalesce(
     await ctx.close();
   });
 
+  await prueba('0.9.1: si el servidor niega los totales (SIN_PERMISO) se suman las filas sin romper; fechas al revés se avisan antes de pedir', async () => {
+    const { ctx, p } = await nueva();
+    for (const f of ['totales_compras', 'totales_gastos']) {
+      await p.route(`**/rest/v1/rpc/${f}`, (rr) => rr.fulfill({ status: 400, contentType: 'application/json',
+        body: JSON.stringify({ code: 'P0001', message: 'SIN_PERMISO: su rol no tiene el permiso "compras.ver".' }) }));
+    }
+    const pedidas = [];
+    p.on('request', (q) => pedidas.push(q.url()));
+    await entrar(p, 'dueno@demo.hn');
+    await ir(p, 'compras/compras', '.cifras[data-fuente=navegador]');
+    afirmar(await p.locator('#contenido .mensaje-error').count() === 0 && await p.locator('#lista-compras').count() === 1, 'compras: la pantalla se rompió con SIN_PERMISO');
+    await ir(p, 'dinero/gastos', '.cifras[data-fuente=navegador]');
+    afirmar(await p.locator('#contenido .mensaje-error').count() === 0, 'gastos: la pantalla se rompió con SIN_PERMISO');
+    // Desde después de hasta: aviso en la app y no se pide nada al servidor.
+    pedidas.length = 0;
+    await p.fill('#gastos-desde', '2026-09-30');
+    await p.fill('#gastos-hasta', '2026-09-01');
+    await p.dispatchEvent('#gastos-hasta', 'change');
+    await p.waitForSelector('[data-info=fechas-al-reves]');
+    afirmar((await texto(p, '[data-info=fechas-al-reves]')).includes("La fecha 'desde' va antes que 'hasta'"), 'no avisa las fechas al revés');
+    afirmar(!pedidas.some((u) => u.includes('totales_gastos') || u.includes('v_gasto')), 'pidió al servidor con las fechas al revés');
+    await ir(p, 'compras/compras', '#compras-desde');
+    await p.fill('#compras-desde', '2026-09-30');
+    await p.fill('#compras-hasta', '2026-09-01');
+    await p.dispatchEvent('#compras-hasta', 'change');
+    await p.waitForSelector('[data-info=fechas-al-reves]');
+    await ctx.close();
+  });
+
   await prueba('0.7.1: al salir los filtros vuelven a los de siempre; "Todos los gastos" sin dinero.ver explica el permiso', async () => {
     const { ctx, p } = await nueva();
     await entrar(p, 'dueno@demo.hn');

@@ -15,6 +15,8 @@ import { hoy, selectCuentas, inputMonto, inputFecha, cifraChica, textoMonto } fr
 const filtros = { desde: null, hasta: null, categoria: '', cuenta: '' };
 reiniciarAlSalir(() => Object.assign(filtros, { desde: null, hasta: null, categoria: '', cuenta: '' }));
 const LIMITE = 300;
+// Si el servidor no deja leer los totales (permiso o fechas), se suman las filas como antes; otro error sí se muestra.
+const sinTotales = (e) => (['SIN_PERMISO', 'FECHA_INVALIDA'].includes(e && e.clave) ? null : Promise.reject(e));
 // Registrar pide gastos.registrar Y poder ver las cajas (dinero.ver): sin eso no hay de dónde elegir.
 const puedeRegistrar = () => puede('gastos.registrar') && puede('dinero.ver');
 const ESTADO = { aplicado: ['aplicado', 'Pagado'], pendiente_aprobacion: ['pendiente_aprobacion', null], rechazado: ['rechazado', null], anulado: ['anulado', null] };
@@ -46,12 +48,17 @@ export async function mostrar(vista, ctx) {
     const f = { empresa_id: empresaId(), fecha_contable: { gte: filtros.desde || '2000-01-01', lte: filtros.hasta || '2100-12-31' } };
     if (filtros.categoria) f.categoria_id = filtros.categoria;
     if (filtros.cuenta) f.cuenta_dinero_id = filtros.cuenta;
+    if (filtros.desde && filtros.hasta && filtros.desde > filtros.hasta) {
+      resumen.replaceChildren(); tope.replaceChildren();
+      zona.replaceChildren(mensaje('error', "La fecha 'desde' va antes que 'hasta'.", 'Corrija las fechas de arriba.', { dataset: { info: 'fechas-al-reves' } }));
+      return;
+    }
     let gastos, tot;
     try {
       // Núcleo 0.16.0: los totales los suma el servidor (todos los gastos del rango, no solo los que llegan).
       [gastos, tot] = await Promise.all([leer('v_gasto', f, { orden: 'numero.desc', limite: LIMITE }),
-        rpcSiExiste('totales_gastos', { p_empresa_id: empresaId(), p_desde: filtros.desde || '2000-01-01', p_hasta: filtros.hasta || '2100-12-31',
-          p_categoria_id: filtros.categoria || null, p_cuenta_dinero_id: filtros.cuenta || null })]);
+        puede('dinero.ver') ? rpcSiExiste('totales_gastos', { p_empresa_id: empresaId(), p_desde: filtros.desde || '2000-01-01', p_hasta: filtros.hasta || '2100-12-31',
+          p_categoria_id: filtros.categoria || null, p_cuenta_dinero_id: filtros.cuenta || null }).catch(sinTotales) : null]);
     } catch (err) { zona.replaceChildren(await cajaError(err)); return; }
     if (!ctx.sigueVigente()) return;
     const suma = (e) => gastos.filter((g) => g.estado === e).reduce((s, g) => s + Number(g.monto_centavos), 0);

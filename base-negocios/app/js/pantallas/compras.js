@@ -30,6 +30,8 @@ function costoTexto(c) {
 }
 
 const LIMITE = 300;
+// Si el servidor no deja leer los totales (permiso o fechas), se suman las filas como antes; otro error sí se muestra.
+const sinTotales = (e) => (['SIN_PERMISO', 'FECHA_INVALIDA'].includes(e && e.clave) ? null : Promise.reject(e));
 
 // Filtros que se recuerdan mientras la app está abierta (no se guardan en el navegador).
 const filtros = { desde: null, hasta: null, proveedor: '' };
@@ -55,12 +57,17 @@ export async function mostrar(vista, ctx) {
     zona.replaceChildren(h('p', { class: 'cargando', role: 'status' }, 'Cargando…'));
     const f = { empresa_id: empresaId(), fecha_contable: { gte: filtros.desde || '2000-01-01', lte: filtros.hasta || '2100-12-31' } };
     if (filtros.proveedor) f.proveedor_id = filtros.proveedor;
+    if (filtros.desde && filtros.hasta && filtros.desde > filtros.hasta) {
+      resumen.replaceChildren(); tope.replaceChildren();
+      zona.replaceChildren(mensaje('error', "La fecha 'desde' va antes que 'hasta'.", 'Corrija las fechas de arriba.', { dataset: { info: 'fechas-al-reves' } }));
+      return;
+    }
     let compras, tot;
     try {
       // Núcleo 0.16.0: los totales los suma el servidor (todas las compras del rango, no solo las que llegan).
       [compras, tot] = await Promise.all([leer('compra', f, { orden: 'numero.desc', limite: LIMITE }),
-        rpcSiExiste('totales_compras', { p_empresa_id: empresaId(), p_desde: filtros.desde || '2000-01-01', p_hasta: filtros.hasta || '2100-12-31',
-          p_proveedor_id: filtros.proveedor || null })]);
+        puede('compras.ver') ? rpcSiExiste('totales_compras', { p_empresa_id: empresaId(), p_desde: filtros.desde || '2000-01-01', p_hasta: filtros.hasta || '2100-12-31',
+          p_proveedor_id: filtros.proveedor || null }).catch(sinTotales) : null]);
     } catch (err) { zona.replaceChildren(await cajaError(err)); return; }
     if (!ctx.sigueVigente()) return;
     let total, porPagar, cuantas;

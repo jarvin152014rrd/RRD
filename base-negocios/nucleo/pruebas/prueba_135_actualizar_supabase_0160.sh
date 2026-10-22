@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# PRUEBA: (0.16.0) actualizar en "Supabase" una base 0.15.0 instalada con las partes del SQL Editor (mini Supabase, rol sin superusuario, una petición por archivo) pegando SOLO dist/actualizar_supabase_0.16.0.sql: dice ACTUALIZADO A 0.16.0, verificar_instalacion dice TODO BIEN, el dueño ve exactamente lo mismo que antes (dinero, proyección, fondos, cuentas por pagar, comisiones, conciliación, resumen), correrlo otra vez no cambia nada, en una base sin núcleo o sin la 051 se rechaza sin tocar nada, y migrar.sh la reconoce
+# PRUEBA: (0.16.0) actualizar en "Supabase" una base 0.15.0 instalada con las partes del SQL Editor (mini Supabase, rol sin superusuario, una petición por archivo) pegando SOLO dist/actualizar_supabase_0.16.0.sql: dice ACTUALIZADO A 0.16.0, verificar_instalacion dice TODO BIEN, el dueño ve exactamente lo mismo que antes (dinero, proyección, fondos, cuentas por pagar, comisiones, conciliación, resumen), correrlo otra vez no cambia nada, en una base sin núcleo o sin la 051 se rechaza sin tocar nada, un error a mitad no deja nada a medias, la bitácora queda íntegra, y migrar.sh la reconoce
 set -euo pipefail
 BASE="$1"
 RAIZ="${RAIZ:-$(cd "$(dirname "$0")/../.." && pwd)}"
@@ -82,6 +82,16 @@ if una "$OTRA" "$ACT" >"$TMP/sal.txt" 2>&1; then falla "se aplicó sin la 051"; 
 grep -q "FALTA_VERSION_ANTERIOR" "$TMP/sal.txt" || falla "sin la 051 debía decir FALTA_VERSION_ANTERIOR: $(cat "$TMP/sal.txt")"
 [ "$(q "$OTRA" "SELECT max(numero) FROM interno._migraciones")" = "46" ] || falla "la base sin la 051 quedó tocada"
 
+# 3b) Un error a mitad (copia del archivo con una división por cero justo antes del final): no queda nada a medias.
+sed 's/^NOTIFY pgrst, .reload schema.;$/SELECT 1 \/ 0 AS falla_a_proposito;\n&/' "$ACT" > "$TMP/act_roto.sql"
+grep -q "falla_a_proposito" "$TMP/act_roto.sql" || falla "no se pudo armar la copia con error"
+if una "$VIEJA" "$TMP/act_roto.sql" >"$TMP/sal.txt" 2>&1; then falla "la copia con error se aplicó"; fi
+[ "$(q "$VIEJA" "SELECT max(numero) || '/' || (to_regprocedure('public.totales_compras(uuid,date,date,uuid)') IS NULL)
+      || '/' || (SELECT count(*) FROM pg_policies WHERE policyname = 'por_sucursal' AND tablename IN ('pago_proveedor', 'cxc_aplicacion', 'saldo_favor'))
+      || '/' || (to_regclass('public.periodo_operacion') IS NULL) FROM interno._migraciones")" = "51/true/0/true" ] \
+  || falla "el error a mitad dejó algo a medias"
+[ "$(foto dueno_a)" = "$ANTES_DUENO" ] || falla "el error a mitad cambió lo que ve el dueño"
+
 # 4) Actualizar: una sola petición, todo o nada.
 una "$VIEJA" "$ACT" >"$TMP/sal.txt" || falla "la actualización dio error: $(cat "$TMP/sal.txt")"
 grep -q "^ACTUALIZADO A $VERSION | $VERSION | 52 | 52" "$TMP/sal.txt" || falla "no dijo ACTUALIZADO A $VERSION: $(cat "$TMP/sal.txt")"
@@ -90,6 +100,8 @@ una "$VIEJA" "$TMP/dist/verificar_instalacion.sql" | grep -q "^TODO BIEN | $VERS
       WHERE n.nspname IN ('public', 'interno') AND pg_get_userbyid(p.proowner) <> 'supa_postgres'")" = "0" ] || falla "funciones con otro dueño"
 [ "$(q "$VIEJA" "SELECT checksum FROM interno._migraciones WHERE numero = 52")" \
   = "$(sha256sum "$RAIZ/nucleo/sql/migraciones/052_sucursal_totales.sql" | cut -d' ' -f1)" ] || falla "huella de la 052"
+
+[ "$(q "$VIEJA" "SELECT count(*) FROM public.verificar_bitacora()")" = "0" ] || falla "la bitácora no quedó íntegra"
 
 # 5) El dueño (y quien no tiene restricción) ve exactamente lo mismo.
 [ "$(foto dueno_a)" = "$ANTES_DUENO" ] || { echo "antes:   $ANTES_DUENO"; echo "despues: $(foto dueno_a)"; falla "el dueño ve otra cosa después de actualizar"; }

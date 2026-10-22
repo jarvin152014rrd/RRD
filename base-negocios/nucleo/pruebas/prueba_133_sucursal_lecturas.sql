@@ -1,4 +1,4 @@
--- PRUEBA: (0.16.0) usuario limitado a su sucursal recibe solo lo suyo y el dueño todo como antes: compras (líneas, pagos, anulaciones, saldos iniciales de toda la empresa) y v_cxp_documento; pagar y anular pagos solo de su sucursal (saldo inicial: no); v_comision_vendedor; donde_esta_mi_dinero; estado_fondos; proyeccion_flujo; conciliación (tablas, v_conciliacion, ver_conciliacion); cobro "a la más vieja" salta facturas de otra sucursal y rechaza aplicar a ellas; preferencias de alertas rechazadas; totales de compras, gastos y lo más vendido que cuadran con la suma de filas (y cifras a mano)
+-- PRUEBA: (0.16.0) usuario limitado a su sucursal recibe solo lo suyo y el dueño todo como antes: lado de clientes (saldos iniciales, aplicaciones, condonaciones, pagos de cobros, saldo a favor y sus usos; cobro con excedente y con saldo a favor; devolución a saldo a favor; condonar solo en su sucursal); contador y proveedor con soporte no pierden nada; compras (líneas, pagos, anulaciones, saldos iniciales de toda la empresa) y v_cxp_documento; pagar y anular pagos solo de su sucursal (saldo inicial: no); v_comision_vendedor; donde_esta_mi_dinero; estado_fondos; proyeccion_flujo; conciliación (tablas, v_conciliacion, ver_conciliacion); cobro "a la más vieja" salta facturas de otra sucursal y rechaza aplicar a ellas; preferencias de alertas rechazadas; totales de compras, gastos y lo más vendido que cuadran con la suma de filas (y cifras a mano)
 DO $$
 DECLARE
   e      uuid := pruebas.empresa('A');
@@ -17,6 +17,7 @@ DECLARE
   n      bigint;
   m      bigint;
   t      text;
+  t2     text;
 BEGIN
   PERFORM pruebas.preparar_ventas(false);
   hoy := public.hoy_local(e);
@@ -297,6 +298,88 @@ BEGIN
   PERFORM pruebas.afirmar(EXISTS (SELECT 1 FROM jsonb_array_elements(r) x WHERE x->>'tipo' = 'stock_minimo' AND NOT (x->>'recibir')::boolean), 'cajero: el suyo sí');
   PERFORM pruebas.como('dueno_a');
   PERFORM public.guardar_preferencias_alertas(e, '{"cuenta_negativa": false}');
+
+  -- =========== Lado de clientes ===========
+  -- Cobro del cajero con excedente: recibe 4,500; V3 debe 4,000 -> 500 quedan a favor de CLI1 (lote de la Norte).
+  PERFORM pruebas.como('cajero_a');
+  r := public.registrar_cobro(e, jsonb_build_object('cliente_id', pruebas.id('CLI1'), 'caja_id', c2, 'excedente', 'saldo_favor',
+         'pagos', '[{"forma":"efectivo","monto_centavos":4500}]'::jsonb), gen_random_uuid());
+  PERFORM pruebas.afirmar((r->>'aplicado_centavos')::bigint = 4000 AND (r->>'excedente_centavos')::bigint = 500
+    AND jsonb_array_length(r->'aplicaciones') = 1 AND (r->'aplicaciones'->0->>'venta_id')::uuid = (v3->>'venta_id')::uuid
+    AND (r->'saldo_favor'->>'monto_centavos')::bigint = 500, 'excedente a favor: ' || r::text);
+  PERFORM pruebas.guardar('SF_NORTE', (r->'saldo_favor'->>'saldo_favor_id')::uuid);
+  -- Dueño: anticipo de CLI2 en la principal (1,000), saldo inicial de CLI2 (2,000), V6 al crédito en la Norte a CLI1 (3,000)
+  -- y V7 de contado en la Norte a CLI2 (2 tornillos = 3,000).
+  PERFORM pruebas.como('dueno_a');
+  r := public.registrar_cobro(e, jsonb_build_object('cliente_id', pruebas.id('CLI2'), 'tipo', 'anticipo', 'caja_id', pruebas.id('CAJA001'),
+         'pagos', '[{"forma":"efectivo","monto_centavos":1000}]'::jsonb), gen_random_uuid());
+  PERFORM pruebas.guardar('SF_PRINCIPAL', (r->'saldo_favor'->>'saldo_favor_id')::uuid);
+  PERFORM pruebas.guardar('SIC', (public.registrar_saldo_inicial_cxc(e, jsonb_build_object('cliente_id', pruebas.id('CLI2'), 'numero_documento', 'F-OLD-9',
+    'fecha_documento', '2025-12-01', 'monto_centavos', 2000), gen_random_uuid())->>'saldo_inicial_id')::uuid);
+  PERFORM public.registrar_cobro(e, jsonb_build_object('cliente_id', pruebas.id('CLI2'), 'caja_id', pruebas.id('CAJA001'),
+    'pagos', '[{"forma":"efectivo","monto_centavos":500}]'::jsonb), gen_random_uuid());   -- abono al saldo inicial
+  PERFORM public.condonar_saldo_cxc(e, jsonb_build_object('venta_id', v4->>'venta_id', 'monto_centavos', 100), 'Redondeo del cliente', gen_random_uuid());
+  PERFORM pruebas.guardar('V6', (public.registrar_venta(e, pruebas.venta('P1', 2, 'credito', 'CLI1') || jsonb_build_object('caja_id', c2), gen_random_uuid())->>'venta_id')::uuid);
+  PERFORM pruebas.guardar('V7', (public.registrar_venta(e, pruebas.venta('P1', 2, 'efectivo', 'CLI2') || jsonb_build_object('caja_id', c2), gen_random_uuid())->>'venta_id')::uuid);
+  -- El cajero paga 500 de V6 con el saldo a favor (función del núcleo: la RLS no la frena).
+  PERFORM pruebas.como('cajero_a');
+  r := public.registrar_cobro(e, jsonb_build_object('cliente_id', pruebas.id('CLI1'), 'caja_id', c2,
+         'pagos', '[{"forma":"saldo_favor","monto_centavos":500}]'::jsonb), gen_random_uuid());
+  PERFORM pruebas.afirmar((r->>'aplicado_centavos')::bigint = 500 AND (r->'aplicaciones'->0->>'venta_id')::uuid = pruebas.id('V6')
+    AND (r->'aplicaciones'->0->>'saldo_restante_centavos')::bigint = 2500, 'cobro con saldo a favor: ' || r::text);
+  -- El admin de la Norte devuelve 1 tornillo de V7 a saldo a favor de CLI2 (lote de la Norte).
+  PERFORM pruebas.como('admin_a');
+  r := public.registrar_devolucion(pruebas.id('V7'), jsonb_build_object('lineas', '[{"linea":1,"cantidad":1}]'::jsonb,
+         'motivo', 'No era la medida', 'destino', 'saldo_favor'), gen_random_uuid());
+  IF r->>'estado' = 'pendiente_aprobacion' THEN
+    PERFORM pruebas.como('dueno_a');
+    r := public.resolver_aprobacion((r->>'aprobacion_id')::uuid, true, 'Devolución correcta', gen_random_uuid());
+    PERFORM pruebas.como('admin_a');
+  END IF;
+  PERFORM pruebas.afirmar(EXISTS (SELECT 1 FROM public.saldo_favor WHERE documento_tipo = 'devolucion' AND monto_centavos = 1500),
+    'devolución a saldo a favor (y el admin la ve)');
+  -- Condonar: solo en su sucursal; un saldo inicial, no.
+  PERFORM pruebas.debe_fallar(format('SELECT public.condonar_saldo_cxc(%L, %L::jsonb, %L, gen_random_uuid())', e,
+    jsonb_build_object('venta_id', v4->>'venta_id', 'monto_centavos', 100), 'Redondeo ajeno'), 'SUCURSAL_NO_PERMITIDA', 'condonar factura de otra sucursal');
+  PERFORM pruebas.debe_fallar(format('SELECT public.condonar_saldo_cxc(%L, %L::jsonb, %L, gen_random_uuid())', e,
+    jsonb_build_object('saldo_inicial_id', pruebas.id('SIC'), 'monto_centavos', 100), 'Redondeo viejo'), 'SUCURSAL_NO_PERMITIDA', 'condonar un saldo inicial');
+  r := public.condonar_saldo_cxc(e, jsonb_build_object('venta_id', pruebas.id('V6'), 'monto_centavos', 100), 'Redondeo Norte', gen_random_uuid());
+  PERFORM pruebas.afirmar(NOT (r->>'duplicado')::boolean, 'condonar en su sucursal sí');
+  -- Lo que llega al admin: nada de la principal ni de toda la empresa.
+  PERFORM pruebas.afirmar((SELECT count(*) FROM public.cxc_saldo_inicial) = 0
+    AND NOT EXISTS (SELECT 1 FROM public.cxc_aplicacion a LEFT JOIN public.venta v ON v.id = a.venta_id WHERE v.sucursal_id IS DISTINCT FROM s2)
+    AND NOT EXISTS (SELECT 1 FROM public.cxc_condonacion c LEFT JOIN public.venta v ON v.id = c.venta_id WHERE v.sucursal_id IS DISTINCT FROM s2)
+    AND (SELECT count(*) FROM public.cxc_condonacion) = 1
+    AND NOT EXISTS (SELECT 1 FROM public.cobro_pago p JOIN public.cobro c ON c.id = p.cobro_id WHERE c.sucursal_id IS DISTINCT FROM s2)
+    AND (SELECT count(*) FROM public.cobro_pago) = (SELECT count(*) FROM public.cobro_pago p WHERE p.cobro_id IN (SELECT id FROM public.cobro))
+    AND EXISTS (SELECT 1 FROM public.saldo_favor WHERE id = pruebas.id('SF_NORTE'))
+    AND NOT EXISTS (SELECT 1 FROM public.saldo_favor WHERE id = pruebas.id('SF_PRINCIPAL'))
+    AND EXISTS (SELECT 1 FROM public.saldo_favor_uso WHERE saldo_favor_id = pruebas.id('SF_NORTE'))
+    AND NOT EXISTS (SELECT 1 FROM public.saldo_favor_uso WHERE saldo_favor_id <> ALL (ARRAY(SELECT id FROM public.saldo_favor))),
+    'admin: lado de clientes solo de la Norte');
+  -- El dueño ve todo (igual que sin RLS).
+  PERFORM pruebas.como('dueno_a');
+  SELECT string_agg(x.tb || ':' || x.n, ',') INTO t FROM (SELECT 'si' AS tb, count(*) AS n FROM public.cxc_saldo_inicial UNION ALL SELECT 'apl', count(*) FROM public.cxc_aplicacion
+    UNION ALL SELECT 'con', count(*) FROM public.cxc_condonacion UNION ALL SELECT 'pag', count(*) FROM public.cobro_pago
+    UNION ALL SELECT 'sf', count(*) FROM public.saldo_favor UNION ALL SELECT 'uso', count(*) FROM public.saldo_favor_uso
+    UNION ALL SELECT 'ppa', count(*) FROM public.pago_proveedor UNION ALL SELECT 'cl', count(*) FROM public.compra_linea UNION ALL SELECT 'bm', count(*) FROM public.banco_movimiento) x;
+  PERFORM pruebas.como('superusuario');
+  PERFORM pruebas.afirmar(t = (SELECT string_agg(x.tb || ':' || x.n, ',') FROM (SELECT 'si' AS tb, count(*) AS n FROM public.cxc_saldo_inicial UNION ALL SELECT 'apl', count(*) FROM public.cxc_aplicacion
+    UNION ALL SELECT 'con', count(*) FROM public.cxc_condonacion UNION ALL SELECT 'pag', count(*) FROM public.cobro_pago
+    UNION ALL SELECT 'sf', count(*) FROM public.saldo_favor UNION ALL SELECT 'uso', count(*) FROM public.saldo_favor_uso
+    UNION ALL SELECT 'ppa', count(*) FROM public.pago_proveedor UNION ALL SELECT 'cl', count(*) FROM public.compra_linea UNION ALL SELECT 'bm', count(*) FROM public.banco_movimiento) x),
+    'dueño = todo: ' || t);
+  -- Contador y proveedor con soporte (sin restricción): ven lo mismo que el dueño en las tablas con reglas nuevas.
+  PERFORM pruebas.crear_contador();
+  PERFORM public.otorgar_acceso_soporte(e, now() + interval '2 hours', 'Revisar los cobros');
+  FOR f IN SELECT to_jsonb(x) FROM (VALUES ('contador'), ('proveedor')) x(quien) LOOP
+    PERFORM pruebas.como(f->>'quien');
+    SELECT string_agg(x.tb || ':' || x.n, ',') INTO t2 FROM (SELECT 'si' AS tb, count(*) AS n FROM public.cxc_saldo_inicial UNION ALL SELECT 'apl', count(*) FROM public.cxc_aplicacion
+      UNION ALL SELECT 'con', count(*) FROM public.cxc_condonacion UNION ALL SELECT 'pag', count(*) FROM public.cobro_pago
+      UNION ALL SELECT 'sf', count(*) FROM public.saldo_favor UNION ALL SELECT 'uso', count(*) FROM public.saldo_favor_uso
+      UNION ALL SELECT 'ppa', count(*) FROM public.pago_proveedor UNION ALL SELECT 'cl', count(*) FROM public.compra_linea UNION ALL SELECT 'bm', count(*) FROM public.banco_movimiento) x;
+    PERFORM pruebas.afirmar(t2 = t, (f->>'quien') || ' no pierde nada: ' || t2 || ' / dueño ' || t);
+  END LOOP;
 
   -- Todo cuadra.
   PERFORM pruebas.como('superusuario');

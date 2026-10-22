@@ -87,6 +87,18 @@ antes y después de actualizar).
 | `registrar_cobro` sin "aplicar" (a la más vieja) | solo ventas al crédito de SUS sucursales (salta las demás y los saldos iniciales); si ahí no debe nada: `COBRO_EXCEDE_SALDO` |
 | `registrar_cobro` con "aplicar" | una venta de otra sucursal o un saldo inicial de cliente: `SUCURSAL_NO_PERMITIDA` |
 | `totales_compras`, `totales_gastos`, `mas_vendido` (nuevas, `totales.md`) | solo sus sucursales |
+| `cxc_saldo_inicial` (RLS) | nada: los saldos iniciales de clientes son de toda la empresa |
+| `cxc_aplicacion`, `cxc_condonacion` (RLS) | solo las de ventas de sus sucursales (las de un saldo inicial, no) |
+| `cobro_pago` (RLS) | solo los pagos de cobros que ve |
+| `saldo_favor` (RLS) | un lote se ve si el documento que lo creó (cobro, devolución, apartado o venta anulada) es de una sucursal que ve; un cobro o apartado sin sucursal (sin caja) es de toda la empresa: no |
+| `saldo_favor_uso` (RLS) | los usos de los lotes que ve |
+| `condonar_saldo_cxc` | solo ventas de sus sucursales; un saldo inicial: `SUCURSAL_NO_PERMITIDA` |
+| `donde_esta_mi_dinero` → depósitos en tránsito | el nombre del banco destino va en `null` si es de otra sucursal |
+
+Las reglas nuevas empiezan con `empresa_id = ANY (ARRAY(SELECT public.empresas_sin_restriccion())) OR ...`: quien
+ve toda la empresa (dueño, contador, proveedor con soporte, admin sin restricción) no pasa por la subconsulta y ve
+lo mismo que antes (prueba 133). Cobrar, devolver y usar un saldo a favor son funciones del núcleo: la RLS no las
+frena (prueba 133: el cajero de la Norte cobra con excedente y con saldo a favor, el admin devuelve a saldo a favor).
 
 Ayudante para políticas: `empresas_sin_restriccion()` (empresas donde el usuario conectado ve todas las
 sucursales; el dueño siempre).

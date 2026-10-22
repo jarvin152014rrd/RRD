@@ -12,6 +12,8 @@ etapa 3.
   `estado_fondos`, `v_conciliacion` (y sus tablas), `proyeccion_flujo`, `v_cxp_documento`, saldos iniciales de
   proveedor, `pago_proveedor`, `pago_proveedor_anulacion` y `compra_linea`. El dueño ve lo mismo que antes.
 - HECHO: sucursal al pagar y anular pagos a proveedores (saldo inicial: solo sin restricción).
+- HECHO (revisión, en la misma 052): lado de clientes (saldos iniciales, aplicaciones, condonaciones, pagos de
+  cobros, saldo a favor y sus usos) y `condonar_saldo_cxc` por sucursal; banco de otra sucursal en tránsito en null.
 - HECHO: cobro "a la más vieja" de un limitado solo en sus sucursales; "aplicar" a otra sucursal se rechaza.
 - HECHO: `guardar_preferencias_alertas` rechaza tipos que el puesto no ve.
 - HECHO: `totales_compras`, `totales_gastos`, `mas_vendido` (con devoluciones).
@@ -22,8 +24,7 @@ etapa 3.
 - FALTA (menor): `pago_fijo` / `pagos_fijos_proximos`, `v_ventas_por_dia`, `v_ventas_por_vendedor`, `v_cxc_cliente`,
   `v_saldo_favor`, `bitacora_legible`, libros de ISV y cierres siguen siendo de toda la empresa.
 - FALTA: que el revisor revise 0.16.0. FALTA (dueño): pegar `actualizar_supabase_0.16.0.sql` en su Supabase real.
-- No se pudo consultar a los agentes constructor-maestro y revisor (CLAUDE.md) desde esta sesión: conviene que
-  revisen la 052, sobre todo las políticas nuevas y el cobro del usuario limitado.
+- El revisor revisó 0.16.0 (sin nada grave); sus puntos medios y menores quedaron dentro de la 052.
 
 ## Etapa 6: subir a Supabase real (PREPARADA en 0.15.0, migración 051, prueba 132)
 

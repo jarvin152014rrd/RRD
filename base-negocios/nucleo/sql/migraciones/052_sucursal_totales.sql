@@ -6,13 +6,17 @@
 --      lo escondía en pantalla pero el dato llegaba al navegador). El dueño y
 --      quien no tiene restricción reciben lo mismo que antes.
 --        - Políticas RLS restrictivas: compra_linea, pago_proveedor,
---          pago_proveedor_anulacion, cxp_saldo_inicial (de toda la empresa) y
---          las tablas de la conciliación (por la cuenta de banco).
+--          pago_proveedor_anulacion, cxp_saldo_inicial (de toda la empresa),
+--          las tablas de la conciliación (por la cuenta de banco) y, del lado de
+--          clientes, cxc_saldo_inicial (de toda la empresa), cxc_aplicacion,
+--          cxc_condonacion (por la venta), cobro_pago (por su cobro), saldo_favor
+--          y saldo_favor_uso (por la sucursal del documento que creó el lote).
 --          Así v_cxp_documento / v_cxp_proveedor / v_conciliacion quedan filtradas.
 --        - v_comision_vendedor: solo comisiones de ventas de sus sucursales.
 --        - donde_esta_mi_dinero, estado_fondos (saldo de la cuenta del fondo),
 --          proyeccion_flujo: solo cuentas y documentos de sus sucursales.
 --        - ver_conciliacion exige la sucursal del banco.
+--        - condonar_saldo_cxc exige la sucursal de la venta (saldo inicial: no).
 --        - pagar_proveedor / anular_pago_proveedor exigen la sucursal de la compra;
 --          los saldos iniciales de proveedor son de toda la empresa (se guardan
 --          con la primera sucursal solo por la contabilidad): el limitado no
@@ -49,20 +53,37 @@ $$;
 -- ---------------------------------------------------------------------
 -- 1a) Políticas restrictivas nuevas (se suman a "leer": hay que cumplir las dos)
 -- ---------------------------------------------------------------------
+-- Quien ve toda la empresa entra por el primer "OR" (empresas_sin_restriccion, una vez por
+-- consulta) y no pasa por la subconsulta de la sucursal.
+-- Saldo a favor (decisión 0.16.0): un lote se ve si su documento de origen (cobro, devolución,
+-- apartado o venta anulada) es de una sucursal que el usuario ve; un cobro o apartado sin sucursal
+-- (sin caja) es de toda la empresa: solo sin restricción. Sus usos, por el lote.
 DO $$
-DECLARE r record;
+DECLARE
+  r     record;
+  todo  constant text := 'empresa_id = ANY (ARRAY(SELECT public.empresas_sin_restriccion()))';
 BEGIN
   FOR r IN SELECT * FROM (VALUES
-      ('cxp_saldo_inicial',        '(empresa_id = ANY (ARRAY(SELECT public.empresas_sin_restriccion())))'),
-      ('compra_linea',             '(compra_id IN (SELECT c.id FROM public.compra c))'),
-      ('pago_proveedor',           '(compra_id IN (SELECT c.id FROM public.compra c) OR (saldo_inicial_id IS NOT NULL AND empresa_id = ANY (ARRAY(SELECT public.empresas_sin_restriccion()))))'),
-      ('pago_proveedor_anulacion', '(pago_id IN (SELECT p.id FROM public.pago_proveedor p))'),
-      ('conciliacion',             '(cuenta_dinero_id = ANY (ARRAY(SELECT public.cuentas_dinero_permitidas())))'),
-      ('banco_movimiento',         '(cuenta_dinero_id = ANY (ARRAY(SELECT public.cuentas_dinero_permitidas())))'),
-      ('banco_importacion',        '(conciliacion_id IN (SELECT c.id FROM public.conciliacion c))'),
-      ('conciliacion_pareja',      '(conciliacion_id IN (SELECT c.id FROM public.conciliacion c))'),
-      ('banco_diferencia',         '(banco_movimiento_id IN (SELECT b.id FROM public.banco_movimiento b))')) x(t, filtro) LOOP
-    EXECUTE format('CREATE POLICY por_sucursal ON public.%I AS RESTRICTIVE FOR SELECT TO authenticated USING %s', r.t, r.filtro);
+      ('cxp_saldo_inicial',        NULL),
+      ('compra_linea',             'compra_id IN (SELECT c.id FROM public.compra c)'),
+      ('pago_proveedor',           'compra_id IN (SELECT c.id FROM public.compra c)'),
+      ('pago_proveedor_anulacion', 'pago_id IN (SELECT p.id FROM public.pago_proveedor p)'),
+      ('conciliacion',             'cuenta_dinero_id = ANY (ARRAY(SELECT public.cuentas_dinero_permitidas()))'),
+      ('banco_movimiento',         'cuenta_dinero_id = ANY (ARRAY(SELECT public.cuentas_dinero_permitidas()))'),
+      ('banco_importacion',        'conciliacion_id IN (SELECT c.id FROM public.conciliacion c)'),
+      ('conciliacion_pareja',      'conciliacion_id IN (SELECT c.id FROM public.conciliacion c)'),
+      ('banco_diferencia',         'banco_movimiento_id IN (SELECT b.id FROM public.banco_movimiento b)'),
+      ('cxc_saldo_inicial',        NULL),
+      ('cxc_aplicacion',           'venta_id IN (SELECT v.id FROM public.venta v)'),
+      ('cxc_condonacion',          'venta_id IN (SELECT v.id FROM public.venta v)'),
+      ('cobro_pago',               'cobro_id IN (SELECT c.id FROM public.cobro c)'),
+      ('saldo_favor',              'documento_id IN (SELECT c.id FROM public.cobro c WHERE c.sucursal_id IS NOT NULL
+                                      UNION ALL SELECT d.id FROM public.devolucion d
+                                      UNION ALL SELECT a.id FROM public.apartado a WHERE a.sucursal_id IS NOT NULL
+                                      UNION ALL SELECT v.id FROM public.venta v)'),
+      ('saldo_favor_uso',          'saldo_favor_id IN (SELECT f.id FROM public.saldo_favor f)')) x(t, filtro) LOOP
+    EXECUTE format('CREATE POLICY por_sucursal ON public.%I AS RESTRICTIVE FOR SELECT TO authenticated USING (%s%s)',
+                   r.t, todo, CASE WHEN r.filtro IS NULL THEN '' ELSE ' OR ' || r.filtro END);
   END LOOP;
 END $$;
 
@@ -145,7 +166,8 @@ BEGIN
            'con_alerta', count(*) FILTER (WHERE (public.hoy_local(o.empresa_id) - o.fecha_contable) > e.dias_alerta_transito),
            'depositos', coalesce(jsonb_agg(jsonb_build_object('operacion_id', o.id, 'numero', o.numero,
               'fecha', to_char(o.fecha_contable, 'YYYY-MM-DD'), 'monto_centavos', o.monto_centavos,
-              'banco', (SELECT x.nombre FROM public.cuenta_dinero x WHERE x.id = o.destino_id),
+              'banco', (SELECT CASE WHEN NOT v_restr OR interno.sucursal_permitida(p_empresa_id, x.sucursal_id) THEN x.nombre END
+                          FROM public.cuenta_dinero x WHERE x.id = o.destino_id),   -- 0.16.0: de otra sucursal, null
               'dias', public.hoy_local(o.empresa_id) - o.fecha_contable,
               'alerta', (public.hoy_local(o.empresa_id) - o.fecha_contable) > e.dias_alerta_transito) ORDER BY o.fecha_contable), '[]'))
     INTO v_transito
@@ -545,6 +567,30 @@ BEGIN
   RETURN interno.registrar_cobro_base(p_empresa_id, v_datos, p_id_operacion);
 END $$;
 
+-- condonar_saldo_cxc (misma firma y respuesta): la de 033 pasa a interno sin cambios y la pública
+-- revisa antes la sucursal de la venta; un saldo inicial de cliente (de toda la empresa), solo sin restricción.
+ALTER FUNCTION public.condonar_saldo_cxc(uuid, jsonb, text, uuid) SET SCHEMA interno;
+ALTER FUNCTION interno.condonar_saldo_cxc(uuid, jsonb, text, uuid) RENAME TO condonar_saldo_cxc_base;
+
+CREATE FUNCTION public.condonar_saldo_cxc(p_empresa_id uuid, p_datos jsonb, p_motivo text, p_id_operacion uuid)
+RETURNS jsonb
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = '' AS $$
+DECLARE v_doc uuid;
+BEGIN
+  PERFORM interno.exigir_escritura(p_empresa_id, 'cobros.condonar', 'ventas');
+  IF p_id_operacion IS NOT NULL AND jsonb_typeof(p_datos) = 'object' AND interno.usuario_restringido(p_empresa_id)
+     AND NOT EXISTS (SELECT 1 FROM public.cxc_condonacion c WHERE c.empresa_id = p_empresa_id AND c.id_operacion = p_id_operacion) THEN
+    IF coalesce(p_datos->'saldo_inicial_id', 'null'::jsonb) <> 'null'::jsonb THEN
+      RAISE EXCEPTION 'SUCURSAL_NO_PERMITIDA: los saldos iniciales de clientes son de toda la empresa; los condona alguien que trabaja con todas las sucursales.';
+    END IF;
+    v_doc := interno.json_uuid(p_datos->'venta_id', 'venta_id');
+    IF v_doc IS NOT NULL THEN
+      PERFORM interno.exigir_sucursal(p_empresa_id, (SELECT v.sucursal_id FROM public.venta v WHERE v.id = v_doc AND v.empresa_id = p_empresa_id));
+    END IF;
+  END IF;
+  RETURN interno.condonar_saldo_cxc_base(p_empresa_id, p_datos, p_motivo, p_id_operacion);
+END $$;
+
 -- ---------------------------------------------------------------------
 -- 3) Preferencias de alertas: solo de los tipos que el puesto ve
 -- ---------------------------------------------------------------------
@@ -828,7 +874,8 @@ END $$;
 REVOKE EXECUTE ON FUNCTION
   interno.exigir_documento_cxp(uuid, uuid), interno.cobro_solo_mis_sucursales(uuid, jsonb, uuid),
   interno.exigir_rango(date, date, integer),
-  interno.cerrar_mes_base(uuid, integer, integer, text), interno.reabrir_periodo_base(uuid, integer, integer, text)
+  interno.cerrar_mes_base(uuid, integer, integer, text), interno.reabrir_periodo_base(uuid, integer, integer, text),
+  interno.condonar_saldo_cxc_base(uuid, jsonb, text, uuid)
 FROM PUBLIC, anon, authenticated, service_role;
 
 REVOKE EXECUTE ON FUNCTION public.empresas_sin_restriccion() FROM PUBLIC, anon;
@@ -851,11 +898,13 @@ REVOKE EXECUTE ON FUNCTION
   public.pagar_proveedor(uuid, uuid, bigint, date, text, uuid, text, text, uuid),
   public.anular_pago_proveedor(uuid, text, uuid, date),
   public.registrar_cobro(uuid, jsonb, uuid), public.guardar_preferencias_alertas(uuid, jsonb),
-  public.cerrar_mes(uuid, integer, integer, text, uuid), public.reabrir_periodo(uuid, integer, integer, text, uuid)
+  public.cerrar_mes(uuid, integer, integer, text, uuid), public.reabrir_periodo(uuid, integer, integer, text, uuid),
+  public.condonar_saldo_cxc(uuid, jsonb, text, uuid)
 FROM PUBLIC, anon, service_role;
 GRANT EXECUTE ON FUNCTION
   public.pagar_proveedor(uuid, uuid, bigint, date, text, uuid, text, text, uuid),
   public.anular_pago_proveedor(uuid, text, uuid, date),
   public.registrar_cobro(uuid, jsonb, uuid), public.guardar_preferencias_alertas(uuid, jsonb),
-  public.cerrar_mes(uuid, integer, integer, text, uuid), public.reabrir_periodo(uuid, integer, integer, text, uuid)
+  public.cerrar_mes(uuid, integer, integer, text, uuid), public.reabrir_periodo(uuid, integer, integer, text, uuid),
+  public.condonar_saldo_cxc(uuid, jsonb, text, uuid)
 TO authenticated;
