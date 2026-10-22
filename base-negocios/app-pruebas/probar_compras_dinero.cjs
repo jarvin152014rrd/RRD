@@ -715,7 +715,7 @@ const existencia = (prod, bod = 'B1') => num('dueno@demo.hn', `(SELECT coalesce(
     await p.dispatchEvent('#gastos-hasta', 'change');
     await p.waitForSelector('[data-info=fechas-al-reves]');
     afirmar((await texto(p, '[data-info=fechas-al-reves]')).includes("La fecha 'desde' va antes que 'hasta'"), 'no avisa las fechas al revés');
-    afirmar(!pedidas.some((u) => u.includes('totales_gastos') || u.includes('v_gasto')), 'pidió al servidor con las fechas al revés');
+    afirmar(!pedidas.some((u) => u.includes('2026-09-01')), 'pidió al servidor con las fechas al revés');
     await ir(p, 'compras/compras', '#compras-desde');
     await p.fill('#compras-desde', '2026-09-30');
     await p.fill('#compras-hasta', '2026-09-01');

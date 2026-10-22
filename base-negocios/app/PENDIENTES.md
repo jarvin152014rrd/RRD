@@ -1,4 +1,4 @@
-# Pendientes de la app (0.9.0)
+# Pendientes de la app (0.9.1)
 
 - HECHO (0.8.0): comas en impuestos, topes, mínimo, traslados y conteo. Quedan los campos `type=number`
   (arqueo por billetes, devoluciones, plazos), que el navegador ya no deja escribir con coma.

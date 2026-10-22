@@ -1,5 +1,12 @@
 # Cambios de la app
 
+## app 0.9.1 (núcleo 0.16.0; también funciona con 0.15.0) — Arreglos de la revisión
+
+- Compras y Todos los gastos piden los totales solo con su permiso (`compras.ver` / `dinero.ver`); si el servidor
+  responde `SIN_PERMISO` o `FECHA_INVALIDA`, suman las filas como antes sin romper la pantalla.
+- Si "desde" es después de "hasta", la app avisa ("La fecha 'desde' va antes que 'hasta'.") y no pide nada.
+- Prueba nueva en `probar_compras_dinero.cjs`. Cascarón `cascaron-0.9.1`.
+
 ## app 0.9.0 (núcleo 0.16.0; también funciona con 0.15.0) — Totales del servidor y sucursales
 
 - **Totales que suma el servidor** (núcleo 0.16.0): Compras (`totales_compras`: comprado, lo que se debe y cuántas)
