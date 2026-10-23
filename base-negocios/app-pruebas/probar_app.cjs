@@ -531,7 +531,9 @@ const textoDe = (pagina, sel) => pagina.locator(sel).first().innerText();
       WHERE empresa_id = '${EMPRESA}' ORDER BY registrado_en DESC LIMIT 1) x)`));
   };
   async function abrirDevolucion(p, numero) {
-    await p.goto(URL_APP + '/#/vender/devoluciones');
+    // Si ya está en Devoluciones (la prueba anterior), tocar la subpestaña vuelve a empezar la pantalla.
+    if (await p.evaluate(() => location.hash) === '#/vender/devoluciones') await p.click('a.subpestana[href="#/vender/devoluciones"]');
+    else await p.goto(URL_APP + '/#/vender/devoluciones');
     await p.waitForSelector('#dev-numero');
     await p.fill('#dev-numero', numero);
     await p.click('form.formulario button[type=submit]');

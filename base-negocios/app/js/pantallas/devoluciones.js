@@ -112,11 +112,11 @@ async function formulario(vista, ctx, ventaId) {
     const nodo = h('fieldset', { class: 'tarjeta-interna', id: 'zona-cambio', hidden: true },
       h('legend', {}, 'Producto que se lleva'),
       campo('Buscar el producto nuevo', buscar), resultados, zonaLineas, zonaCifras);
-    let cargado = false;
-    async function cargar() {
-      if (cargado) return;
-      cargado = true;
-      try { lista = await productos(); } catch (err) { zonaCifras.replaceChildren(await cajaError(err)); }
+    // Una sola carga de la lista (el foco y la primera tecla esperan la misma promesa).
+    let carga = null;
+    function cargar() {
+      if (!carga) carga = productos().then((x) => { lista = x; }).catch(async (err) => { carga = null; zonaCifras.replaceChildren(await cajaError(err)); });
+      return carga;
     }
     buscar.addEventListener('focus', cargar);
     buscar.addEventListener('input', async () => {
