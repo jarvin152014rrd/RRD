@@ -41,6 +41,10 @@ SELECT pruebas.como('dueno_a');
 SELECT public.crear_sucursal(pruebas.empresa('A'), '002', 'Sucursal Norte');
 SELECT public.importar_estado_cuenta(pruebas.empresa('A'), pruebas.id('BANCO'), 2026, 1,
   '{"filas":[{"fecha":"2026-01-22","descripcion":"PAGO ENEE","monto_centavos":-11500}]}', gen_random_uuid());
+-- El cliente ya usaba 3.1.01.04 "Aportes de socios" con un asiento suyo: la 052 debe poner la del sistema en la siguiente libre.
+SELECT public.crear_subcuenta(pruebas.empresa('A'), '3.1.01', '3.1.01.04', 'Aportes de socios');
+SELECT public.registrar_asiento(pruebas.empresa('A'), '2026-01-30', 'Aporte anotado a mano', jsonb_build_array(
+  jsonb_build_object('cuenta', '3.3.01.01', 'debe', 100), jsonb_build_object('cuenta', '3.1.01.04', 'haber', 100)), gen_random_uuid());
 SELECT public.registrar_saldo_inicial_cxp(pruebas.empresa('A'), jsonb_build_object('proveedor_id', pruebas.id('PROV2'),
   'numero_documento', 'SI-9', 'fecha_documento', '2025-12-20', 'monto_centavos', 30000), gen_random_uuid());
 COMMIT;
@@ -120,6 +124,25 @@ DO $$ BEGIN
   PERFORM pruebas.afirmar((public.totales_compras(pruebas.empresa('A'), '2026-01-01', '2026-01-31')->>'total_centavos')::bigint = 544000, 'totales_compras');
   PERFORM pruebas.afirmar((public.totales_gastos(pruebas.empresa('A'), '2026-01-01', '2026-01-31')->>'gastado_centavos')::bigint = 11500, 'totales_gastos');
   PERFORM pruebas.afirmar((public.mas_vendido(pruebas.empresa('A'), '2026-01-01', '2026-01-31')->'total'->>'total_vendido_centavos')::bigint = 106000, 'mas_vendido');
+END $$;
+ROLLBACK;
+SQL
+# 7b) Lo nuevo de la 052 en la empresa que ya existía: cuenta de aportes (la siguiente libre, porque la 3.1.01.04 ya
+#     tenía un asiento del cliente), permiso del dueño y un aporte de verdad.
+psql -X -q -v ON_ERROR_STOP=1 -d "$VIEJA" >/dev/null <<'SQL' || falla "aporte de socio en la base actualizada"
+BEGIN;
+SELECT pruebas.como('superusuario');
+INSERT INTO public.modulo_activo (empresa_id, modulo) VALUES (pruebas.empresa('A'), 'fondos');
+DO $$
+DECLARE e uuid := pruebas.empresa('A'); s uuid; r jsonb;
+BEGIN
+  PERFORM pruebas.afirmar(interno.cuenta_de(e, 'aportes_socios') = '3.1.01.05', 'cuenta de aportes: ' || interno.cuenta_de(e, 'aportes_socios'));
+  PERFORM pruebas.afirmar(EXISTS (SELECT 1 FROM public.rol_permiso WHERE empresa_id = e AND rol = 'dueno' AND permiso = 'fondos.aportes'), 'permiso del dueño');
+  PERFORM pruebas.como('dueno_a');
+  s := (public.guardar_socio(e, jsonb_build_object('user_id', pruebas.usuario('dueno_a'), 'porcentaje', 100), 'Socio único')->>'socio_id')::uuid;
+  r := public.registrar_aporte_socio(e, jsonb_build_object('socio_id', s, 'monto_centavos', 250000, 'cuenta_dinero_id', pruebas.id('BANCO')), gen_random_uuid());
+  PERFORM pruebas.afirmar(r->>'cuenta_capital' = '3.1.01.05' AND pruebas.saldo_libros(e, '3.1.01.05') = 250000
+    AND pruebas.saldo_libros(e, '3.1.01.04') = 100 AND (public.aportes_socios(e)->>'cuadra')::boolean, 'aporte: ' || r::text);
 END $$;
 ROLLBACK;
 SQL

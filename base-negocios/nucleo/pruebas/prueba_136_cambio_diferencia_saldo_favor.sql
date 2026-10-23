@@ -1,4 +1,4 @@
--- PRUEBA: (0.16.0) cambio de producto desde la app (cifras a mano): calcular_cambio_previo no guarda nada y dice lo devuelto, lo que rebaja la deuda, el total nuevo y la diferencia (a cobrar o a favor) con las opciones que permite el dueño; si el producto nuevo vale menos la diferencia queda como saldo a favor del cliente, como VALE sin cliente o se devuelve en dinero; si vale más se cobra; doble envío con el mismo id_operacion; rechazos (diferencia inválida, saldo a favor con cuenta, tipo no permitido, sin permiso, sucursal ajena); todos los asientos cuadran
+-- PRUEBA: (0.16.0) cambio de producto desde la app (cifras a mano; asiento con ISV, inventario y costo exactos; mismo precio; venta al crédito con deuda): calcular_cambio_previo no guarda nada y dice lo devuelto, lo que rebaja la deuda, el total nuevo y la diferencia (a cobrar o a favor) con las opciones que permite el dueño; si el producto nuevo vale menos la diferencia queda como saldo a favor del cliente, como VALE sin cliente o se devuelve en dinero; si vale más se cobra; doble envío con el mismo id_operacion; rechazos (diferencia inválida, saldo a favor con cuenta, tipo no permitido, sin permiso, sucursal ajena); todos los asientos cuadran
 DO $$
 DECLARE
   e    uuid := pruebas.empresa('A');
@@ -10,6 +10,9 @@ DECLARE
   op   uuid;
   n    bigint;
   caja0 bigint;
+  p1   numeric;
+  p3   numeric;
+  isv  text;
 BEGIN
   PERFORM pruebas.preparar_ventas(false);
   PERFORM public.configurar_empresa(e, '{"turnos_obligatorios": false}', 'Prueba de cambio de producto');
@@ -60,6 +63,50 @@ BEGIN
           WHERE venta_id = (d->>'venta_cambio_id')::uuid) = 'saldo_favor:3000'
     AND pruebas.dinero('CAJA1') = caja0, 'saldo a favor de 42,000 y la caja igual');
   PERFORM pruebas.afirmar(pruebas.saldo_libros(e, '2.1.04.02') = 42000, 'pasivo de saldos a favor = 42,000');
+  -- Asiento de la nota de crédito, a mano: galón 45,000 con ISV 18 % -> base round(45,000 / 1.18) = 38,136 e ISV 6,864;
+  -- costo de la venta 30,000 (compra a L 300.00). Dr 4.1.01.04 38,136 + Dr ISV 6,864 = Cr 2.1.04.02 45,000; Dr 1.1.03.01 / Cr 5.1.01.01 30,000.
+  SELECT im.cuenta_por_pagar INTO isv FROM public.impuesto im WHERE im.empresa_id = e AND im.codigo = 'ISV18';
+  PERFORM pruebas.afirmar((SELECT string_agg(c.codigo || ':' || l.debe_centavos || '/' || l.haber_centavos, ',' ORDER BY c.codigo)
+                             FROM public.asiento_linea l JOIN public.cuenta c ON c.id = l.cuenta_id
+                            WHERE l.asiento_id = (SELECT asiento_id FROM public.devolucion WHERE id = (d->>'devolucion_id')::uuid))
+    = (SELECT string_agg(x, ',' ORDER BY x) FROM unnest(ARRAY['1.1.03.01:30000/0', isv || ':6864/0', '2.1.04.02:0/45000', '4.1.01.04:38136/0', '5.1.01.01:0/30000']) x),
+    'asiento exacto de la nota de crédito');
+  -- Inventario: vuelve el galón y salen 2 tornillos de la venta nueva.
+  SELECT pruebas.existencia('B1', 'P1'), pruebas.existencia('B1', 'P3') INTO p1, p3;
+
+  PERFORM pruebas.afirmar(p3 = 10 AND p1 = 98, 'inventario: galones ' || p3 || ', tornillos ' || p1);
+
+  -- ===== 1b) Mismo precio: un galón por otro galón (diferencia 0) =====
+  PERFORM pruebas.como('dueno_a');
+  v2 := public.registrar_venta(e, pruebas.venta('P3', 1, 'efectivo', 'CLI2'), gen_random_uuid());
+  pv := public.calcular_cambio_previo((v2->>'venta_id')::uuid, jsonb_build_object('lineas', '[{"linea":1,"cantidad":1}]'::jsonb,
+          'cambio', jsonb_build_object('lineas', jsonb_build_array(jsonb_build_object('producto_id', pruebas.id('P3'), 'cantidad', 1)))));
+  PERFORM pruebas.afirmar((pv->>'a_cobrar_centavos')::bigint = 0 AND (pv->>'a_favor_cliente_centavos')::bigint = 0
+    AND jsonb_array_length(pv->'opciones_diferencia') = 0, 'previo parejo: ' || pv::text);
+  d := public.registrar_devolucion((v2->>'venta_id')::uuid, jsonb_build_object('lineas', '[{"linea":1,"cantidad":1}]'::jsonb,
+         'motivo', 'Venía golpeado', 'destino', 'cambio',
+         'cambio', jsonb_build_object('lineas', jsonb_build_array(jsonb_build_object('producto_id', pruebas.id('P3'), 'cantidad', 1)))), gen_random_uuid());
+  PERFORM pruebas.como('superusuario');
+  PERFORM pruebas.afirmar((d->>'cambio_centavos')::bigint = 45000 AND (d->>'saldo_favor_centavos')::bigint = 0 AND (d->>'dinero_centavos')::bigint = 0
+    AND interno.saldo_favor_lote((d->'saldo_favor'->>'saldo_favor_id')::uuid) = 0, 'parejo: ' || d::text);
+
+  -- ===== 1c) Venta al crédito con deuda: primero rebaja lo que debe =====
+  PERFORM pruebas.como('dueno_a');
+  -- V crédito a CLI1: 1 galón = 45,000 (debe todo). Cambio por 2 tornillos (3,000): rebaja 45,000 de la deuda,
+  -- no queda nada para el cambio y el cliente paga los 3,000 del producto nuevo.
+  v2 := public.registrar_venta(e, pruebas.venta('P3', 1, 'credito', 'CLI1'), gen_random_uuid());
+  pv := public.calcular_cambio_previo((v2->>'venta_id')::uuid, jsonb_build_object('lineas', '[{"linea":1,"cantidad":1}]'::jsonb,
+          'cambio', jsonb_build_object('lineas', jsonb_build_array(jsonb_build_object('producto_id', pruebas.id('P1'), 'cantidad', 2)))));
+  PERFORM pruebas.afirmar((pv->>'rebaja_deuda_centavos')::bigint = 45000 AND (pv->>'para_el_cambio_centavos')::bigint = 0
+    AND (pv->>'a_cobrar_centavos')::bigint = 3000, 'previo con deuda: ' || pv::text);
+  d := public.registrar_devolucion((v2->>'venta_id')::uuid, jsonb_build_object('lineas', '[{"linea":1,"cantidad":1}]'::jsonb,
+         'motivo', 'Prefiere tornillos', 'destino', 'cambio',
+         'cambio', jsonb_build_object('lineas', jsonb_build_array(jsonb_build_object('producto_id', pruebas.id('P1'), 'cantidad', 2)),
+                                      'pagos', '[{"forma":"efectivo","monto_centavos":3000}]'::jsonb)), gen_random_uuid());
+  PERFORM pruebas.afirmar((d->>'cxc_centavos')::bigint = 45000 AND (d->>'cambio_centavos')::bigint = 0 AND (d->'venta_cambio'->>'total_centavos')::bigint = 3000,
+    'con deuda: ' || d::text);
+  PERFORM pruebas.como('superusuario');
+  PERFORM pruebas.afirmar(interno.saldo_documento_cxc((v2->>'venta_id')::uuid) = 0, 'la deuda quedó en cero');
 
   -- ===== 2) Consumidor final: la diferencia queda en un VALE con código =====
   -- V2 contado sin cliente: 1 galón = 45,000. Cambio por 1 tornillo = 1,500. Vale: 43,500.
@@ -130,6 +177,14 @@ BEGIN
     'lineas', '[{"linea":1,"cantidad":1}]'::jsonb, 'motivo', 'Prefiere tornillos', 'destino', 'cambio', 'cuenta_dinero_id', pruebas.id('CAJA1'),
     'cambio', jsonb_build_object('diferencia', 'dinero', 'lineas', jsonb_build_array(jsonb_build_object('producto_id', pruebas.id('P1'), 'cantidad', 1))))),
     'DEVOLUCION_NO_PERMITIDA', 'el dueño no permite devolver dinero');
+  PERFORM pruebas.debe_fallar(format('SELECT public.registrar_devolucion(%L, %L, gen_random_uuid())', v1->>'venta_id', jsonb_build_object(
+    'lineas', '[{"linea":1,"cantidad":1}]'::jsonb, 'motivo', 'Prefiere tornillos', 'destino', 'cambio', 'cuenta_dinero_id', pruebas.id('CAJA1'),
+    'cambio', jsonb_build_object('lineas', jsonb_build_array(jsonb_build_object('producto_id', pruebas.id('P1'), 'cantidad', 1))))),
+    'DEVOLUCION_NO_PERMITIDA', 'con cuenta y sin "diferencia" = dinero: no permitido');
+  PERFORM pruebas.debe_fallar(format('SELECT public.registrar_devolucion(%L, %L, gen_random_uuid())', v1->>'venta_id', jsonb_build_object(
+    'lineas', '[{"linea":1,"cantidad":1}]'::jsonb, 'motivo', 'Prefiere tornillos', 'destino', 'cambio',
+    'cambio', jsonb_build_object('lineas', jsonb_build_array(jsonb_build_object('producto_id', pruebas.id('P1'), 'cantidad', 1))))),
+    'DEVOLUCION_NO_PERMITIDA', 'sin cuenta ni "diferencia": la diferencia saldría en dinero y no está permitido');
   PERFORM public.configurar_empresa(e, '{"devolucion_tipos": ["devolver_dinero", "nota_credito"]}', 'Sin cambio de producto');
   PERFORM pruebas.debe_fallar(format('SELECT public.calcular_cambio_previo(%L, %L)', v1->>'venta_id', jsonb_build_object(
     'lineas', '[{"linea":1,"cantidad":1}]'::jsonb, 'cambio', jsonb_build_object('lineas', jsonb_build_array(jsonb_build_object('producto_id', pruebas.id('P1'), 'cantidad', 1))))),

@@ -47,6 +47,10 @@ pegada; ver `docs/SUPABASE.md`, "Actualizar de 0.15.0 a 0.16.0").
     controlada por `fondos`); permiso nuevo `fondos.aportes` (dueño; lo puede dar al admin). Asiento Dr cuenta de
     dinero / Cr 3.1.01.04 con rastro; sucursal de la cuenta que recibe; no es ganancia (el estado de resultados no
     cambia) y en el flujo de efectivo es la entrada "Aportes de capital de socios".
+  - Revisión (dentro de la 052): en un cambio, `cuenta_dinero_id` o la diferencia que sale en dinero exigen
+    `devolver_dinero`; `fondos.aportes` solo para dueño y admin; si 3.1.01.04 ya tiene asientos del cliente, la del
+    sistema va en la siguiente libre; `aportes_socios` acepta `desde`/`hasta`. La 135 además crea un aporte real en la
+    base actualizada (con la 3.1.01.04 del cliente ocupada).
   - Pruebas 136 (cambio), 137 (anular reparto y reabrir) y 138 (aportes). Se ajustó la 123 (el dueño tiene ahora 7
     permisos de fondos). La 135 sigue igual: el dueño ve exactamente lo mismo antes y después de actualizar.
 - **Paquete:** `armar_instalacion.sh` deja también `dist/actualizar_supabase_<versión>.sql` (solo lo nuevo, revisa

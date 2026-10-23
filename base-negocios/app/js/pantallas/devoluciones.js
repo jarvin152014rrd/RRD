@@ -83,6 +83,7 @@ async function formulario(vista, ctx, ventaId) {
     cambio.nodo.hidden = !esCambio;
     zonaCuenta.hidden = !(selDestino.value === 'dinero' || (esCambio && cambio.diferencia() === 'dinero'));
     if (esCambio) cambio.calcular();
+    else cambio.cancelar();   // un cálculo que llegue tarde ya no toca la pantalla
   };
   selDestino.addEventListener('change', pintarDestino);
   filas.forEach(({ x }) => x.addEventListener('change', () => { if (selDestino.value === 'cambio') cambio.calcular(); }));
@@ -156,6 +157,7 @@ async function formulario(vista, ctx, ventaId) {
       return { lineas: elegidas(), cambio: { lineas: nuevas } };
     }
     // Pide el cálculo al servidor (con una pausa corta para no pedir en cada tecla) y pinta las cifras.
+    function cancelar() { clearTimeout(est.reloj); est.vez++; est.previa = null; }
     function calcular() {
       clearTimeout(est.reloj);
       est.previa = null;
@@ -224,7 +226,7 @@ async function formulario(vista, ctx, ventaId) {
       } else {
         partes.push(mensaje('ok', 'Queda parejo: no se cobra ni se devuelve nada.', null, { dataset: { info: 'cambio-parejo' } }));
       }
-      zonaCuenta.hidden = !(Number(r.a_favor_cliente_centavos) > 0 && est.diferencia === 'dinero');
+      if (selDestino.value === 'cambio') zonaCuenta.hidden = !(Number(r.a_favor_cliente_centavos) > 0 && est.diferencia === 'dinero');
       if (r.pasa_tope) {
         partes.push(mensaje('error', `Este cambio (${dinero(r.devuelto.total_centavos)}) pasa lo que su puesto puede devolver sin aprobación.`,
           'Pídale al administrador o al dueño que lo haga, o registre la devolución como nota de crédito (queda en espera de aprobación) y venda el producto nuevo con ese saldo.',
@@ -233,7 +235,7 @@ async function formulario(vista, ctx, ventaId) {
       zonaCifras.replaceChildren(...partes);
     }
     return {
-      nodo, calcular,
+      nodo, calcular, cancelar,
       diferencia: () => (est.previa && Number(est.previa.a_favor_cliente_centavos) > 0 ? est.diferencia : ''),
       // Datos del cambio para registrar_devolucion, con el cálculo al día (si cambió algo, se vuelve a pedir).
       async listo() {
@@ -291,7 +293,8 @@ async function formulario(vista, ctx, ventaId) {
   async function listo(r, previa) {
     const pend = r.estado === 'pendiente_aprobacion';
     const esCambio = Boolean(r.venta_cambio_id);
-    const vale = r.saldo_favor && r.saldo_favor.codigo ? r.saldo_favor.codigo : null;
+    // El código del vale solo si de verdad queda saldo (en un cambio el lote puede quedar en cero).
+    const vale = Number(r.saldo_favor_centavos) > 0 && r.saldo_favor && r.saldo_favor.codigo ? r.saldo_favor.codigo : null;
     let hecho;
     if (pend) hecho = `Devolución en espera de aprobación · ${dinero(r.total_centavos)}`;
     else if (esCambio) {

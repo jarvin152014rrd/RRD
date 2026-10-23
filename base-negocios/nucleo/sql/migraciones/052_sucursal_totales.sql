@@ -942,11 +942,15 @@ DECLARE
 BEGIN
   SELECT * INTO v FROM public.venta WHERE id = p_venta_id;
   IF v.id IS NOT NULL AND jsonb_typeof(p_datos) = 'object' AND jsonb_typeof(p_datos->'cambio') = 'object'
-     AND p_datos->'cambio' ? 'diferencia' THEN
+     AND (p_datos->'cambio' ? 'diferencia' OR coalesce(p_datos->'cuenta_dinero_id', 'null'::jsonb) <> 'null'::jsonb) THEN
     PERFORM interno.exigir_escritura(v.empresa_id, 'ventas.devolver', 'ventas');
-    v_dif := interno.json_texto(p_datos->'cambio'->'diferencia', 'diferencia', 20);
-    IF v_dif IS NULL OR v_dif NOT IN ('dinero', 'saldo_favor') THEN
-      RAISE EXCEPTION 'DATO_INVALIDO: "diferencia" es "dinero" (se devuelve de una caja o banco) o "saldo_favor" (queda a favor del cliente o en un vale).';
+    IF p_datos->'cambio' ? 'diferencia' THEN
+      v_dif := interno.json_texto(p_datos->'cambio'->'diferencia', 'diferencia', 20);
+      IF v_dif IS NULL OR v_dif NOT IN ('dinero', 'saldo_favor') THEN
+        RAISE EXCEPTION 'DATO_INVALIDO: "diferencia" es "dinero" (se devuelve de una caja o banco) o "saldo_favor" (queda a favor del cliente o en un vale).';
+      END IF;
+    ELSE
+      v_dif := 'dinero';   -- revisión 0.16.0: con "cuenta_dinero_id" y sin "diferencia", la diferencia sale en dinero
     END IF;
     SELECT e.devolucion_tipos INTO v_tip FROM public.empresa e WHERE e.id = v.empresa_id;
     IF NOT (CASE v_dif WHEN 'dinero' THEN 'devolver_dinero' ELSE 'nota_credito' END) = ANY (v_tip) THEN
@@ -1014,6 +1018,11 @@ BEGIN
         v_sf := v_resto - v_cam;
       ELSE
         v_din := v_resto - v_cam;
+        -- Revisión 0.16.0: la diferencia que sale en dinero exige que el dueño permita devolver dinero.
+        IF v_din > 0 AND NOT EXISTS (SELECT 1 FROM public.empresa e WHERE e.id = d.empresa_id AND 'devolver_dinero' = ANY (e.devolucion_tipos)) THEN
+          RAISE EXCEPTION 'DEVOLUCION_NO_PERMITIDA: el producto nuevo vale menos y el dueño no permite devolver dinero; deje la diferencia (%) como saldo a favor ("diferencia": "saldo_favor") o elija un producto de igual o mayor valor.',
+            interno.lempiras(v_din);
+        END IF;
         IF v_din > 0 AND d.cuenta_dinero_id IS NULL THEN
           RAISE EXCEPTION 'DATO_INVALIDO: el producto nuevo vale menos; indique de qué cuenta se devuelve la diferencia (%) ("cuenta_dinero_id") o déjela como saldo a favor.',
             interno.lempiras(v_din);
@@ -1236,6 +1245,30 @@ END $$;
 INSERT INTO public.permiso (codigo, descripcion, es_movimiento, es_financiero) VALUES
   ('fondos.aportes', 'Registrar y anular aportes de capital de los socios', true, false);
 INSERT INTO interno.plantilla_rol_permiso (rol, permiso) VALUES ('dueno', 'fondos.aportes');
+-- fondos.aportes solo para dueño y admin (reemplaza la de 041; misma regla + este permiso).
+CREATE OR REPLACE FUNCTION interno.validar_rol_permiso() RETURNS trigger
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = '' AS $$
+DECLARE v_p public.permiso;
+BEGIN
+  IF NEW.rol = 'proveedor' THEN
+    RAISE EXCEPTION 'PROHIBIDO: el rol proveedor no recibe permisos ("%"). Para soporte, el dueño da un acceso temporal.', NEW.permiso;
+  END IF;
+  IF NEW.permiso IN ('soporte.otorgar', 'permisos.editar', 'periodos.reabrir', 'empresa.configurar',
+                     'fondos.configurar', 'fondos.distribuir', 'fondos.aprobar')
+     AND NEW.rol <> 'dueno' THEN
+    RAISE EXCEPTION 'PROHIBIDO: el permiso "%" es solo del dueño.', NEW.permiso;
+  END IF;
+  IF NEW.permiso = 'fondos.aportes' AND NEW.rol NOT IN ('dueno', 'admin') THEN
+    RAISE EXCEPTION 'PROHIBIDO: el permiso "fondos.aportes" es solo del dueño y del administrador.';
+  END IF;
+  IF NEW.rol = 'contador' THEN
+    SELECT * INTO v_p FROM public.permiso WHERE codigo = NEW.permiso;
+    IF v_p.es_movimiento OR NOT (v_p.es_financiero OR v_p.codigo LIKE '%.ver') THEN
+      RAISE EXCEPTION 'PROHIBIDO: el contador es de solo lectura; no recibe el permiso "%".', NEW.permiso;
+    END IF;
+  END IF;
+  RETURN NEW;
+END $$;
 SELECT interno.repartir_permisos(ARRAY['fondos.aportes'], 'Núcleo 0.16.0: aportes de capital de los socios');
 
 INSERT INTO interno.plantilla_cuenta (codigo, nombre, tipo, naturaleza, es_detalle) VALUES
@@ -1247,7 +1280,27 @@ DECLARE e record;
 BEGIN
   PERFORM set_config('app.motivo', 'Núcleo 0.16.0: cuenta de aportes de socios', true);
   FOR e IN SELECT id FROM public.empresa LOOP
-    PERFORM interno.asegurar_cuenta_uso(e.id, 'aportes_socios', 'Aportes de socios');
+    -- Revisión 0.16.0: si el cliente ya tiene una 3.1.01.04 con asientos (aunque se llame igual), esa es
+    -- suya: la del sistema va en la siguiente libre bajo 3.1.01 (queda en cuenta_sistema_empresa).
+    IF EXISTS (SELECT 1 FROM public.cuenta c JOIN public.asiento_linea l ON l.cuenta_id = c.id
+                WHERE c.empresa_id = e.id AND c.codigo = '3.1.01.04') THEN
+      DECLARE
+        m  public.cuenta;
+        n  integer := 4;
+        cd text := '3.1.01.04';
+      BEGIN
+        SELECT * INTO m FROM public.cuenta c WHERE c.empresa_id = e.id AND c.codigo = '3.1.01';
+        WHILE EXISTS (SELECT 1 FROM public.cuenta c WHERE c.empresa_id = e.id AND c.codigo = cd) LOOP
+          n := n + 1;
+          cd := '3.1.01.' || lpad(n::text, 2, '0');
+        END LOOP;
+        INSERT INTO public.cuenta (empresa_id, codigo, nombre, tipo, naturaleza, padre_id, es_detalle)
+        VALUES (e.id, cd, 'Aportes de socios', m.tipo, 'acreedora', m.id, true);
+        INSERT INTO interno.cuenta_sistema_empresa (empresa_id, uso, codigo) VALUES (e.id, 'aportes_socios', cd);
+      END;
+    ELSE
+      PERFORM interno.asegurar_cuenta_uso(e.id, 'aportes_socios', 'Aportes de socios');
+    END IF;
   END LOOP;
   PERFORM set_config('app.motivo', '', true);
 END $$;
@@ -1477,11 +1530,14 @@ BEGIN
   RETURN interno.aporte_respuesta(a, false);
 END $$;
 
--- aportes_socios(empresa, socio?)   fondos.ver
+-- aportes_socios(empresa, socio?, desde?, hasta?)   fondos.ver
+-- desde / hasta (opcionales, por fecha del aporte) limitan la lista y los totales; el cuadre con
+-- los libros solo se da sin filtros.
 -- Por socio: lo aportado (vigente), lo anulado y cuántos; la lista de aportes (más nuevos
 -- primero) y el cuadre con la cuenta de aportes de socios. Usuario limitado: solo aportes que
 -- entraron a cuentas de sus sucursales (o de toda la empresa) y sin el cuadre de los libros.
-CREATE FUNCTION public.aportes_socios(p_empresa_id uuid, p_socio_id uuid DEFAULT NULL) RETURNS jsonb
+CREATE FUNCTION public.aportes_socios(p_empresa_id uuid, p_socio_id uuid DEFAULT NULL,
+                                      p_desde date DEFAULT NULL, p_hasta date DEFAULT NULL) RETURNS jsonb
 LANGUAGE plpgsql STABLE SECURITY DEFINER SET search_path = '' AS $$
 DECLARE
   v_restr boolean;
@@ -1491,12 +1547,16 @@ DECLARE
   r       jsonb;
 BEGIN
   PERFORM interno.exigir_lectura(p_empresa_id, 'fondos.ver');
+  IF p_desde IS NOT NULL AND p_hasta IS NOT NULL AND p_desde > p_hasta THEN
+    RAISE EXCEPTION 'FECHA_INVALIDA: "desde" va antes que "hasta".';
+  END IF;
   v_restr := interno.usuario_restringido(p_empresa_id);
   v_cta := interno.cuenta_de(p_empresa_id, 'aportes_socios');
   WITH a AS (
     SELECT x.*, s.nombre AS socio, d.nombre AS cuenta
       FROM public.socio_aporte x JOIN public.socio s ON s.id = x.socio_id JOIN public.cuenta_dinero d ON d.id = x.cuenta_dinero_id
      WHERE x.empresa_id = p_empresa_id AND (p_socio_id IS NULL OR x.socio_id = p_socio_id)
+       AND (p_desde IS NULL OR x.fecha_contable >= p_desde) AND (p_hasta IS NULL OR x.fecha_contable <= p_hasta)
        AND (NOT v_restr OR interno.sucursal_permitida(p_empresa_id, d.sucursal_id)))
   SELECT jsonb_build_object(
     'socios', coalesce((SELECT jsonb_agg(jsonb_build_object('socio_id', s.id, 'nombre', s.nombre, 'activo', s.activo,
@@ -1514,11 +1574,12 @@ BEGIN
     'total_centavos', coalesce((SELECT sum(a.monto_centavos) FROM a WHERE a.anulada_en IS NULL), 0))
     INTO r FROM (SELECT 1) uno;
   v_tot := (r->>'total_centavos')::bigint;
-  IF NOT v_restr AND p_socio_id IS NULL THEN
+  IF NOT v_restr AND p_socio_id IS NULL AND p_desde IS NULL AND p_hasta IS NULL THEN
     v_lib := interno.saldo_libros(p_empresa_id, v_cta);
   END IF;
   RETURN r || jsonb_build_object('cuenta_capital', v_cta,
     'libros_centavos', v_lib, 'cuadra', CASE WHEN v_lib IS NOT NULL THEN v_lib = v_tot END,
+    'desde', to_char(p_desde, 'YYYY-MM-DD'), 'hasta', to_char(p_hasta, 'YYYY-MM-DD'),
     'solo_mis_sucursales', v_restr, 'generado_en', public.iso(now()),
     'nota', 'Aportes de capital: entran a patrimonio (cuenta ' || v_cta || '), no son ganancia del negocio.');
 END $$;
@@ -1550,10 +1611,10 @@ REVOKE EXECUTE ON FUNCTION
   interno.exigir_turno_aporte(public.cuenta_dinero)
 FROM PUBLIC, anon, authenticated, service_role;
 REVOKE EXECUTE ON FUNCTION
-  public.calcular_cambio_previo(uuid, jsonb), public.aportes_socios(uuid, uuid)
+  public.calcular_cambio_previo(uuid, jsonb), public.aportes_socios(uuid, uuid, date, date)
 FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION
-  public.calcular_cambio_previo(uuid, jsonb), public.aportes_socios(uuid, uuid)
+  public.calcular_cambio_previo(uuid, jsonb), public.aportes_socios(uuid, uuid, date, date)
 TO authenticated, service_role;
 REVOKE EXECUTE ON FUNCTION
   public.registrar_devolucion(uuid, jsonb, uuid), public.registrar_aporte_socio(uuid, jsonb, uuid),

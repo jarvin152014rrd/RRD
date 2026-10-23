@@ -66,12 +66,12 @@ Un socio mete dinero al negocio. **No es ganancia** (NIIF para PYMES: es patrimo
 CxC por cliente). Así no se crea una cuenta por socio (el catálogo no crece con cada socio) y el cuadre es
 simple: aportes vigentes = saldo de 3.1.01.04. La 3.1.01.02 "Aportes del dueño" de la plantilla se deja
 para los asientos manuales que ya hubiera. La 3.1.01.04 la controla el módulo `fondos` (sin asientos
-manuales, también apagado). Si el cliente ya usaba ese código, se crea en el siguiente libre
+manuales, también apagado). Si el cliente ya usaba ese código con otro nombre, o con asientos suyos aunque se llame igual, se crea en el siguiente libre
 (`interno.cuenta_de`). Un contador puede reclasificar a capital social al formalizar (escritura).
 
 - `registrar_aporte_socio(empresa, {"socio_id","monto_centavos","cuenta_dinero_id","fecha"?,"nota"?,"referencia"?,"equipo"?}, id_operacion)`:
-  permiso nuevo **`fondos.aportes`** (dueño; el dueño se lo puede dar al admin; el contador no, porque mueve
-  los libros), módulo `fondos`. Socio activo de la empresa; monto mayor que cero; la cuenta que recibe es
+  permiso nuevo **`fondos.aportes`** (dueño; el dueño se lo puede dar SOLO al admin: a otro puesto,
+  `PROHIBIDO` en `interno.validar_rol_permiso`), módulo `fondos`. Socio activo de la empresa; monto mayor que cero; la cuenta que recibe es
   caja, caja chica o banco de una sucursal del usuario (`SUCURSAL_NO_PERMITIDA`); el asiento lleva la
   sucursal de esa cuenta. Una caja de punto de venta solo en el turno propio (`TURNO_AJENO`,
   `SIN_TURNO_ABIERTO` si la empresa exige turnos); la caja chica no pasa su fondo fijo (`TOPE_CAJA_CHICA`).
@@ -79,7 +79,7 @@ manuales, también apagado). Si el cliente ya usaba ese código, se crea en el s
 - `anular_aporte_socio(aporte, motivo, id_operacion, fecha?)`: mismo permiso (también con el módulo
   apagado), motivo, fecha no anterior al aporte y mes abierto; contra-asiento a la misma cuenta. Si el
   dinero ya no está: `SALDO_INSUFICIENTE` (según la política de la cuenta). Una vez (`YA_ANULADO`).
-- `aportes_socios(empresa, socio?)` (`fondos.ver`): por socio lo aportado (vigente), lo anulado y cuántos;
+- `aportes_socios(empresa, socio?, desde?, hasta?)` (`fondos.ver`; con fechas filtra la lista y los totales, sin el cuadre de libros): por socio lo aportado (vigente), lo anulado y cuántos;
   la lista de aportes (más nuevos primero); `total_centavos`, `libros_centavos` y `cuadra`. Usuario
   limitado: solo aportes a cuentas de sus sucursales o de toda la empresa, sin el cuadre de libros.
   La tabla `socio_aporte` se lee con RLS (fondos.ver + sucursal de la cuenta).

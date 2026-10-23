@@ -82,6 +82,10 @@ BEGIN
         = 'Ana Socia=500000,Dueño A=150000,Pedro Retirado=0'
     AND jsonb_array_length(r->'aportes') = 2 AND (r->'aportes'->0->>'aporte_id')::uuid = ap2, 'lectura por socio: ' || r::text);
   PERFORM pruebas.afirmar((public.aportes_socios(e, sb)->>'total_centavos')::bigint = 500000, 'lectura de un socio');
+  r := public.aportes_socios(e, NULL, '2026-02-11', '2026-02-28');
+  PERFORM pruebas.afirmar((r->>'total_centavos')::bigint = 150000 AND jsonb_array_length(r->'aportes') = 1 AND r->>'libros_centavos' IS NULL
+    AND r->>'desde' = '2026-02-11', 'lectura por fechas: ' || r::text);
+  PERFORM pruebas.debe_fallar(format('SELECT public.aportes_socios(%L, NULL, %L, %L)', e, '2026-03-01', '2026-02-01'), 'FECHA_INVALIDA', 'fechas al revés');
 
   -- ===== Rechazos =====
   PERFORM pruebas.debe_fallar(format('SELECT public.registrar_aporte_socio(%L, %L, gen_random_uuid())', e,
@@ -111,6 +115,10 @@ BEGIN
   PERFORM pruebas.como('dueno_a');
   PERFORM pruebas.debe_fallar(format('SELECT public.cambiar_permiso_rol(%L, %L, %L, true, %L)', e, 'contador', 'fondos.aportes', 'Darle aportes'),
     'PROHIBIDO', 'el contador no recibe permisos de movimiento');
+  PERFORM pruebas.debe_fallar(format('SELECT public.cambiar_permiso_rol(%L, %L, %L, true, %L)', e, 'cajero', 'fondos.aportes', 'Darle aportes'),
+    'solo del dueño y del administrador', 'el cajero no recibe fondos.aportes');
+  PERFORM pruebas.debe_fallar(format('SELECT public.cambiar_permiso_rol(%L, %L, %L, true, %L)', e, 'vendedor', 'fondos.aportes', 'Darle aportes'),
+    'PROHIBIDO', 'el vendedor tampoco');
   PERFORM public.cambiar_permiso_rol(e, 'admin', 'fondos.aportes', true, 'El admin registra aportes de la Norte');
   SELECT id INTO s1 FROM public.sucursal WHERE empresa_id = e AND codigo = '001';
   s2 := (public.crear_sucursal(e, '002', 'Sucursal Norte')->>'sucursal_id')::uuid;

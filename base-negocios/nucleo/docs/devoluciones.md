@@ -80,8 +80,9 @@ La venta nueva debe salir de una vez (si pidiera aprobación: `APROBACION_REQUER
   Exige que el dueño permita `devolver_dinero`.
 - `"saldo_favor"`: queda a favor del cliente (o en un **VALE** con código si la venta fue a consumidor
   final). No lleva `"cuenta_dinero_id"` (`DATO_INVALIDO`). Exige que el dueño permita `nota_credito`.
-- Sin `"diferencia"`: como antes (dinero; sin cuenta: `DATO_INVALIDO`). Otro valor: `DATO_INVALIDO`;
-  tipo no permitido: `DEVOLUCION_NO_PERMITIDA`.
+- Sin `"diferencia"`: es `"dinero"` (como antes; sin cuenta: `DATO_INVALIDO`). Revisión: con `"cuenta_dinero_id"`
+  o si la diferencia sale en dinero, también exige `devolver_dinero` (si no: `DEVOLUCION_NO_PERMITIDA`). Otro valor:
+  `DATO_INVALIDO`. Un cambio que vale más o igual no saca dinero y no lo exige.
 
 Contablemente el lote de saldo a favor de la devolución es de (cambio + diferencia); la venta nueva usa
 la parte del cambio y lo demás queda en 2.1.04.02 (prueba 136: galón 45,000 por 2 tornillos 3,000 →

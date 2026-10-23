@@ -60,7 +60,8 @@ export async function mostrar(vista, ctx) {
     const conAportes = puede('fondos.ver') && tieneModulo('fondos');
     const [d, estado, aportes] = await Promise.all([rpc('donde_esta_mi_dinero', { p_empresa_id: empresaId() }),
       rpc('mi_estado_sesion', { p_empresa_id: empresaId() }),
-      conAportes ? rpcSiExiste('aportes_socios', { p_empresa_id: empresaId() }).catch(() => null) : null]);
+      // Solo los del mes (núcleo 0.16.0: desde el día 1).
+      conAportes ? rpcSiExiste('aportes_socios', { p_empresa_id: empresaId(), p_desde: hoy().slice(0, 8) + '01' }).catch(() => null) : null]);
     if (!ctx.sigueVigente()) return;
     const limitado = estado && estado.todas_las_sucursales === false;
     vista.append(tarjetaDinero(d, limitado ? (estado.sucursales || []).map((x) => x.sucursal_id) : null));

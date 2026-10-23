@@ -1,5 +1,12 @@
 # Cambios de la app
 
+## app 0.10.1 (núcleo 0.16.0; también funciona con 0.15.0) — Arreglos de la revisión
+
+- Devoluciones: el código del vale solo aparece si de verdad queda saldo; al cambiar de destino se cancela el cálculo
+  del cambio que estaba en camino (ya no esconde ni muestra la cuenta de dinero a destiempo).
+- ¿Dónde está mi dinero?: pide al servidor solo los aportes del mes (`aportes_socios` con `p_desde`).
+- Cascarón `cascaron-0.10.1`.
+
 ## app 0.10.0 (núcleo 0.16.0; también funciona con 0.15.0) — Cambio de producto, anular reparto y aportes de socios
 
 - **Devoluciones: cambio de producto.** Nuevo destino "Cambiarlo por otro producto" (si el dueño lo permite): se busca
