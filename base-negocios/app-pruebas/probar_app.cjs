@@ -521,6 +521,101 @@ const textoDe = (pagina, sel) => pagina.locator(sel).first().innerText();
     afirmar(d.total_centavos === 55000 && d.estado === 'aplicada', 'base: ' + JSON.stringify(d));
   });
 
+  // ---------------- app 0.10.0: cambio de producto (núcleo 0.16.0) ----------------
+  // Venta nueva (como dueño) de contado; el admin la cambia. Precios con ISV: cemento CEM L 275.00, varilla VAR L 185.00,
+  // tubo PVC L 115.00, pintura PIN L 520.00 (con dos promociones: la sugerida es "Galón L 60 menos").
+  const ventaParaCambio = (lineas, cliente) => {
+    sqlEscribir('dueno@demo.hn', `SELECT public.registrar_venta(demo.id('EMPRESA'), jsonb_build_object(${cliente ? `'cliente_id', demo.id('${cliente}'), ` : ''}'lineas', jsonb_build_array(${lineas}),
+      'pagos', '[{"forma":"efectivo"}]'::jsonb), gen_random_uuid())`);
+    return JSON.parse(sql('dueno@demo.hn', `(SELECT row_to_json(x) FROM (SELECT venta_id, numero_documento, total_centavos FROM public.v_venta
+      WHERE empresa_id = '${EMPRESA}' ORDER BY registrado_en DESC LIMIT 1) x)`));
+  };
+  async function abrirDevolucion(p, numero) {
+    await p.goto(URL_APP + '/#/vender/devoluciones');
+    await p.waitForSelector('#dev-numero');
+    await p.fill('#dev-numero', numero);
+    await p.click('form.formulario button[type=submit]');
+    await p.waitForSelector('#dev-motivo');
+  }
+  async function elegirNuevo(p, buscar, codigo) {
+    await p.fill('#cambio-buscar', buscar);
+    await p.click(`#zona-cambio .resultado-producto[data-producto="${id(codigo)}"]`);
+  }
+
+  await prueba('cambio de producto que vale MENOS: el servidor calcula, la diferencia queda como saldo a favor y sale el comprobante sin emojis', async () => {
+    const p = adm.p;
+    const v = ventaParaCambio(`demo.l('CEM', 1)`, 'CLI3');
+    afirmar(Number(v.total_centavos) === 27500, 'venta de 1 cemento: ' + v.total_centavos);
+    await abrirDevolucion(p, v.numero_documento);
+    await p.fill('.linea-devolver input[name=devolver] >> nth=0', '1');
+    await p.fill('#dev-motivo', 'Prefiere varilla');
+    await p.selectOption('#dev-destino', 'cambio');
+    await p.waitForSelector('#zona-cambio:not([hidden])');
+    await elegirNuevo(p, 'varilla', 'VAR');
+    await p.waitForSelector('[data-dato=cambio-a-favor]', { timeout: 15000 });
+    // A mano: devuelve 1 cemento = L 275.00; se lleva 1 varilla = L 185.00; a favor L 275.00 - L 185.00 = L 90.00.
+    afirmar((await textoDe(p, '[data-dato=cambio-devuelto]')).trim() === 'L 275.00', 'devuelto');
+    afirmar((await textoDe(p, '[data-dato=cambio-nuevo]')).trim() === 'L 185.00', 'nuevo');
+    afirmar((await textoDe(p, '[data-dato=cambio-a-favor]')).trim() === 'L 90.00', 'a favor');
+    await p.check('#cambio-diferencia input[value=saldo_favor]');
+    afirmar(await p.locator('#dev-cuenta').isHidden(), 'con saldo a favor no pide la cuenta');
+    await p.click('#dev-guardar');
+    await p.waitForSelector('[data-resultado=cambio]', { timeout: 20000 });
+    afirmar((await textoDe(p, '[data-dato=saldo-favor]')).trim() === 'L 90.00', 'saldo a favor en pantalla');
+    afirmar((await textoDe(p, '[data-dato=cambio-usado]')).trim() === 'L 185.00', 'usado para el producto nuevo');
+    await p.waitForSelector('article.comprobante');
+    const comp = await textoDe(p, 'article.comprobante');
+    afirmar(!EMOJI_RE.test(comp) && comp.includes('Varilla') && comp.includes('Saldo a favor'), 'comprobante: ' + comp);
+    afirmar(await p.locator('article.comprobante svg').count() === 0, 'el comprobante no lleva íconos');
+    const d = JSON.parse(sql('dueno@demo.hn', `(SELECT row_to_json(x) FROM (SELECT d.saldo_favor_centavos, d.cambio_centavos, d.dinero_centavos,
+      d.venta_cambio_id IS NOT NULL AS enlazada, (SELECT monto_centavos - coalesce((SELECT sum(u.monto_centavos) FROM public.saldo_favor_uso u WHERE u.saldo_favor_id = f.id AND u.anulado_en IS NULL), 0)
+        FROM public.saldo_favor f WHERE f.id = d.saldo_favor_id) AS queda, (SELECT cliente_id FROM public.saldo_favor f WHERE f.id = d.saldo_favor_id) = demo.id('CLI3') AS del_cliente
+      FROM public.devolucion d WHERE d.venta_id = '${v.venta_id}') x)`));
+    afirmar(d.saldo_favor_centavos === 9000 && d.cambio_centavos === 18500 && d.dinero_centavos === 0 && d.enlazada && d.queda === 9000 && d.del_cliente,
+      'base: ' + JSON.stringify(d));
+  });
+
+  await prueba('cambio de producto que vale MÁS: cobra la diferencia, con la promoción sugerida (una sola venta nueva aunque se corte el internet)', async () => {
+    const p = adm.p;
+    const v = ventaParaCambio(`demo.l('PVC', 1)`, null);
+    await abrirDevolucion(p, v.numero_documento);
+    await p.fill('.linea-devolver input[name=devolver] >> nth=0', '1');
+    await p.fill('#dev-motivo', 'Mejor se lleva pintura');
+    await p.selectOption('#dev-destino', 'cambio');
+    await elegirNuevo(p, 'pintura', 'PIN');
+    await p.waitForSelector('[data-dato=cambio-cobrar]', { timeout: 15000 });
+    // A mano: pintura L 520.00 - L 60.00 de la promoción sugerida = L 460.00; devuelve L 115.00: paga L 345.00.
+    afirmar((await textoDe(p, '[data-dato=cambio-nuevo]')).trim() === 'L 460.00', 'nuevo con promoción');
+    afirmar((await textoDe(p, '[data-dato=cambio-cobrar]')).trim() === 'L 345.00', 'a cobrar');
+    let llamadas = 0;
+    await p.route('**/rest/v1/rpc/registrar_devolucion', async (rr) => { llamadas++; if (llamadas === 1) await rr.abort('internetdisconnected'); else await rr.continue(); });
+    await p.click('#dev-guardar');
+    await p.waitForSelector('[data-resultado=cambio]', { timeout: 20000 });
+    await p.unroute('**/rest/v1/rpc/registrar_devolucion');
+    afirmar((await textoDe(p, '[data-dato=cambio-pagado]')).trim() === 'L 345.00', 'diferencia pagada en pantalla');
+    const pagos = sql('dueno@demo.hn', `(SELECT string_agg(g.forma || ':' || g.monto_centavos, ',' ORDER BY g.linea) FROM public.devolucion d
+      JOIN public.venta_pago g ON g.venta_id = d.venta_cambio_id WHERE d.venta_id = '${v.venta_id}')`);
+    afirmar(pagos === 'saldo_favor:11500,efectivo:34500', 'pagos de la venta nueva: ' + pagos);
+    afirmar(sql('dueno@demo.hn', `(SELECT count(*) FROM public.devolucion WHERE venta_id = '${v.venta_id}')`) === '1', 'una sola devolución');
+  });
+
+  await prueba('cambio de producto: con un núcleo 0.15.0 (sin calcular_cambio_previo) lo explica sin romper; en el celular no se sale a lo ancho', async () => {
+    const { ctx, p } = await nueva({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
+    await entrar(p, 'admin@demo.hn');
+    await p.route('**/rest/v1/rpc/calcular_cambio_previo', (rr) => rr.fulfill({ status: 404, contentType: 'application/json',
+      body: JSON.stringify({ code: 'PGRST202', message: 'Could not find the function public.calcular_cambio_previo in the schema cache' }) }));
+    const v = ventaParaCambio(`demo.l('PVC', 2)`, null);
+    await abrirDevolucion(p, v.numero_documento);
+    await p.fill('.linea-devolver input[name=devolver] >> nth=0', '1');
+    await p.selectOption('#dev-destino', 'cambio');
+    await elegirNuevo(p, 'clavo', 'CLA');
+    await p.waitForSelector('[data-info=cambio-sin-nucleo]', { timeout: 15000 });
+    afirmar(await p.evaluate(() => document.documentElement.scrollWidth) <= 390, 'devolución con cambio se sale a lo ancho');
+    await p.screenshot({ path: path.join(CAPTURAS, 'devolucion_cambio_celular.png'), fullPage: true });
+    afirmar(sql('dueno@demo.hn', `(SELECT count(*) FROM public.devolucion WHERE venta_id = '${v.venta_id}')`) === '0', 'no guardó nada');
+    await ctx.close();
+  });
+
   await prueba('depósito al banco con referencia', async () => {
     const p = adm.p;
     await p.goto(URL_APP + '/#/caja/depositos');

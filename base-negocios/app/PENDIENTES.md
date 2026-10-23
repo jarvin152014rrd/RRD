@@ -1,4 +1,4 @@
-# Pendientes de la app (0.9.1)
+# Pendientes de la app (0.10.0)
 
 - HECHO (0.8.0): comas en impuestos, topes, mínimo, traslados y conteo. Quedan los campos `type=number`
   (arqueo por billetes, devoluciones, plazos), que el navegador ya no deja escribir con coma.
@@ -16,8 +16,8 @@
   - "Gastos por categoría" agrupa por la cuenta contable (6.1…), no por la categoría de gasto de Dinero.
   - El pre-cierre usa las advertencias del núcleo; el "conteo pendiente" sale como solicitud pendiente. No hay
     una lectura del núcleo que dé la lista "listo / falta" completa ni el descuadre por asiento antes de cerrar.
-  - Reabrir un mes con reparto: primero hay que anular el reparto (`anular_distribucion`), que todavía no está en
-    pantalla (lo hace el proveedor). Tampoco hay pantalla para anular un pago de dividendos.
+  - HECHO (0.10.0): anular un reparto y un pago a un socio en Dinero > Fondos y socios; el cierre explica los pasos
+    para reabrir un mes con reparto.
   - Núcleo 0.16.0: `cerrar_mes` y `reabrir_periodo` aceptan `id_operacion` opcional; la app todavía no lo manda
     (con 0.15.0 fallaría; el reintento ya es seguro por el estado del mes).
   - Ventas por vendedor para un usuario limitado y el PDF del cierre (hoy: Imprimir y Excel).
@@ -27,9 +27,9 @@
 - Pantallas en construcción (con su estado vacío amable): apartados y cajas abiertas.
   HECHO (0.8.0): Reportes y cierre de mes. HECHO (0.7.0): Compras (compras, proveedores, pagar a proveedores) y Dinero (gastos, depósitos y traslados,
   pagos fijos, fondos y socios, cuadrar con el banco, proyección).
-- Fondos: el núcleo no tiene "aporte de capital" de un socio (solo repartos de utilidad y su pago). Faltan en
-  pantalla: guardar socios y la regla de reparto, editar o desactivar un fondo y anular un reparto o un pago a
-  socio (el núcleo sí los tiene).
+- HECHO (0.10.0, núcleo 0.16.0): aportes de capital de los socios (registrar, lista y anular) y anular un reparto o un
+  pago a socio. Faltan en pantalla: guardar socios y la regla de reparto, editar o desactivar un fondo. Falta la foto
+  del comprobante del aporte (el núcleo no la guarda todavía).
 - Usar un fondo exige el comprobante subido a Supabase Storage (`bucketComprobantes` en config.js): sin eso la
   pantalla lo explica y no deja guardar. No probado contra Storage real.
 - Cuadrar con el banco: falta crear "otro" movimiento (pide un código de cuenta) y emparejar varias filas contra
@@ -73,8 +73,10 @@
 - Fotos de productos: la burbuja de "Lo más vendido" ya está lista para la miniatura.
 - Fotos de comprobantes: se suben a Supabase Storage solo con `bucketComprobantes` en config.js (no probado
   contra Supabase real); en la demo no hay Storage y se guarda solo el nombre de la foto en la descripción.
-- Devoluciones: falta el "cambio de producto" en pantalla (el núcleo ya lo tiene) y elegir vale / saldo a favor
-  como forma de pago en Vender.
+- HECHO (0.10.0, núcleo 0.16.0): cambio de producto en Devoluciones (la diferencia se cobra, o se devuelve / queda
+  como saldo a favor o vale). Falta: elegir vale / saldo a favor como forma de pago en Vender (para usar ese saldo
+  después) y un cambio que pase el tope del cajero (hoy: lo hace quien aprueba).
+- Devoluciones: la cantidad a devolver sigue en un campo `type=number` (sin coma).
 - Productos y clientes se leen completos (hasta 1,000) y se buscan en el navegador; con catálogos más grandes
   hará falta una búsqueda en el servidor.
 - Vender no muestra existencias por bodega ni deja cambiar el precio (el núcleo no lo permite: solo descuento).

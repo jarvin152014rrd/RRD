@@ -1,5 +1,27 @@
 # Cambios de la app
 
+## app 0.10.0 (núcleo 0.16.0; también funciona con 0.15.0) — Cambio de producto, anular reparto y aportes de socios
+
+- **Devoluciones: cambio de producto.** Nuevo destino "Cambiarlo por otro producto" (si el dueño lo permite): se busca
+  el producto nuevo, el servidor calcula lo devuelto, el total nuevo y la diferencia (`calcular_cambio_previo`; la app
+  no suma dinero). Si vale más, se cobra la diferencia (efectivo, tarjeta o transferencia); si vale menos, la
+  diferencia se devuelve en dinero o queda como saldo a favor / vale, según lo que el dueño permite. Al terminar: el
+  resumen y el comprobante de la venta nueva (sin emojis ni íconos; Imprimir y WhatsApp). Un mismo `id_operacion` en
+  los reintentos. Si pasa el tope del puesto lo explica (un cambio no queda en espera).
+- **Dinero > Fondos y socios:** "Repartos y pagos a socios" con **Anular reparto** (solo el dueño, con motivo) y
+  **Anular pago** a un socio (si ya se le pagó, primero se anula ese pago: el núcleo lo exige y la pantalla lo
+  explica). **Aportes de los socios:** "Registrar aporte de un socio" (socio, monto, caja o banco, fecha, nota y
+  referencia; aclara que no es ganancia), la lista por socio y la anulación con motivo.
+- **¿Dónde está mi dinero?:** "Entró de los socios este mes" (aportes vigentes del mes).
+- **Cierre de mes:** el mes con reparto explica los 3 pasos para reabrirlo y lleva a Fondos y socios.
+- Cuadrar con el banco nombra "Aporte de socio" en los movimientos.
+- **Núcleo 0.15.0:** sin `aportes_socios` no se muestra la parte de aportes; el cambio de producto solo se ofrece con
+  núcleo 0.16.0 (y si falta la lectura, lo explica sin romper). Anular reparto y pagos sí funcionan (existen desde 0.10.0).
+- Pruebas: `probar_app.cjs` (cambio que vale menos con saldo a favor y comprobante sin emojis; que vale más con un corte
+  de internet; núcleo viejo y celular), `probar_compras_dinero.cjs` (aporte con corte de internet, en ¿Dónde está mi
+  dinero?, no cambia el estado de resultados, anular; núcleo viejo; el admin no ve las acciones del dueño),
+  `probar_reportes.cjs` (anular pago y reparto en pantalla y después reabrir el mes). Cascarón `cascaron-0.10.0`.
+
 ## app 0.9.1 (núcleo 0.16.0; también funciona con 0.15.0) — Arreglos de la revisión
 
 - Compras y Todos los gastos piden los totales solo con su permiso (`compras.ver` / `dinero.ver`); si el servidor

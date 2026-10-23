@@ -32,6 +32,10 @@ el reparto (`anular_distribucion`) y después se reabre. Lo revisa un trigger en
 cualquier camino). Por eso la advertencia `reparto_version_anterior` solo puede salir en meses que se
 reabrieron antes de 0.13.1.
 
+Pasos para reabrir un mes con reparto (app 0.10.0: Dinero > Fondos y socios > "Anular reparto"): 1) si ya se
+pagó a algún socio de ese reparto, anular esos pagos; 2) anular el reparto con su motivo; 3) reabrir el mes
+(prueba 137). Ver `fondos.md`.
+
 Al reabrir, la foto vigente queda **superada** (con quién, cuándo y el motivo); nunca se
 borra. Al volver a cerrar se crea la **versión siguiente**. `historial_cierres(empresa,
 año?, mes?)` lista las versiones; `ver_cierre(cierre)` muestra cualquiera completa.

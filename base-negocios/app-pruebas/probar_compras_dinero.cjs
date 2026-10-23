@@ -475,6 +475,64 @@ const existencia = (prod, bod = 'B1') => num('dueno@demo.hn', `(SELECT coalesce(
     afirmar(await p.locator('[data-info=sin-almacenamiento]').count() === 1 && await p.locator('#uso-guardar').isDisabled(), 'sin almacenamiento debería explicar y no dejar guardar');
   });
 
+  await prueba('aportes de socios (app 0.10.0): registrar (con un corte de internet, un solo aporte), sale en ¿Dónde está mi dinero?, no es ganancia, se anula con motivo', async () => {
+    const p = d.p;
+    const hoy = sql('dueno@demo.hn', `public.hoy_local('${EM}')`);
+    const [A, M] = hoy.split('-').map(Number);
+    const erAntes = sql('dueno@demo.hn', `(public.estado_resultados('${EM}', ${A}, ${M}) - 'generado_en')`);
+    const atl = saldoCuenta('ATL');
+    await ir(p, 'dinero/fondos', '#lista-fondos');
+    await p.click('#registrar-aporte');
+    await p.waitForSelector('#aporte-socio');
+    // Sin monto: lo dice antes de llamar al servidor.
+    await p.selectOption('#aporte-socio', id('S_CARLOS'));
+    await p.click('#aporte-guardar');
+    afirmar((await texto(p, 'form.formulario')).includes('Escriba el monto'), 'no pide el monto');
+    await p.fill('#aporte-monto', '1,500');
+    await p.selectOption('#aporte-cuenta', id('ATL'));
+    await p.fill('#aporte-nota', 'Capital para comprar cemento');
+    let llamadas = 0;
+    await p.route('**/rest/v1/rpc/registrar_aporte_socio', async (rr) => { llamadas++; if (llamadas === 1) await rr.abort('internetdisconnected'); else await rr.continue(); });
+    await p.click('#aporte-guardar');
+    const conf = await confirmarDialogo(p);
+    afirmar(conf.includes('Aporte de L 1,500.00 de Carlos Mejía · entra a Atlántida ahorro') && conf.includes('No cuenta como ganancia'), 'confirmación: ' + conf);
+    await p.waitForSelector('#lista-aportes', { timeout: 20000 });
+    await p.unroute('**/rest/v1/rpc/registrar_aporte_socio');
+    afirmar(llamadas === 2, 'llamadas: ' + llamadas);
+    const ap = JSON.parse(sql('dueno@demo.hn', `(SELECT json_agg(row_to_json(x)) FROM (SELECT id, monto_centavos FROM public.socio_aporte WHERE empresa_id = '${EM}') x)`));
+    afirmar(ap.length === 1 && ap[0].monto_centavos === 150000, 'un solo aporte de L 1,500.00: ' + JSON.stringify(ap));
+    // A mano: Atlántida sube L 1,500.00; el estado de resultados del mes no cambia (no es ganancia).
+    afirmar(saldoCuenta('ATL') === atl + 150000, 'el aporte no entró a Atlántida');
+    afirmar(sql('dueno@demo.hn', `(public.estado_resultados('${EM}', ${A}, ${M}) - 'generado_en')`) === erAntes, 'el aporte cambió el estado de resultados');
+    afirmar((await texto(p, '[data-dato=total-aportes]')).trim() === 'L 1,500.00', 'total de aportes');
+    afirmar((await texto(p, `[data-aporte="${ap[0].id}"]`)).includes('entró a Atlántida ahorro'), 'la fila no dice a dónde entró');
+    // ¿Dónde está mi dinero?: la entrada del socio este mes.
+    await ir(p, 'dinero/donde', '#aportes-mes');
+    afirmar((await texto(p, '#aportes-mes')).includes('Aporte de Carlos Mejía') && (await texto(p, '#aportes-mes')).includes('L 1,500.00'), 'no sale en ¿Dónde está mi dinero?');
+    // Anular con motivo: el dinero sale otra vez de Atlántida.
+    await ir(p, 'dinero/fondos', '#lista-aportes');
+    await p.click(`[data-aporte="${ap[0].id}"] [data-accion=anular-aporte]`);
+    await dialogoMotivo(p, 'Se registró en la cuenta equivocada');
+    await p.waitForSelector(`[data-aporte="${ap[0].id}"] [data-estado=anulado]`, { timeout: 20000 });
+    afirmar(saldoCuenta('ATL') === atl, 'al anular no salió el dinero');
+    afirmar(sql('dueno@demo.hn', `(SELECT motivo_anulacion FROM public.socio_aporte WHERE id = '${ap[0].id}')`) === 'Se registró en la cuenta equivocada', 'motivo en la base');
+    await ir(p, 'dinero/donde', '[data-dato=total_dinero]');
+    afirmar(await p.locator('#aportes-mes').count() === 0, 'el aporte anulado sigue en ¿Dónde está mi dinero?');
+  });
+
+  await prueba('aportes y repartos con un núcleo 0.15.0 (sin aportes_socios): Fondos y socios carga sin la parte de aportes', async () => {
+    const { ctx, p } = await nueva();
+    await p.route('**/rest/v1/rpc/aportes_socios', (rr) => rr.fulfill({ status: 404, contentType: 'application/json',
+      body: JSON.stringify({ code: 'PGRST202', message: 'Could not find the function public.aportes_socios in the schema cache' }) }));
+    await entrar(p, 'dueno@demo.hn');
+    await ir(p, 'dinero/fondos', '#lista-fondos');
+    afirmar(await p.locator('#registrar-aporte, #t-aportes').count() === 0, 'con núcleo viejo muestra aportes');
+    afirmar(await p.locator('#lista-repartos [data-accion=anular-reparto]').count() >= 1, 'falta "Anular reparto" (existe desde el núcleo 0.10.0)');
+    await ir(p, 'dinero/donde', '[data-dato=total_dinero]');
+    afirmar(await p.locator('#aportes-mes').count() === 0, 'con núcleo viejo muestra aportes en ¿Dónde está mi dinero?');
+    await ctx.close();
+  });
+
   await prueba('cuadrar con el banco: marcar el cheque a mano, crear comisión e intereses, cuadra y se cierra; CSV del banco', async () => {
     const p = d.p;
     await ir(p, 'dinero/banco', '#solo-banco');
@@ -548,7 +606,9 @@ const existencia = (prod, bod = 'B1') => num('dueno@demo.hn', `(SELECT coalesce(
     const { ctx, p } = await nueva();
     await entrar(p, 'admin@demo.hn');
     await ir(p, 'dinero/fondos', '#lista-fondos');
-    afirmar(await p.locator('#repartir-utilidad, #nuevo-fondo, #usar-fondo').count() === 0, 'el admin ve acciones solo del dueño');
+    afirmar(await p.locator('#repartir-utilidad, #nuevo-fondo, #usar-fondo, #registrar-aporte, [data-accion=anular-reparto], [data-accion=anular-aporte], [data-accion=anular-pago-socio]').count() === 0,
+      'el admin ve acciones solo del dueño');
+    afirmar(await p.locator('#lista-repartos').count() === 1, 'el admin no ve los repartos');
     // Limitado a su sucursal (respuesta simulada de mi_estado_sesion). Núcleo 0.16.0: el servidor la limita y se muestra.
     await p.route('**/rest/v1/rpc/mi_estado_sesion', (r) => r.fulfill({ status: 200, contentType: 'application/json',
       body: JSON.stringify({ activo: true, todas_las_sucursales: false, sucursales: [{ sucursal_id: 'S1' }] }) }));

@@ -31,6 +31,12 @@
 --      libros no asignan cada asiento a una sucursal (ver nucleo/docs/sucursales.md).
 --   6) cerrar_mes y reabrir_periodo aceptan un id_operacion opcional al final
 --      (las llamadas de antes siguen igual). Tabla periodo_operacion.
+--   8) Cambio de producto (faltante de la app): si el producto nuevo vale MENOS, la
+--      diferencia puede quedar como saldo a favor (o vale sin cliente) además de
+--      devolverse en dinero ("cambio": {"diferencia": ...}); calcular_cambio_previo.
+--   9) Aporte de capital de un socio: registrar_aporte_socio, anular_aporte_socio,
+--      aportes_socios; tabla socio_aporte; cuenta 3.1.01.04 Aportes de socios;
+--      permiso fondos.aportes. Anular un reparto ya existía (anular_distribucion, 041).
 -- =====================================================================
 
 -- ---------------------------------------------------------------------
@@ -907,4 +913,653 @@ GRANT EXECUTE ON FUNCTION
   public.registrar_cobro(uuid, jsonb, uuid), public.guardar_preferencias_alertas(uuid, jsonb),
   public.cerrar_mes(uuid, integer, integer, text, uuid), public.reabrir_periodo(uuid, integer, integer, text, uuid),
   public.condonar_saldo_cxc(uuid, jsonb, text, uuid)
+TO authenticated;
+
+-- =====================================================================
+-- 8) (0.16.0, faltantes de la app) Cambio de producto: la diferencia a favor
+--    del cliente puede quedar como SALDO A FAVOR (o vale sin cliente), no solo
+--    en dinero; y una lectura previa del cambio para la pantalla.
+-- =====================================================================
+-- registrar_devolucion (misma firma y respuesta): la de 038 pasa a interno sin cambios y la
+-- pública acepta, dentro de "cambio", "diferencia": "dinero" | "saldo_favor" (lo que pasa si el
+-- producto nuevo vale MENOS). Sin "diferencia": como antes (dinero de "cuenta_dinero_id").
+--   "dinero"      exige que el dueño permita devolver dinero (devolver_dinero).
+--   "saldo_favor" exige que permita la nota de crédito (nota_credito); sin cliente = VALE con código.
+-- Se pasa a aplicar_devolucion con app.cambio_diferencia (local a la transacción; un cambio
+-- nunca queda pendiente de aprobación, así que se aplica en la misma llamada).
+ALTER FUNCTION public.registrar_devolucion(uuid, jsonb, uuid) SET SCHEMA interno;
+ALTER FUNCTION interno.registrar_devolucion(uuid, jsonb, uuid) RENAME TO registrar_devolucion_base;
+
+CREATE FUNCTION public.registrar_devolucion(p_venta_id uuid, p_datos jsonb, p_id_operacion uuid)
+RETURNS jsonb
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = '' AS $$
+DECLARE
+  v      public.venta;
+  v_dif  text;
+  v_tip  text[];
+  v_dat  jsonb := p_datos;
+  r      jsonb;
+BEGIN
+  SELECT * INTO v FROM public.venta WHERE id = p_venta_id;
+  IF v.id IS NOT NULL AND jsonb_typeof(p_datos) = 'object' AND jsonb_typeof(p_datos->'cambio') = 'object'
+     AND p_datos->'cambio' ? 'diferencia' THEN
+    PERFORM interno.exigir_escritura(v.empresa_id, 'ventas.devolver', 'ventas');
+    v_dif := interno.json_texto(p_datos->'cambio'->'diferencia', 'diferencia', 20);
+    IF v_dif IS NULL OR v_dif NOT IN ('dinero', 'saldo_favor') THEN
+      RAISE EXCEPTION 'DATO_INVALIDO: "diferencia" es "dinero" (se devuelve de una caja o banco) o "saldo_favor" (queda a favor del cliente o en un vale).';
+    END IF;
+    SELECT e.devolucion_tipos INTO v_tip FROM public.empresa e WHERE e.id = v.empresa_id;
+    IF NOT (CASE v_dif WHEN 'dinero' THEN 'devolver_dinero' ELSE 'nota_credito' END) = ANY (v_tip) THEN
+      RAISE EXCEPTION 'DEVOLUCION_NO_PERMITIDA: el dueño no permite dejar la diferencia como "%" (permitidos: %).',
+        CASE v_dif WHEN 'dinero' THEN 'dinero devuelto' ELSE 'saldo a favor' END, array_to_string(v_tip, ', ');
+    END IF;
+    IF v_dif = 'saldo_favor' AND coalesce(p_datos->'cuenta_dinero_id', 'null'::jsonb) <> 'null'::jsonb THEN
+      RAISE EXCEPTION 'DATO_INVALIDO: si la diferencia queda como saldo a favor no sale dinero; quite "cuenta_dinero_id".';
+    END IF;
+    v_dat := jsonb_set(p_datos, '{cambio}', (p_datos->'cambio') - 'diferencia');
+  END IF;
+  PERFORM set_config('app.cambio_diferencia', coalesce(v_dif, ''), true);
+  r := interno.registrar_devolucion_base(p_venta_id, v_dat, p_id_operacion);
+  PERFORM set_config('app.cambio_diferencia', '', true);
+  RETURN r;
+END $$;
+
+CREATE OR REPLACE FUNCTION interno.aplicar_devolucion(p_devolucion_id uuid, p_fecha date, p_id_operacion uuid) RETURNS public.devolucion
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = '' AS $$
+DECLARE
+  d       public.devolucion;
+  v       public.venta;
+  l       public.devolucion_linea;
+  m       public.inventario_movimiento;
+  rf      record;
+  v_num   text;
+  v_tdoc  text;
+  v_reg   text;
+  v_fis   jsonb;
+  v_cxc   bigint;
+  v_resto bigint;
+  v_din   bigint := 0;
+  v_sf    bigint := 0;
+  v_cam   bigint := 0;
+  v_t2    bigint;
+  f       public.saldo_favor;
+  v_lin   jsonb := '[]';
+  v_asto  uuid;
+  v_torig uuid;
+BEGIN
+  SELECT * INTO d FROM public.devolucion WHERE id = p_devolucion_id FOR UPDATE;
+  SELECT * INTO v FROM public.venta WHERE id = d.venta_id FOR UPDATE;
+  IF v.estado <> 'emitida' THEN
+    RAISE EXCEPTION 'DEVOLUCION_INVALIDA: la venta % está % ; no se le aplica la devolución.', v.numero_documento, v.estado;
+  END IF;
+  PERFORM interno.exigir_periodo_abierto(d.empresa_id, p_fecha);
+
+  -- Reparto: primero rebaja lo que la venta todavía debe; lo demás al destino.
+  v_cxc := least(d.total_centavos, greatest(interno.saldo_documento_cxc(v.id), 0));
+  v_resto := d.total_centavos - v_cxc;
+  IF v_resto > 0 THEN
+    IF d.destino IS NULL THEN
+      RAISE EXCEPTION 'DATO_INVALIDO: la venta ya está pagada en parte (el cliente pagó después de pedir la devolución #%): indique a dónde va % con definir_destino_devolucion ("destino": dinero o saldo_favor) y vuelva a aprobar, o rechace la devolución.',
+        d.numero, interno.lempiras(v_resto);
+    ELSIF d.destino = 'dinero' THEN
+      v_din := v_resto;
+    ELSIF d.destino = 'saldo_favor' THEN
+      v_sf := v_resto;
+    ELSE
+      v_t2 := coalesce((d.cambio->>'total_nuevo')::bigint, 0);
+      v_cam := least(v_resto, v_t2);
+      -- 0.16.0: el producto nuevo vale menos: la diferencia va a saldo a favor (vale sin cliente)
+      -- si así se pidió ("cambio": {"diferencia": "saldo_favor"}); si no, se devuelve en dinero.
+      IF nullif(current_setting('app.cambio_diferencia', true), '') = 'saldo_favor' THEN
+        v_sf := v_resto - v_cam;
+      ELSE
+        v_din := v_resto - v_cam;
+        IF v_din > 0 AND d.cuenta_dinero_id IS NULL THEN
+          RAISE EXCEPTION 'DATO_INVALIDO: el producto nuevo vale menos; indique de qué cuenta se devuelve la diferencia (%) ("cuenta_dinero_id") o déjela como saldo a favor.',
+            interno.lempiras(v_din);
+        END IF;
+      END IF;
+    END IF;
+  END IF;
+  IF v_din > 0 THEN
+    PERFORM interno.cuenta_dinero_para_pagar(d.empresa_id, d.cuenta_dinero_id);
+    IF NOT public.modulo_esta_activo(d.empresa_id, 'dinero') THEN
+      RAISE EXCEPTION 'MODULO_INACTIVO: el módulo "dinero" no está activo; el valor devuelto solo puede quedar como saldo a favor.';
+    END IF;
+    -- 0.9.1: de una caja sale solo del turno abierto de quien aplica o de quien pidió la devolución
+    -- (nunca del turno de otro cajero; si se cerró, cambie la cuenta con definir_destino_devolucion).
+    PERFORM interno.cuenta_salida_efectivo(d.empresa_id, d.cuenta_dinero_id, ARRAY[auth.uid(), d.creado_por], false);
+    SELECT g.turno_id INTO v_torig FROM public.venta_pago g WHERE g.venta_id = v.id AND g.forma = 'efectivo' ORDER BY g.linea LIMIT 1;
+  END IF;
+
+  -- Número: nota de crédito del régimen fiscal (si la venta fue factura) o interna.
+  IF v.tipo_documento = 'factura' AND interno.regimen_fiscal(d.empresa_id) IS NOT NULL THEN
+    SELECT * INTO rf FROM interno.numero_fiscal(d.empresa_id, d.caja_id, 'nota_credito', p_fecha);
+    v_num := rf.o_numero;  v_fis := rf.o_datos || jsonb_build_object('factura_que_modifica', v.numero_documento);
+    v_reg := v_fis->>'regimen';  v_tdoc := 'nota_credito';
+  ELSE
+    SELECT 'NC-' || s.codigo || '-' || c.punto_emision || '-'
+           || lpad(interno.siguiente_numero(d.empresa_id, 'nota_credito:' || d.caja_id)::text, 8, '0')
+      INTO v_num FROM public.caja c JOIN public.sucursal s ON s.id = c.sucursal_id WHERE c.id = d.caja_id;
+    v_tdoc := 'nota_credito_interna';
+  END IF;
+
+  -- Inventario: vuelve al costo de la venta original (los servicios no).
+  FOR l IN SELECT * FROM public.devolucion_linea x WHERE x.devolucion_id = d.id AND NOT x.es_servicio ORDER BY x.linea LOOP
+    m := interno.mover_inventario(d.empresa_id, v.bodega_id, l.producto_id, 'entrada', 'devolucion_venta', p_fecha, l.cantidad,
+                                  l.costo_centavos, 'devolucion', d.id, p_id_operacion, 'Devolución ' || v_num || ' de la venta ' || v.numero_documento, false);
+    UPDATE public.devolucion_linea SET movimiento_id = m.id WHERE id = l.id;
+  END LOOP;
+
+  IF v_sf + v_cam > 0 THEN
+    f := interno.crear_saldo_favor(d.empresa_id, v.cliente_id, 'devolucion', 'devolucion', d.id, v_sf + v_cam, p_fecha);
+  END IF;
+  v_lin := jsonb_build_array(
+    jsonb_build_object('uso', 'devolucion_ventas', 'debe', d.subtotal_centavos, 'descripcion', 'Devolución ' || v_num),
+    jsonb_build_object('uso', 'cxc', 'haber', v_cxc, 'descripcion', 'Rebaja de la factura ' || v.numero_documento),
+    jsonb_build_object('uso', 'saldo_favor', 'haber', v_sf + v_cam,
+                       'descripcion', CASE WHEN v_cam > 0 AND v_sf > 0 THEN 'Cambio de producto y saldo a favor'
+                                           WHEN v_cam > 0 THEN 'Cambio de producto' ELSE 'Nota de crédito a favor del cliente' END),
+    jsonb_build_object('uso', 'inventario', 'debe', d.costo_centavos, 'descripcion', 'Mercadería devuelta (costo de la venta)'),
+    jsonb_build_object('uso', 'costo_ventas', 'haber', d.costo_centavos, 'descripcion', 'Reversión del costo'));
+  IF v_din > 0 THEN
+    v_lin := v_lin || jsonb_build_object('cuenta', interno.codigo_cuenta_dinero(d.cuenta_dinero_id), 'haber', v_din,
+                                         'descripcion', 'Devolución de dinero ' || v_num);
+  END IF;
+  v_lin := v_lin || coalesce((SELECT jsonb_agg(jsonb_build_object('cuenta', x->>'cuenta_por_pagar', 'debe', (x->>'impuesto_centavos')::bigint,
+                                 'descripcion', 'Reversión impuesto ' || (x->>'nombre')))
+                                FROM jsonb_array_elements(d.desglose_impuestos) x WHERE (x->>'impuesto_centavos')::bigint > 0), '[]');
+  v_asto := interno.asiento_sistema(d.empresa_id, interno.sucursal_activa(d.sucursal_id), p_fecha,
+    'Nota de crédito ' || v_num || ' (devolución de la venta ' || v.numero_documento || ' de ' || v.cliente_nombre || '): ' || d.motivo,
+    'devolucion', p_id_operacion, v_lin);
+
+  IF v_cxc > 0 THEN
+    INSERT INTO public.cxc_aplicacion (empresa_id, cliente_id, venta_id, origen, origen_id, monto_centavos, fecha_contable, creado_por)
+    VALUES (d.empresa_id, v.cliente_id, v.id, 'devolucion', d.id, v_cxc, p_fecha, auth.uid());
+  END IF;
+  UPDATE public.devolucion
+     SET estado = 'aplicada', fecha_contable = p_fecha, tipo_documento = v_tdoc, numero_documento = v_num, regimen_fiscal = v_reg,
+         datos_fiscales = v_fis, cxc_centavos = v_cxc, dinero_centavos = v_din, saldo_favor_centavos = v_sf, cambio_centavos = v_cam,
+         saldo_favor_id = f.id, asiento_id = v_asto, aplicada_en = now(), aplicada_por = auth.uid()
+   WHERE id = d.id
+  RETURNING * INTO d;
+  PERFORM set_config('app.turno_origen', coalesce(v_torig::text, ''), true);
+  PERFORM interno.rastrear_dinero(v_asto, 'devolucion', 'devolucion', d.id, v_num, d.equipo);
+  PERFORM set_config('app.turno_origen', '', true);
+  PERFORM interno.recalcular_comision(v.id, p_id_operacion, p_fecha);
+  RETURN d;
+END $$;
+
+-- calcular_cambio_previo(venta, {"lineas":[{"linea","cantidad"}], "cambio":{"lineas":[...],"descuento_factura"?}, "fecha"?})
+-- (ventas.devolver; además ventas.vender o ventas.cotizar para calcular la venta nueva). NO guarda nada.
+-- Con la MISMA regla de registrar_devolucion (montos por cantidad acumulada) y de la venta
+-- (calcular_venta_previa) dice, para que la pantalla no calcule dinero:
+--   valor devuelto, cuánto rebaja lo que debe la venta (CxC), cuánto queda para el cambio,
+--   total del producto nuevo, diferencia a cobrar o a favor del cliente, qué puede hacer con
+--   la diferencia a favor (dinero / saldo a favor) según lo que permite el dueño, y si pasa
+--   el tope del puesto (un cambio no queda pendiente: APROBACION_REQUERIDA al registrar).
+-- Sin costos. Venta de otra sucursal (usuario limitado): SUCURSAL_NO_PERMITIDA.
+CREATE FUNCTION public.calcular_cambio_previo(p_venta_id uuid, p_datos jsonb) RETURNS jsonb
+LANGUAGE plpgsql STABLE SECURITY DEFINER SET search_path = '' AS $$
+DECLARE
+  v       public.venta;
+  e       public.empresa;
+  vl      public.venta_linea;
+  pr      public.producto;
+  lj      jsonb;
+  i       integer := 0;
+  q       numeric;
+  q0      numeric;
+  b0 bigint; i0 bigint;
+  t_acum  bigint; b_acum bigint; v_tot bigint; v_base bigint;
+  v_total bigint := 0;
+  v_lin   jsonb := '[]';
+  v_fecha date;
+  v_nueva jsonb;
+  v_cxc   bigint;
+  v_resto bigint;
+  v_dif   bigint;
+  v_rol   text;
+  v_tope  bigint;
+  v_hay_serv boolean := false;
+  v_opc   jsonb := '[]';
+BEGIN
+  SELECT * INTO v FROM public.venta WHERE id = p_venta_id;
+  IF v.id IS NULL THEN
+    RAISE EXCEPTION 'NO_EXISTE: la venta no existe.';
+  END IF;
+  PERFORM interno.exigir_lectura(v.empresa_id, 'ventas.devolver');
+  PERFORM interno.exigir_sucursal(v.empresa_id, v.sucursal_id);
+  IF jsonb_typeof(p_datos) IS DISTINCT FROM 'object' THEN
+    RAISE EXCEPTION 'DATO_INVALIDO: faltan los datos del cambio.';
+  END IF;
+  PERFORM interno.exigir_claves(p_datos, ARRAY['lineas', 'cambio', 'fecha']);
+  IF v.estado <> 'emitida' THEN
+    RAISE EXCEPTION 'DEVOLUCION_INVALIDA: solo se devuelve de una venta emitida (esta está %).', v.estado;
+  END IF;
+  SELECT * INTO e FROM public.empresa x WHERE x.id = v.empresa_id;
+  IF NOT 'cambio_producto' = ANY (e.devolucion_tipos) THEN
+    RAISE EXCEPTION 'DEVOLUCION_NO_PERMITIDA: el dueño no permite el cambio de producto (permitidos: %).', array_to_string(e.devolucion_tipos, ', ');
+  END IF;
+  v_fecha := coalesce(interno.json_fecha(p_datos->'fecha', 'fecha'), greatest(public.hoy_local(v.empresa_id), v.fecha_contable));
+  IF jsonb_typeof(p_datos->'lineas') IS DISTINCT FROM 'array' OR jsonb_array_length(p_datos->'lineas') = 0 THEN
+    RAISE EXCEPTION 'DEVOLUCION_INVALIDA: indique qué líneas devuelve ("lineas": [{"linea": 1, "cantidad": 2}]).';
+  END IF;
+  -- Lo devuelto: misma cuenta que registrar_devolucion (cantidad acumulada; pendientes cuentan).
+  FOR lj IN SELECT * FROM jsonb_array_elements(p_datos->'lineas') LOOP
+    i := i + 1;
+    PERFORM interno.exigir_claves(lj, ARRAY['linea', 'cantidad']);
+    IF jsonb_typeof(lj->'linea') <> 'number' THEN
+      RAISE EXCEPTION 'DEVOLUCION_INVALIDA: en la línea % indique el número de línea de la venta ("linea").', i;
+    END IF;
+    SELECT * INTO vl FROM public.venta_linea x WHERE x.venta_id = v.id AND x.linea = (lj->>'linea')::integer;
+    IF vl.id IS NULL THEN
+      RAISE EXCEPTION 'DEVOLUCION_INVALIDA: la venta % no tiene la línea %.', v.numero_documento, lj->>'linea';
+    END IF;
+    IF v_lin @> jsonb_build_array(jsonb_build_object('linea_venta', vl.linea)) THEN
+      RAISE EXCEPTION 'DEVOLUCION_INVALIDA: la línea % viene dos veces.', vl.linea;
+    END IF;
+    q := interno.json_numero(lj->'cantidad', 'cantidad', i);
+    SELECT * INTO pr FROM public.producto x WHERE x.id = vl.producto_id;
+    PERFORM interno.validar_cantidad(pr, q, i);
+    SELECT coalesce(sum(x.cantidad), 0), coalesce(sum(x.base_centavos), 0), coalesce(sum(x.impuesto_centavos), 0)
+      INTO q0, b0, i0
+      FROM public.devolucion_linea x JOIN public.devolucion y ON y.id = x.devolucion_id
+     WHERE x.venta_linea_id = vl.id AND y.estado IN ('aplicada', 'pendiente_aprobacion', 'por_aplicar');
+    IF q > vl.cantidad - q0 THEN
+      RAISE EXCEPTION 'DEVOLUCION_INVALIDA: de la línea % ("%") se vendieron % y ya se devolvieron %; no se pueden devolver %.',
+        vl.linea, vl.descripcion, vl.cantidad, q0, q;
+    END IF;
+    t_acum := round(vl.total_centavos * (q0 + q) / vl.cantidad)::bigint;
+    b_acum := round(vl.base_centavos * (q0 + q) / vl.cantidad)::bigint;
+    v_tot := t_acum - (b0 + i0);
+    v_base := least(greatest(b_acum - b0, 0), greatest(v_tot, 0));
+    v_hay_serv := v_hay_serv OR vl.es_servicio;
+    v_lin := v_lin || jsonb_build_object('linea_venta', vl.linea, 'producto_id', vl.producto_id, 'descripcion', vl.descripcion,
+      'cantidad', q, 'total_centavos', greatest(v_tot, 0), 'base_centavos', v_base, 'impuesto_centavos', greatest(v_tot, 0) - v_base);
+    v_total := v_total + greatest(v_tot, 0);
+  END LOOP;
+  IF v_total <= 0 THEN
+    RAISE EXCEPTION 'DEVOLUCION_INVALIDA: el valor devuelto debe ser mayor que cero.';
+  END IF;
+  IF v_hay_serv THEN
+    RAISE EXCEPTION 'DEVOLUCION_INVALIDA: un servicio se devuelve como nota de crédito o dinero, no como cambio de producto.';
+  END IF;
+  -- La venta nueva (misma cuenta que la venta; sin costos para quien no los ve).
+  IF jsonb_typeof(p_datos->'cambio') IS DISTINCT FROM 'object' THEN
+    RAISE EXCEPTION 'DATO_INVALIDO: indique el producto nuevo ("cambio": {"lineas": [...]}).';
+  END IF;
+  PERFORM interno.exigir_claves(p_datos->'cambio', ARRAY['lineas', 'descuento_factura']);
+  v_nueva := public.calcular_venta_previa(v.empresa_id, jsonb_strip_nulls(jsonb_build_object('lineas', p_datos->'cambio'->'lineas',
+               'descuento_factura', p_datos->'cambio'->'descuento_factura', 'fecha', to_char(v_fecha, 'YYYY-MM-DD'))));
+  -- Reparto como al aplicar: primero lo que la venta todavía debe; lo demás paga el cambio.
+  v_cxc := least(v_total, greatest(interno.saldo_documento_cxc(v.id), 0));
+  v_resto := v_total - v_cxc;
+  v_dif := (v_nueva->>'total_centavos')::bigint - v_resto;
+  IF v_dif < 0 THEN
+    IF 'devolver_dinero' = ANY (e.devolucion_tipos) THEN
+      v_opc := v_opc || jsonb_build_object('diferencia', 'dinero', 'texto', 'Devolver la diferencia en dinero');
+    END IF;
+    IF 'nota_credito' = ANY (e.devolucion_tipos) THEN
+      v_opc := v_opc || jsonb_build_object('diferencia', 'saldo_favor',
+        'texto', CASE WHEN v.cliente_id IS NULL THEN 'Dejar la diferencia en un vale (código para una próxima compra)'
+                      ELSE 'Dejar la diferencia como saldo a favor del cliente' END);
+    END IF;
+  END IF;
+  v_rol := public.mi_rol(v.empresa_id);
+  IF v_rol <> 'dueno' THEN
+    SELECT x.sin_aprobacion INTO v_tope FROM interno.tope_rol(v.empresa_id, v_rol, 'devolucion') x;
+  END IF;
+  RETURN jsonb_build_object(
+    'venta_id', v.id, 'numero_documento', v.numero_documento, 'cliente_id', v.cliente_id, 'cliente_nombre', v.cliente_nombre,
+    'fecha', to_char(v_fecha, 'YYYY-MM-DD'),
+    'devuelto', jsonb_build_object('lineas', v_lin, 'total_centavos', v_total),
+    'rebaja_deuda_centavos', v_cxc, 'para_el_cambio_centavos', v_resto,
+    'nuevo', v_nueva,
+    'total_nuevo_centavos', (v_nueva->>'total_centavos')::bigint,
+    'a_cobrar_centavos', greatest(v_dif, 0), 'a_favor_cliente_centavos', greatest(-v_dif, 0),
+    'opciones_diferencia', v_opc,
+    'pasa_tope', v_rol <> 'dueno' AND v_total > coalesce(v_tope, 0),
+    'tope_centavos', v_tope,
+    'nota', 'Cálculo previo: no se guardó nada. Lo devuelto primero rebaja lo que la venta todavía debe; lo demás paga el producto nuevo.');
+END $$;
+
+-- =====================================================================
+-- 9) (0.16.0, faltantes de la app) Aporte de capital de un socio: el socio mete
+--    dinero al negocio. NIIF para PYMES: es patrimonio (no es ingreso).
+--      Dr cuenta de dinero que recibe (caja, caja chica o banco; con rastro)
+--      Cr 3.1.01.04 Aportes de socios (cuenta nueva del sistema, la controla "fondos")
+--    El detalle POR SOCIO está en socio_aporte (como la CxC por cliente): una sola
+--    cuenta contable y el auxiliar por socio. Anular = contra-asiento con motivo.
+--    Permiso nuevo fondos.aportes (dueño; el dueño lo puede dar al admin).
+-- =====================================================================
+INSERT INTO public.permiso (codigo, descripcion, es_movimiento, es_financiero) VALUES
+  ('fondos.aportes', 'Registrar y anular aportes de capital de los socios', true, false);
+INSERT INTO interno.plantilla_rol_permiso (rol, permiso) VALUES ('dueno', 'fondos.aportes');
+SELECT interno.repartir_permisos(ARRAY['fondos.aportes'], 'Núcleo 0.16.0: aportes de capital de los socios');
+
+INSERT INTO interno.plantilla_cuenta (codigo, nombre, tipo, naturaleza, es_detalle) VALUES
+  ('3.1.01.04', 'Aportes de socios', 'patrimonio', 'acreedora', true);
+INSERT INTO interno.cuenta_sistema (uso, codigo, descripcion, modulo_controla) VALUES
+  ('aportes_socios', '3.1.01.04', 'Aportes de capital de los socios (el detalle por socio está en socio_aporte)', 'fondos');
+DO $$
+DECLARE e record;
+BEGIN
+  PERFORM set_config('app.motivo', 'Núcleo 0.16.0: cuenta de aportes de socios', true);
+  FOR e IN SELECT id FROM public.empresa LOOP
+    PERFORM interno.asegurar_cuenta_uso(e.id, 'aportes_socios', 'Aportes de socios');
+  END LOOP;
+  PERFORM set_config('app.motivo', '', true);
+END $$;
+
+CREATE TABLE public.socio_aporte (
+  id                      uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  empresa_id              uuid NOT NULL REFERENCES public.empresa(id),
+  numero                  bigint NOT NULL,
+  socio_id                uuid NOT NULL,
+  monto_centavos          bigint NOT NULL CHECK (monto_centavos BETWEEN 1 AND 9007199254740991),
+  cuenta_dinero_id        uuid NOT NULL,                 -- caja, caja chica o banco que recibe
+  sucursal_id             uuid,                          -- la de esa cuenta (null = de toda la empresa)
+  fecha_contable          date NOT NULL,
+  nota                    text,
+  referencia              text,
+  equipo                  text,
+  asiento_id              uuid NOT NULL,
+  id_operacion            uuid NOT NULL,
+  creado_por              uuid,
+  registrado_en           timestamptz NOT NULL DEFAULT now(),
+  anulada_en              timestamptz,
+  anulada_por             uuid,
+  motivo_anulacion        text,
+  fecha_anulacion         date,
+  asiento_anulacion_id    uuid,
+  anulacion_id_operacion  uuid,
+  UNIQUE (empresa_id, id),
+  UNIQUE (empresa_id, numero),
+  UNIQUE (empresa_id, id_operacion),
+  UNIQUE (empresa_id, anulacion_id_operacion),
+  FOREIGN KEY (empresa_id, socio_id)             REFERENCES public.socio(empresa_id, id),
+  FOREIGN KEY (empresa_id, cuenta_dinero_id)     REFERENCES public.cuenta_dinero(empresa_id, id),
+  FOREIGN KEY (empresa_id, asiento_id)           REFERENCES public.asiento(empresa_id, id),
+  FOREIGN KEY (empresa_id, asiento_anulacion_id) REFERENCES public.asiento(empresa_id, id),
+  CHECK ((anulada_en IS NULL) = (asiento_anulacion_id IS NULL)),
+  CHECK ((anulada_en IS NULL) = (motivo_anulacion IS NULL))
+);
+CREATE INDEX socio_aporte_socio ON public.socio_aporte (socio_id, fecha_contable);
+CREATE TRIGGER proteger BEFORE UPDATE ON public.socio_aporte FOR EACH ROW EXECUTE FUNCTION interno.proteger_anulable();
+CREATE TRIGGER auditar AFTER INSERT OR UPDATE OR DELETE ON public.socio_aporte FOR EACH ROW EXECUTE FUNCTION interno.auditar();
+CREATE TRIGGER no_borrar BEFORE DELETE ON public.socio_aporte
+  FOR EACH ROW EXECUTE FUNCTION interno.prohibir_cambios('Un aporte de socio no se borra; se anula con su motivo.');
+CREATE TRIGGER no_vaciar BEFORE TRUNCATE ON public.socio_aporte
+  FOR EACH STATEMENT EXECUTE FUNCTION interno.prohibir_cambios('No se permite vaciar tablas.');
+CREATE TRIGGER revisar_sucursal BEFORE INSERT ON public.socio_aporte
+  FOR EACH ROW EXECUTE FUNCTION interno.revisar_sucursal_fila('cuenta');
+ALTER TABLE public.socio_aporte ENABLE ROW LEVEL SECURITY;
+REVOKE ALL ON public.socio_aporte FROM PUBLIC, anon, authenticated;
+GRANT SELECT ON public.socio_aporte TO authenticated, service_role;
+CREATE POLICY leer ON public.socio_aporte FOR SELECT TO authenticated
+  USING (empresa_id = ANY (ARRAY(SELECT public.empresas_con_permiso('fondos.ver'))));
+CREATE POLICY por_sucursal ON public.socio_aporte AS RESTRICTIVE FOR SELECT TO authenticated
+  USING (empresa_id = ANY (ARRAY(SELECT public.empresas_sin_restriccion()))
+         OR cuenta_dinero_id = ANY (ARRAY(SELECT public.cuentas_dinero_permitidas())));
+
+INSERT INTO interno.id_operacion_uso (tabla, columna, tipo, orden) VALUES
+  ('socio_aporte', 'id_operacion',           'aporte_socio',           92),
+  ('socio_aporte', 'anulacion_id_operacion', 'anulacion_aporte_socio', 93);
+INSERT INTO interno.modulo_apagado_permite (modulo, funcion, motivo) VALUES
+  ('fondos', 'public.anular_aporte_socio', 'Corregir un aporte de capital mal registrado.');
+
+-- Respuesta de un aporte (registrar, reintento y anular).
+CREATE FUNCTION interno.aporte_respuesta(a public.socio_aporte, p_duplicado boolean) RETURNS jsonb
+LANGUAGE sql STABLE SECURITY DEFINER SET search_path = '' AS $$
+  SELECT jsonb_build_object('aporte_id', a.id, 'numero', a.numero, 'socio_id', a.socio_id,
+    'socio', (SELECT s.nombre FROM public.socio s WHERE s.id = a.socio_id), 'monto_centavos', a.monto_centavos,
+    'cuenta_dinero_id', a.cuenta_dinero_id, 'cuenta', (SELECT d.nombre FROM public.cuenta_dinero d WHERE d.id = a.cuenta_dinero_id),
+    'fecha', to_char(a.fecha_contable, 'YYYY-MM-DD'), 'nota', a.nota, 'referencia', a.referencia,
+    'cuenta_capital', interno.cuenta_de(a.empresa_id, 'aportes_socios'), 'asiento_id', a.asiento_id,
+    'anulada', a.anulada_en IS NOT NULL, 'asiento_anulacion_id', a.asiento_anulacion_id,
+    'aportado_socio_centavos', (SELECT coalesce(sum(x.monto_centavos), 0) FROM public.socio_aporte x
+                                 WHERE x.socio_id = a.socio_id AND x.anulada_en IS NULL),
+    'duplicado', p_duplicado)
+$$;
+
+-- Una caja de punto de venta (con turnos) recibe el aporte solo en el turno abierto de quien lo
+-- registra; nunca en el turno de otro cajero (su arqueo no cuadraría). Sin turno: solo si la
+-- empresa no exige turnos. Caja fuerte, caja chica y bancos: sin turno.
+CREATE FUNCTION interno.exigir_turno_aporte(d public.cuenta_dinero) RETURNS void
+LANGUAGE plpgsql STABLE SECURITY DEFINER SET search_path = '' AS $$
+DECLARE t public.turno_caja;
+BEGIN
+  IF d.tipo <> 'efectivo_caja' OR d.caja_id IS NULL THEN
+    RETURN;
+  END IF;
+  SELECT * INTO t FROM public.turno_caja x WHERE x.cuenta_dinero_id = d.id AND x.estado = 'abierto';
+  IF t.id IS NOT NULL AND t.cajero_id = auth.uid() THEN
+    RETURN;
+  END IF;
+  IF t.id IS NOT NULL THEN
+    RAISE EXCEPTION 'TURNO_AJENO: "%" está en el turno #% de %; el aporte no entra al turno de otro cajero (su arqueo no cuadraría). Elija la caja fuerte, un banco o la caja de su propio turno.',
+      d.nombre, t.numero, coalesce(public.nombre_usuario(d.empresa_id, t.cajero_id), 'otro cajero');
+  END IF;
+  IF coalesce((SELECT e.turnos_obligatorios FROM public.empresa e WHERE e.id = d.empresa_id), true) THEN
+    RAISE EXCEPTION 'SIN_TURNO_ABIERTO: la caja "%" no tiene un turno abierto suyo; abra su turno o elija la caja fuerte o un banco.', d.nombre;
+  END IF;
+END $$;
+
+-- registrar_aporte_socio(empresa, {"socio_id","monto_centavos","cuenta_dinero_id","fecha"?,"nota"?,"referencia"?,"equipo"?}, id_operacion)
+--   fondos.aportes (módulo fondos). La cuenta que recibe debe ser de una sucursal del usuario.
+CREATE FUNCTION public.registrar_aporte_socio(p_empresa_id uuid, p_datos jsonb, p_id_operacion uuid) RETURNS jsonb
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = '' AS $$
+DECLARE
+  a       public.socio_aporte;
+  s       public.socio;
+  d       public.cuenta_dinero;
+  v_monto bigint;
+  v_fecha date;
+  v_nota  text;
+  v_ref   text;
+  v_asto  uuid;
+BEGIN
+  PERFORM interno.exigir_escritura(p_empresa_id, 'fondos.aportes', 'fondos');
+  IF p_id_operacion IS NULL THEN
+    RAISE EXCEPTION 'FALTA_ID_OPERACION: cada operación necesita un id_operacion (uuid) único.';
+  END IF;
+  PERFORM interno.exigir_tipo_operacion(p_empresa_id, p_id_operacion, 'aporte_socio');
+  SELECT * INTO a FROM public.socio_aporte x WHERE x.empresa_id = p_empresa_id AND x.id_operacion = p_id_operacion;
+  IF a.id IS NOT NULL THEN
+    RETURN interno.aporte_respuesta(a, true);
+  END IF;
+  IF jsonb_typeof(p_datos) IS DISTINCT FROM 'object' THEN
+    RAISE EXCEPTION 'DATO_INVALIDO: faltan los datos del aporte.';
+  END IF;
+  PERFORM interno.exigir_claves(p_datos, ARRAY['socio_id', 'monto_centavos', 'cuenta_dinero_id', 'fecha', 'nota', 'referencia', 'equipo']);
+  SELECT * INTO s FROM public.socio x WHERE x.id = interno.json_uuid(p_datos->'socio_id', 'socio_id') AND x.empresa_id = p_empresa_id;
+  IF s.id IS NULL THEN
+    RAISE EXCEPTION 'DATO_INVALIDO: indique el socio ("socio_id") de esta empresa.';
+  END IF;
+  IF NOT s.activo THEN
+    RAISE EXCEPTION 'DATO_INVALIDO: el socio "%" está desactivado; actívelo antes de registrar su aporte.', s.nombre;
+  END IF;
+  v_monto := interno.json_centavos(p_datos->'monto_centavos', 'monto_centavos');
+  IF v_monto = 0 THEN
+    RAISE EXCEPTION 'DATO_INVALIDO: el aporte debe ser mayor que cero.';
+  END IF;
+  d := interno.cuenta_dinero_de(p_empresa_id, interno.json_uuid(p_datos->'cuenta_dinero_id', 'cuenta_dinero_id'));
+  IF d.tipo NOT IN ('efectivo_caja', 'banco', 'caja_chica') THEN
+    RAISE EXCEPTION 'CUENTA_DINERO_INVALIDA: el aporte entra a una caja, la caja chica o un banco (no a "%").', d.nombre;
+  END IF;
+  PERFORM interno.exigir_sucursal(p_empresa_id, d.sucursal_id);
+  PERFORM interno.exigir_turno_aporte(d);
+  v_fecha := coalesce(interno.json_fecha(p_datos->'fecha', 'fecha'), public.hoy_local(p_empresa_id));
+  PERFORM interno.exigir_fecha_contable(p_empresa_id, v_fecha);
+  v_nota := interno.json_texto(p_datos->'nota', 'nota', 300);
+  v_ref := interno.json_texto(p_datos->'referencia', 'referencia', 100);
+
+  PERFORM interno.reservar_operacion(p_empresa_id, p_id_operacion, 'aporte_socio');
+  SELECT * INTO a FROM public.socio_aporte x WHERE x.empresa_id = p_empresa_id AND x.id_operacion = p_id_operacion;
+  IF a.id IS NOT NULL THEN
+    RETURN interno.aporte_respuesta(a, true);
+  END IF;
+  PERFORM interno.exigir_periodo_abierto(p_empresa_id, v_fecha);
+  a.id := gen_random_uuid();
+  a.numero := interno.siguiente_numero(p_empresa_id, 'aporte_socio');
+  v_asto := interno.asiento_sistema(p_empresa_id, interno.sucursal_activa(d.sucursal_id), v_fecha,
+    'Aporte de capital #' || a.numero || ' de ' || s.nombre || coalesce(': ' || v_nota, ''), 'aporte_socio', p_id_operacion,
+    jsonb_build_array(jsonb_build_object('cuenta', interno.codigo_cuenta_dinero(d.id), 'debe', v_monto, 'descripcion', 'Aporte de ' || s.nombre),
+                      jsonb_build_object('uso', 'aportes_socios', 'haber', v_monto, 'descripcion', 'Aporte de capital de ' || s.nombre)));
+  INSERT INTO public.socio_aporte (id, empresa_id, numero, socio_id, monto_centavos, cuenta_dinero_id, sucursal_id, fecha_contable, nota,
+                                   referencia, equipo, asiento_id, id_operacion, creado_por)
+  VALUES (a.id, p_empresa_id, a.numero, s.id, v_monto, d.id, d.sucursal_id, v_fecha, v_nota, v_ref, interno.equipo(p_datos),
+          v_asto, p_id_operacion, auth.uid())
+  RETURNING * INTO a;
+  PERFORM interno.rastrear_dinero(v_asto, 'aporte_socio', 'socio_aporte', a.id, coalesce(v_ref, 'Aporte #' || a.numero), a.equipo);
+  RETURN interno.aporte_respuesta(a, false);
+END $$;
+
+-- anular_aporte_socio(aporte, motivo, id_operacion, fecha?)   fondos.aportes (también con el módulo apagado)
+-- Contra-asiento Dr aportes de socios / Cr la MISMA cuenta de dinero (rastro): si el dinero ya
+-- no está en esa cuenta, SALDO_INSUFICIENTE (según su política de saldo negativo).
+CREATE FUNCTION public.anular_aporte_socio(p_aporte_id uuid, p_motivo text, p_id_operacion uuid, p_fecha date DEFAULT NULL)
+RETURNS jsonb
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = '' AS $$
+DECLARE
+  a       public.socio_aporte;
+  d       public.cuenta_dinero;
+  v_fecha date;
+  v_asto  uuid;
+BEGIN
+  SELECT * INTO a FROM public.socio_aporte WHERE id = p_aporte_id;
+  IF a.id IS NULL THEN
+    RAISE EXCEPTION 'NO_EXISTE: el aporte no existe.';
+  END IF;
+  PERFORM interno.exigir_escritura(a.empresa_id, 'fondos.aportes', 'fondos');
+  IF p_id_operacion IS NULL THEN
+    RAISE EXCEPTION 'FALTA_ID_OPERACION: cada operación necesita un id_operacion (uuid) único.';
+  END IF;
+  PERFORM interno.exigir_tipo_operacion(a.empresa_id, p_id_operacion, 'anulacion_aporte_socio');
+  IF a.anulacion_id_operacion = p_id_operacion THEN
+    RETURN interno.aporte_respuesta(a, true);
+  END IF;
+  IF length(trim(coalesce(p_motivo, ''))) < 5 THEN
+    RAISE EXCEPTION 'FALTA_MOTIVO: escriba el motivo de la anulación (mínimo 5 letras).';
+  END IF;
+  d := interno.cuenta_dinero_de(a.empresa_id, a.cuenta_dinero_id, false);
+  PERFORM interno.exigir_sucursal(a.empresa_id, d.sucursal_id);
+  v_fecha := coalesce(p_fecha, greatest(public.hoy_local(a.empresa_id), a.fecha_contable));
+  PERFORM interno.exigir_fecha_contable(a.empresa_id, v_fecha);
+  IF v_fecha < a.fecha_contable THEN
+    RAISE EXCEPTION 'FECHA_INVALIDA: la anulación no puede tener fecha anterior al aporte (%).', to_char(a.fecha_contable, 'DD/MM/YYYY');
+  END IF;
+  PERFORM interno.reservar_operacion(a.empresa_id, p_id_operacion, 'anulacion_aporte_socio');
+  SELECT * INTO a FROM public.socio_aporte WHERE id = p_aporte_id FOR UPDATE;
+  IF a.anulacion_id_operacion = p_id_operacion THEN
+    RETURN interno.aporte_respuesta(a, true);
+  END IF;
+  IF a.anulada_en IS NOT NULL THEN
+    RAISE EXCEPTION 'YA_ANULADO: el aporte #% ya fue anulado.', a.numero;
+  END IF;
+  PERFORM interno.exigir_periodo_abierto(a.empresa_id, v_fecha);
+  -- El dinero sale de la misma cuenta: de una caja con turnos, solo del turno propio.
+  PERFORM interno.cuenta_salida_efectivo(a.empresa_id, d.id, ARRAY[auth.uid()], false);
+  v_asto := interno.asiento_sistema(a.empresa_id, interno.sucursal_activa(a.sucursal_id), v_fecha,
+    'ANULACIÓN aporte de capital #' || a.numero || ': ' || trim(p_motivo), 'anulacion_aporte_socio', p_id_operacion,
+    jsonb_build_array(jsonb_build_object('uso', 'aportes_socios', 'debe', a.monto_centavos, 'descripcion', 'Aporte anulado'),
+                      jsonb_build_object('cuenta', interno.codigo_cuenta_dinero(d.id), 'haber', a.monto_centavos,
+                                         'descripcion', 'Sale el dinero del aporte anulado')),
+    a.asiento_id, trim(p_motivo));
+  PERFORM set_config('app.motivo', trim(p_motivo), true);
+  UPDATE public.socio_aporte SET anulada_en = now(), anulada_por = auth.uid(), motivo_anulacion = trim(p_motivo), fecha_anulacion = v_fecha,
+         asiento_anulacion_id = v_asto, anulacion_id_operacion = p_id_operacion
+   WHERE id = a.id
+  RETURNING * INTO a;
+  PERFORM set_config('app.motivo', '', true);
+  PERFORM interno.rastrear_dinero(v_asto, 'anulacion_aporte_socio', 'socio_aporte', a.id, trim(p_motivo), NULL);
+  RETURN interno.aporte_respuesta(a, false);
+END $$;
+
+-- aportes_socios(empresa, socio?)   fondos.ver
+-- Por socio: lo aportado (vigente), lo anulado y cuántos; la lista de aportes (más nuevos
+-- primero) y el cuadre con la cuenta de aportes de socios. Usuario limitado: solo aportes que
+-- entraron a cuentas de sus sucursales (o de toda la empresa) y sin el cuadre de los libros.
+CREATE FUNCTION public.aportes_socios(p_empresa_id uuid, p_socio_id uuid DEFAULT NULL) RETURNS jsonb
+LANGUAGE plpgsql STABLE SECURITY DEFINER SET search_path = '' AS $$
+DECLARE
+  v_restr boolean;
+  v_cta   text;
+  v_lib   bigint;
+  v_tot   bigint;
+  r       jsonb;
+BEGIN
+  PERFORM interno.exigir_lectura(p_empresa_id, 'fondos.ver');
+  v_restr := interno.usuario_restringido(p_empresa_id);
+  v_cta := interno.cuenta_de(p_empresa_id, 'aportes_socios');
+  WITH a AS (
+    SELECT x.*, s.nombre AS socio, d.nombre AS cuenta
+      FROM public.socio_aporte x JOIN public.socio s ON s.id = x.socio_id JOIN public.cuenta_dinero d ON d.id = x.cuenta_dinero_id
+     WHERE x.empresa_id = p_empresa_id AND (p_socio_id IS NULL OR x.socio_id = p_socio_id)
+       AND (NOT v_restr OR interno.sucursal_permitida(p_empresa_id, d.sucursal_id)))
+  SELECT jsonb_build_object(
+    'socios', coalesce((SELECT jsonb_agg(jsonb_build_object('socio_id', s.id, 'nombre', s.nombre, 'activo', s.activo,
+        'aportado_centavos', coalesce((SELECT sum(a.monto_centavos) FROM a WHERE a.socio_id = s.id AND a.anulada_en IS NULL), 0),
+        'anulado_centavos', coalesce((SELECT sum(a.monto_centavos) FROM a WHERE a.socio_id = s.id AND a.anulada_en IS NOT NULL), 0),
+        'aportes', (SELECT count(*) FROM a WHERE a.socio_id = s.id AND a.anulada_en IS NULL)) ORDER BY s.nombre)
+      FROM public.socio s WHERE s.empresa_id = p_empresa_id AND (p_socio_id IS NULL OR s.id = p_socio_id)), '[]'),
+    'aportes', coalesce((SELECT jsonb_agg(jsonb_build_object('aporte_id', a.id, 'numero', a.numero, 'socio_id', a.socio_id, 'socio', a.socio,
+        'monto_centavos', a.monto_centavos, 'cuenta_dinero_id', a.cuenta_dinero_id, 'cuenta', a.cuenta,
+        'fecha', to_char(a.fecha_contable, 'YYYY-MM-DD'), 'nota', a.nota, 'referencia', a.referencia,
+        'anulada', a.anulada_en IS NOT NULL, 'motivo_anulacion', a.motivo_anulacion,
+        'fecha_anulacion', to_char(a.fecha_anulacion, 'YYYY-MM-DD'),
+        'registrado_por', public.nombre_usuario(a.empresa_id, a.creado_por), 'registrado_en', public.iso(a.registrado_en))
+        ORDER BY a.fecha_contable DESC, a.numero DESC) FROM a), '[]'),
+    'total_centavos', coalesce((SELECT sum(a.monto_centavos) FROM a WHERE a.anulada_en IS NULL), 0))
+    INTO r FROM (SELECT 1) uno;
+  v_tot := (r->>'total_centavos')::bigint;
+  IF NOT v_restr AND p_socio_id IS NULL THEN
+    v_lib := interno.saldo_libros(p_empresa_id, v_cta);
+  END IF;
+  RETURN r || jsonb_build_object('cuenta_capital', v_cta,
+    'libros_centavos', v_lib, 'cuadra', CASE WHEN v_lib IS NOT NULL THEN v_lib = v_tot END,
+    'solo_mis_sucursales', v_restr, 'generado_en', public.iso(now()),
+    'nota', 'Aportes de capital: entran a patrimonio (cuenta ' || v_cta || '), no son ganancia del negocio.');
+END $$;
+
+-- Nombre en el flujo de efectivo (reemplaza la de 040; mismos nombres + aportes de socios).
+CREATE OR REPLACE FUNCTION interno.nombre_operacion(p_operacion text) RETURNS text
+LANGUAGE sql IMMUTABLE SET search_path = '' AS $$
+  SELECT CASE p_operacion
+    WHEN 'dinero_saldo_inicial' THEN 'Saldos iniciales'
+    WHEN 'venta' THEN 'Ventas de contado'
+    WHEN 'cobro' THEN 'Cobros a clientes'
+    WHEN 'gasto' THEN 'Gastos'
+    WHEN 'compra' THEN 'Compras de contado'
+    WHEN 'pago_proveedor' THEN 'Pagos a proveedores'
+    WHEN 'pago_comisiones' THEN 'Pago de comisiones'
+    WHEN 'pago_dividendos' THEN 'Pago de dividendos a socios'
+    WHEN 'uso_fondo' THEN 'Uso de fondos'
+    WHEN 'devolucion' THEN 'Devoluciones a clientes'
+    WHEN 'aporte_socio' THEN 'Aportes de capital de socios'
+    WHEN 'anulacion_aporte_socio' THEN 'Aportes de socios anulados'
+    ELSE upper(left(replace(p_operacion, '_', ' '), 1)) || substr(replace(p_operacion, '_', ' '), 2) END
+$$;
+
+-- ---------------------------------------------------------------------
+-- 10) Seguridad de 8 y 9
+-- ---------------------------------------------------------------------
+REVOKE EXECUTE ON FUNCTION
+  interno.registrar_devolucion_base(uuid, jsonb, uuid), interno.aporte_respuesta(public.socio_aporte, boolean),
+  interno.exigir_turno_aporte(public.cuenta_dinero)
+FROM PUBLIC, anon, authenticated, service_role;
+REVOKE EXECUTE ON FUNCTION
+  public.calcular_cambio_previo(uuid, jsonb), public.aportes_socios(uuid, uuid)
+FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION
+  public.calcular_cambio_previo(uuid, jsonb), public.aportes_socios(uuid, uuid)
+TO authenticated, service_role;
+REVOKE EXECUTE ON FUNCTION
+  public.registrar_devolucion(uuid, jsonb, uuid), public.registrar_aporte_socio(uuid, jsonb, uuid),
+  public.anular_aporte_socio(uuid, text, uuid, date)
+FROM PUBLIC, anon, service_role;
+GRANT EXECUTE ON FUNCTION
+  public.registrar_devolucion(uuid, jsonb, uuid), public.registrar_aporte_socio(uuid, jsonb, uuid),
+  public.anular_aporte_socio(uuid, text, uuid, date)
 TO authenticated;

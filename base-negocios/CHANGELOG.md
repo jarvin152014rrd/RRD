@@ -6,7 +6,7 @@ Números: MAYOR.MENOR.ARREGLO (ver `docs/CONVENCIONES.md`).
 
 ## 0.16.0 (2026-10-22) — Cada sucursal recibe solo lo suyo; totales en el servidor
 
-Migración nueva 052 (las 001-051 no se tocaron). 135 pruebas (nuevas 133, 134 y 135). Todas pasan también con
+Migración nueva 052 (las 001-051 no se tocaron). 138 pruebas (nuevas 133 a 138). Todas pasan también con
 `probar.sh --paquete`. Para quien ya tiene 0.15.0 en Supabase: `dist/actualizar_supabase_0.16.0.sql` (una sola
 pegada; ver `docs/SUPABASE.md`, "Actualizar de 0.15.0 a 0.16.0").
 
@@ -33,6 +33,22 @@ pegada; ver `docs/SUPABASE.md`, "Actualizar de 0.15.0 a 0.16.0").
 - **NO se hizo (decisión técnica):** estado de resultados / balance / `saldo_cuentas` por sucursal: los libros no
   asignan cada asiento a una sucursal y el resultado saldría incompleto o descuadrado. Para comparar sucursales:
   `reporte_sucursales`.
+- **Faltantes de la app (decisión del dueño: dentro de la MISMA 052, para pegar un solo archivo):**
+  - **Cambio de producto con diferencia a favor** (`devoluciones.md`): si el producto nuevo vale menos, la diferencia
+    puede quedar como saldo a favor del cliente o en un VALE (consumidor final), además de devolverse en dinero
+    (`"cambio": {"diferencia": "dinero" | "saldo_favor"}`, cada una solo si el dueño la permite). Lectura nueva
+    `calcular_cambio_previo` (no guarda; lo devuelto, lo que rebaja la deuda, el total nuevo, la diferencia y las
+    opciones; sin costos). `registrar_devolucion` de 038 pasó a `interno.registrar_devolucion_base` sin cambios.
+  - **Anular un reparto:** el núcleo ya lo tenía (`anular_distribucion`, 0.10.0; `MES_CON_REPARTO` ya deja reabrir
+    después). Sin cambios en el núcleo; prueba nueva 137 con el camino completo (pagos a socios primero, reabrir,
+    cerrar versión 2 y repartir otra vez).
+  - **Aporte de capital de un socio** (`fondos.md`): `registrar_aporte_socio`, `anular_aporte_socio`,
+    `aportes_socios`; tabla `socio_aporte`; cuenta nueva del sistema 3.1.01.04 "Aportes de socios" (patrimonio,
+    controlada por `fondos`); permiso nuevo `fondos.aportes` (dueño; lo puede dar al admin). Asiento Dr cuenta de
+    dinero / Cr 3.1.01.04 con rastro; sucursal de la cuenta que recibe; no es ganancia (el estado de resultados no
+    cambia) y en el flujo de efectivo es la entrada "Aportes de capital de socios".
+  - Pruebas 136 (cambio), 137 (anular reparto y reabrir) y 138 (aportes). Se ajustó la 123 (el dueño tiene ahora 7
+    permisos de fondos). La 135 sigue igual: el dueño ve exactamente lo mismo antes y después de actualizar.
 - **Paquete:** `armar_instalacion.sh` deja también `dist/actualizar_supabase_<versión>.sql` (solo lo nuevo, revisa
   que esté la migración anterior, todo-o-nada, termina con "ACTUALIZADO A <versión>"; se parte si pasa de 200 KB).
   La instalación nueva queda en 14 partes y `verificar_instalacion.sql` espera 52 migraciones.

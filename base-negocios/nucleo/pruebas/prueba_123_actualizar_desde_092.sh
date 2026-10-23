@@ -29,7 +29,8 @@ PGDATABASE="$VIEJA" SIN_PREGUNTAR=1 SIN_RESPALDO=1 bash "$RAIZ/herramientas/migr
 [ "$(q "SELECT count(*) FROM public.cuenta WHERE empresa_id = $E AND codigo = '2.1.01.03' AND nombre = 'Dividendos por pagar a socios'")" = "1" ] || falla "cuenta de dividendos"
 [ "$(q "SELECT string_agg(rol || ':' || permiso, ',' ORDER BY rol, permiso) FROM public.rol_permiso WHERE empresa_id = $E AND permiso LIKE 'fondos.%' AND rol <> 'dueno'")" \
   = "admin:fondos.ver,contador:fondos.ver" ] || falla "permisos de fondos"
-[ "$(q "SELECT count(*) FROM public.rol_permiso WHERE empresa_id = $E AND permiso LIKE 'fondos.%' AND rol = 'dueno'")" = "6" ] || falla "permisos del dueño"
+# 0.16.0: el dueño recibe también fondos.aportes (aportes de capital de los socios): 6 + 1.
+[ "$(q "SELECT count(*) FROM public.rol_permiso WHERE empresa_id = $E AND permiso LIKE 'fondos.%' AND rol = 'dueno'")" = "7" ] || falla "permisos del dueño"
 [ "$(q "SELECT count(*) FROM public.modulo_activo WHERE modulo = 'fondos'")" = "0" ] || falla "fondos apagado"
 
 # 3) Cerrar enero (cifras de prueba_120) y repartir con fondos encendido.

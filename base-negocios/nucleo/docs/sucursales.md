@@ -94,6 +94,8 @@ antes y después de actualizar).
 | `saldo_favor_uso` (RLS) | los usos de los lotes que ve |
 | `condonar_saldo_cxc` | solo ventas de sus sucursales; un saldo inicial: `SUCURSAL_NO_PERMITIDA` |
 | `donde_esta_mi_dinero` → depósitos en tránsito | el nombre del banco destino va en `null` si es de otra sucursal |
+| `socio_aporte` (RLS), `aportes_socios`, `registrar_aporte_socio`, `anular_aporte_socio` | solo aportes a cuentas de sus sucursales o de toda la empresa; registrar o anular en otra: `SUCURSAL_NO_PERMITIDA` |
+| `calcular_cambio_previo` | una venta de otra sucursal: `SUCURSAL_NO_PERMITIDA` |
 
 Las reglas nuevas empiezan con `empresa_id = ANY (ARRAY(SELECT public.empresas_sin_restriccion())) OR ...`: quien
 ve toda la empresa (dueño, contador, proveedor con soporte, admin sin restricción) no pasa por la subconsulta y ve

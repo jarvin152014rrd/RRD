@@ -493,12 +493,49 @@ async function leerExcel(p, descarga) {
 
   await prueba('cierre: reabrir con motivo, revisión antes de cerrar (listo / falta con su botón) y cerrar con un corte de internet (un solo cierre)', async () => {
     const p = d.p;
-    // El dueño anula el reparto (lo hace el proveedor; aquí por SQL) para poder reabrir.
-    // Primero se anulan los pagos de dividendos de ese reparto (si alguna prueba anterior pagó a un socio).
-    sql('dueno@demo.hn', `(SELECT count(public.anular_pago_dividendos(id, 'Prueba: reabrir el mes', gen_random_uuid())) FROM public.dividendo_pago WHERE empresa_id = '${EM}' AND anulada_en IS NULL)`, true);
+    // app 0.10.0: el dueño anula el reparto en Dinero > Fondos y socios para poder reabrir (antes: por SQL).
     const dist = sql('dueno@demo.hn', `(SELECT id FROM public.distribucion WHERE empresa_id = '${EM}' AND anio = ${AA} AND mes = ${MA} AND anulada_en IS NULL)`);
-    sql('dueno@demo.hn', `public.anular_distribucion('${dist}', 'Prueba: reabrir el mes', gen_random_uuid())`, true);
     await ir(p, 'reportes/cierre', `#cierre-meses [data-mes="${mesPasado}"]`);
+    await p.click(`#cierre-meses [data-mes="${mesPasado}"] button`);
+    await p.waitForSelector('#cierre-ir-anular-reparto');
+    afirmar((await texto(p, '[data-info=reabrir-con-reparto]')).includes('anule el reparto'), 'no explica cómo reabrir con reparto');
+    await p.click('#cierre-ir-anular-reparto');
+    await p.waitForSelector(`[data-reparto="${dist}"] [data-accion=anular-reparto]`, { timeout: 20000 });
+    const pagos = num('dueno@demo.hn', `(SELECT count(*) FROM public.dividendo_pago WHERE empresa_id = '${EM}' AND anulada_en IS NULL)`);
+    if (pagos) {
+      // Con un pago a un socio (la prueba de Dinero le pagó a Carlos): no se anula y lo explica; primero se anula el pago.
+      await p.click(`[data-reparto="${dist}"] [data-accion=anular-reparto]`);
+      await p.waitForSelector('dialog.dialogo[open] textarea');
+      await p.fill('dialog.dialogo[open] textarea', 'Prueba: reabrir el mes');
+      await p.click('dialog.dialogo[open] button[type=submit]');
+      await p.waitForSelector('dialog.dialogo[open] .mensaje-error', { timeout: 15000 });
+      afirmar((await texto(p, 'dialog.dialogo[open] .mensaje-error')).includes('Anule primero los pagos'), 'no explica que primero se anulan los pagos');
+      await p.click('dialog.dialogo[open] button[type=button]');
+      await p.waitForSelector('dialog.dialogo', { state: 'detached' });
+      for (let i = 0; i < pagos; i++) {
+        await p.click('#lista-pagos-socios [data-accion=anular-pago-socio] >> nth=0');
+        await p.waitForSelector('dialog.dialogo[open] textarea');
+        await p.fill('dialog.dialogo[open] textarea', 'Prueba: reabrir el mes');
+        await p.click('dialog.dialogo[open] button[type=submit]');
+        await p.waitForSelector('dialog.dialogo', { state: 'detached', timeout: 15000 });
+        await p.waitForSelector('#lista-repartos', { timeout: 15000 });
+      }
+      afirmar(num('dueno@demo.hn', `(SELECT count(*) FROM public.dividendo_pago WHERE empresa_id = '${EM}' AND anulada_en IS NULL)`) === 0, 'quedaron pagos vigentes');
+    }
+    const fondosAntes = num('dueno@demo.hn', `(SELECT coalesce(sum(monto_centavos), 0) FROM public.fondo_movimiento WHERE empresa_id = '${EM}')`);
+    await p.click(`[data-reparto="${dist}"] [data-accion=anular-reparto]`);
+    await p.waitForSelector('dialog.dialogo[open] textarea');
+    await p.click('dialog.dialogo[open] button[type=submit]'); // sin motivo: no deja
+    afirmar((await texto(p, 'dialog.dialogo[open]')).includes('al menos 5 letras'), 'anular reparto sin motivo');
+    await p.fill('dialog.dialogo[open] textarea', 'Prueba: reabrir el mes');
+    await p.click('dialog.dialogo[open] button[type=submit]');
+    await p.waitForSelector(`[data-reparto="${dist}"] [data-estado=anulado]`, { timeout: 20000 });
+    afirmar(sql(null, `(SELECT motivo_anulacion FROM public.distribucion WHERE id = '${dist}')`) === 'Prueba: reabrir el mes', 'la base no quedó anulada');
+    // Los fondos vuelven a como estaban antes del reparto (sus aportes se restan) y nada se borra.
+    const recibido = num('dueno@demo.hn', `(SELECT coalesce(sum(monto_centavos), 0) FROM public.distribucion_detalle WHERE distribucion_id = '${dist}' AND fondo_id IS NOT NULL)`);
+    afirmar(num('dueno@demo.hn', `(SELECT coalesce(sum(monto_centavos), 0) FROM public.fondo_movimiento WHERE empresa_id = '${EM}')`) === fondosAntes - recibido, 'los fondos no volvieron');
+    await ir(p, 'reportes/cierre', `#cierre-meses [data-mes="${mesPasado}"]`);
+    afirmar(await p.locator(`#cierre-meses [data-mes="${mesPasado}"] [data-reparto=no]`).count() === 1, 'el mes sigue "Con reparto"');
     await p.click(`#cierre-meses [data-mes="${mesPasado}"] button`);
     await p.waitForSelector('#cierre-reabrir');
     await p.click('#cierre-reabrir');

@@ -72,6 +72,36 @@ saldo a favor que se consume en el acto) y:
 - si vale menos, la diferencia se devuelve de `"cuenta_dinero_id"`.
 La venta nueva debe salir de una vez (si pidiera aprobación: `APROBACION_REQUERIDA`).
 
+### 0.16.0: la diferencia a favor del cliente y el cálculo previo
+
+**Si el producto nuevo vale menos**, dentro de `"cambio"` va `"diferencia"`:
+
+- `"dinero"`: se devuelve de `"cuenta_dinero_id"` (como antes; con la regla del efectivo del turno propio).
+  Exige que el dueño permita `devolver_dinero`.
+- `"saldo_favor"`: queda a favor del cliente (o en un **VALE** con código si la venta fue a consumidor
+  final). No lleva `"cuenta_dinero_id"` (`DATO_INVALIDO`). Exige que el dueño permita `nota_credito`.
+- Sin `"diferencia"`: como antes (dinero; sin cuenta: `DATO_INVALIDO`). Otro valor: `DATO_INVALIDO`;
+  tipo no permitido: `DEVOLUCION_NO_PERMITIDA`.
+
+Contablemente el lote de saldo a favor de la devolución es de (cambio + diferencia); la venta nueva usa
+la parte del cambio y lo demás queda en 2.1.04.02 (prueba 136: galón 45,000 por 2 tornillos 3,000 →
+saldo a favor 42,000; sin cliente: vale de 43,500 por 1 tornillo). La respuesta trae
+`saldo_favor_centavos` y `saldo_favor.codigo` (el vale).
+
+**`calcular_cambio_previo(venta, {"lineas", "cambio": {"lineas", "descuento_factura"?}, "fecha"?})`**
+(`ventas.devolver` y, para la venta nueva, `ventas.vender` o `ventas.cotizar`): no guarda nada. Con la
+misma regla de la devolución (cantidad acumulada) y de la venta (`calcular_venta_previa`) da
+`devuelto.total_centavos` (y por línea), `rebaja_deuda_centavos` (lo que la venta todavía debe),
+`para_el_cambio_centavos`, `nuevo` (la venta calculada), `total_nuevo_centavos`, `a_cobrar_centavos`,
+`a_favor_cliente_centavos`, `opciones_diferencia` (solo las que el dueño permite, con su texto) y
+`pasa_tope` (el cajero siempre: un cambio no queda pendiente). Sin costos para quien no los ve. Una venta
+de otra sucursal (usuario limitado): `SUCURSAL_NO_PERMITIDA`. Si el dueño no permite el cambio:
+`DEVOLUCION_NO_PERMITIDA`.
+
+Técnico: `registrar_devolucion` de 038 pasó a `interno.registrar_devolucion_base` sin cambios; la pública
+valida `"diferencia"` y la pasa a `interno.aplicar_devolucion` (reemplazada, mismo código + la rama del
+saldo a favor) con `app.cambio_diferencia`, local a la transacción.
+
 ## Tope y aprobación
 
 Tope por puesto `configurar_tope_rol(..., 'devolucion', sin_aprobacion, aprueba_hasta, motivo)`.

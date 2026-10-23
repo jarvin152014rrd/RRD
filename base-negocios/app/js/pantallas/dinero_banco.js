@@ -17,7 +17,8 @@ const MESES = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', '
 const OPERACION = { gasto: 'Gasto', compra: 'Compra de contado', pago_proveedor: 'Pago a proveedor', venta: 'Venta', cobro: 'Cobro',
   dinero_deposito: 'Depósito', confirmacion_deposito: 'Depósito confirmado', dinero_retiro: 'Retiro', dinero_traslado: 'Traslado',
   dinero_reposicion_caja_chica: 'Reposición de caja chica', diferencia_banco: 'Creado al cuadrar', pago_dividendos: 'Pago a socio',
-  uso_fondo: 'Uso de fondo', anulacion_compra: 'Compra anulada', anulacion_pago_proveedor: 'Pago anulado', anulacion_gasto: 'Gasto anulado' };
+  uso_fondo: 'Uso de fondo', anulacion_compra: 'Compra anulada', anulacion_pago_proveedor: 'Pago anulado', anulacion_gasto: 'Gasto anulado',
+  aporte_socio: 'Aporte de socio', anulacion_aporte_socio: 'Aporte de socio anulado' };
 const nombreOp = (o) => OPERACION[o] || String(o || '').replace(/_/g, ' ');
 const textoMes = (anio, mes) => `${MESES[mes - 1]} de ${anio}`;
 const firmado = (c) => monto(dinero(Math.abs(c)), { sentido: c < 0 ? 'sale' : 'entra', signo: c < 0 ? '-' : '+' });

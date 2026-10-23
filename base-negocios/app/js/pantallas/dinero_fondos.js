@@ -4,11 +4,14 @@
 // núcleo: usar un fondo (usar_fondo, con comprobante; si no lo pide el dueño queda en espera de su
 // aprobación), pagar a un socio su parte (pagar_dividendos), repartir la utilidad de un mes cerrado
 // (distribuir_utilidades, solo el dueño) y crear un fondo (crear_fondo, solo el dueño).
-import { leer, rpc, escribir, nuevoId, subirComprobante, config } from '../api.js';
+// app 0.10.0: anular un reparto (anular_distribucion, solo el dueño) y un pago a un socio
+// (anular_pago_dividendos), y los aportes de capital de los socios (núcleo 0.16.0: registrar_aporte_socio,
+// anular_aporte_socio, aportes_socios). Con un núcleo 0.15.0 la parte de aportes no se muestra.
+import { leer, rpc, rpcSiExiste, escribir, nuevoId, subirComprobante, config } from '../api.js';
 import { empresaId, puede } from '../sesion.js';
 import { dinero, fecha, aCentavos } from '../formato.js';
 import { h, icono, aviso, cajaError, errorSimple, campo, conBoton, confirmar, titulo, filaIcono, chip, chipEstado, monto,
-  estadoVacio, mensaje } from '../ui.js';
+  estadoVacio, mensaje, pedirMotivo } from '../ui.js';
 import { cuentasDinero, cuentasQuePagan, categoriasGasto, alcance, olvidarDatos } from '../datos.js';
 import { hoy, selectCuentas, inputMonto, inputFecha, cifraChica, textoMonto } from '../formularios.js';
 
@@ -18,9 +21,13 @@ const MESES = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', '
 const pct = (n) => `${Number(n).toLocaleString('en-US', { maximumFractionDigits: 2 })} %`;
 
 export async function mostrar(vista, ctx) {
-  const [e, movs, cuentas, al] = await Promise.all([rpc('estado_fondos', { p_empresa_id: empresaId() }),
+  const [e, movs, cuentas, al, repartos, pagos, aportes] = await Promise.all([rpc('estado_fondos', { p_empresa_id: empresaId() }),
     leer('v_fondo_movimiento', { empresa_id: empresaId() }, { orden: 'registrado_en.desc', limite: 30 }),
-    puede('dinero.ver') ? cuentasDinero(true) : [], alcance()]);
+    puede('dinero.ver') ? cuentasDinero(true) : [], alcance(),
+    leer('v_distribucion', { empresa_id: empresaId() }, { orden: 'registrado_en.desc', limite: 12 }).catch(() => []),
+    leer('dividendo_pago', { empresa_id: empresaId() }, { orden: 'registrado_en.desc', limite: 30 }).catch(() => []),
+    // Núcleo 0.16.0: aportes de capital (null = núcleo viejo, sin esa parte).
+    rpcSiExiste('aportes_socios', { p_empresa_id: empresaId() }).catch(() => null)]);
   if (!ctx.sigueVigente()) return;
   // Los fondos son de toda la empresa (patrimonio). A un usuario limitado no se le muestra el saldo de una
   // cuenta de dinero que no ve (de otra sucursal).
@@ -65,7 +72,10 @@ export async function mostrar(vista, ctx) {
       onclick: () => formularioUso(vista, ctx, fondos) }, icono('baja'), 'Usar un fondo') : null,
     puede('fondos.distribuir') ? h('button', { type: 'button', class: 'boton', id: 'repartir-utilidad', onclick: () => formularioReparto(vista, ctx, regla) },
       icono('capas'), 'Repartir la utilidad de un mes') : null,
-    puede('fondos.configurar') ? h('button', { type: 'button', class: 'boton', id: 'nuevo-fondo', onclick: () => formularioFondo(vista, ctx) }, icono('mas'), 'Nuevo fondo') : null);
+    puede('fondos.configurar') ? h('button', { type: 'button', class: 'boton', id: 'nuevo-fondo', onclick: () => formularioFondo(vista, ctx) }, icono('mas'), 'Nuevo fondo') : null,
+    aportes && puede('fondos.aportes') && socios.some((s) => s.activo) ? h('button', { type: 'button', class: 'boton', id: 'registrar-aporte',
+      onclick: () => formularioAporte(vista, ctx, socios.filter((s) => s.activo)) }, icono('sube'), 'Registrar aporte de un socio') : null);
+  const recargar = () => { vista.replaceChildren(); mostrar(vista, ctx); };
 
   vista.append(
     h('section', { class: 'tarjeta', 'aria-labelledby': 't-fondos' },
@@ -85,7 +95,149 @@ export async function mostrar(vista, ctx) {
     h('section', { class: 'tarjeta', 'aria-labelledby': 't-mov-fondos' },
       titulo('h2', 'movimientos', 'Movimientos de los fondos', { id: 't-mov-fondos' }),
       filasMov.length ? h('div', { class: 'lista-filas', id: 'lista-mov-fondos' }, filasMov)
-        : estadoVacio({ icono: 'movimientos', chico: true, texto: 'Todavía no hay movimientos en los fondos.' })));
+        : estadoVacio({ icono: 'movimientos', chico: true, texto: 'Todavía no hay movimientos en los fondos.' })),
+    tarjetaRepartos(repartos, pagos, socios, recargar),
+    aportes ? tarjetaAportes(aportes, recargar) : null);
+}
+
+// Repartos de utilidad (con "Anular reparto", solo el dueño) y pagos a socios (con "Anular pago").
+// Un reparto con pagos a socios no se anula: primero se anulan esos pagos (el núcleo lo exige).
+function tarjetaRepartos(repartos, pagos, socios, recargar) {
+  const nombreSocio = new Map(socios.map((s) => [s.socio_id, s.nombre]));
+  const vigentes = pagos.filter((p) => !p.anulada_en);
+  const filasRep = repartos.map((r) => filaIcono({
+    icono: 'capas', color: r.anulada ? 'neutro' : 'azul',
+    titulo: [h('strong', {}, `Reparto #${r.numero} de ${MESES[r.mes - 1]} de ${r.anio}`), ' ', r.anulada ? chipEstado('anulado') : chipEstado('vigente')],
+    detalle: [`del ${fecha(r.fecha_contable)}`, ...(r.partes || []).map((x) => `${x.nombre} ${dinero(x.monto_centavos)}`),
+      r.anulada ? `anulado: ${r.motivo_anulacion}` : null].filter(Boolean).join(' · '),
+    derecha: monto(dinero(r.base_centavos)),
+    abajo: !r.anulada && puede('fondos.distribuir') ? h('div', { class: 'botones' },
+      h('button', { type: 'button', class: 'boton boton-peligro', 'aria-label': `Anular el reparto #${r.numero}`, dataset: { accion: 'anular-reparto' },
+        onclick: () => anularReparto(r, recargar) }, icono('anular'), 'Anular reparto')) : null,
+    props: { dataset: { reparto: r.distribucion_id } },
+  }));
+  const filasPag = vigentes.map((p) => filaIcono({
+    icono: 'billetes', color: 'rojo',
+    titulo: h('strong', {}, `Pago #${p.numero} a ${nombreSocio.get(p.socio_id) || 'socio'}`),
+    detalle: [fecha(p.fecha_contable), p.referencia].filter(Boolean).join(' · '),
+    derecha: monto(dinero(p.monto_centavos), { sentido: 'sale' }),
+    abajo: puede('fondos.pagar_dividendos') ? h('div', { class: 'botones' },
+      h('button', { type: 'button', class: 'boton boton-peligro', 'aria-label': `Anular el pago #${p.numero}`, dataset: { accion: 'anular-pago-socio' },
+        onclick: () => anularPagoSocio(p, nombreSocio.get(p.socio_id) || 'el socio', recargar) }, icono('anular'), 'Anular pago')) : null,
+    props: { dataset: { pagoSocio: p.id } },
+  }));
+  return h('section', { class: 'tarjeta', 'aria-labelledby': 't-repartos' },
+    titulo('h2', 'capas', 'Repartos y pagos a socios', { id: 't-repartos' }),
+    h('p', { class: 'ayuda' }, 'Anular un reparto devuelve los fondos y lo que se les debía a los socios a como estaban (nada se borra: queda el movimiento en contra con su motivo). Si ya se le pagó a un socio de ese reparto, primero anule ese pago aquí abajo. Después puede reabrir el mes en Reportes > Cierre de mes.'),
+    filasRep.length ? h('div', { class: 'lista-filas', id: 'lista-repartos' }, filasRep)
+      : estadoVacio({ icono: 'capas', chico: true, texto: 'Todavía no hay repartos de utilidad.' }),
+    h('h3', { class: 'titulo-chico' }, 'Pagos a socios'),
+    filasPag.length ? h('div', { class: 'lista-filas', id: 'lista-pagos-socios' }, filasPag)
+      : h('p', { class: 'vacio' }, 'No hay pagos a socios vigentes.'));
+}
+
+async function anularReparto(r, recargar) {
+  const ok = await pedirMotivo({ titulo: `Anular el reparto de ${MESES[r.mes - 1]} de ${r.anio}`, textoBoton: 'Sí, anular', peligro: true,
+    explicacion: `Se deshace el reparto #${r.numero} de ${dinero(r.base_centavos)}: los fondos y lo que se les debe a los socios vuelven a como estaban y, si el dinero se separó, vuelve a su cuenta. Si ya se le pagó a un socio, primero anule ese pago.`,
+    accion: (motivo) => escribir('anular_distribucion', { p_distribucion_id: r.distribucion_id, p_motivo: motivo }) });
+  if (!ok) return;
+  olvidarDatos('cuentas');
+  aviso(`Reparto de ${MESES[r.mes - 1]} anulado · ya puede reabrir ese mes en Reportes > Cierre de mes`, 'ok', 9000);
+  recargar();
+}
+
+async function anularPagoSocio(p, nombre, recargar) {
+  const ok = await pedirMotivo({ titulo: `Anular el pago a ${nombre}`, textoBoton: 'Sí, anular', peligro: true,
+    explicacion: `El pago #${p.numero} de ${dinero(p.monto_centavos)} se deshace: el dinero vuelve a la cuenta de donde salió y a ${nombre} se le vuelve a deber.`,
+    accion: (motivo) => escribir('anular_pago_dividendos', { p_pago_id: p.id, p_motivo: motivo }) });
+  if (!ok) return;
+  olvidarDatos('cuentas');
+  aviso(`Pago a ${nombre} anulado · ${dinero(p.monto_centavos)} vuelven a la cuenta`, 'ok', 8000);
+  recargar();
+}
+
+// Aportes de capital de los socios (núcleo 0.16.0): lo que cada socio metió al negocio. No es ganancia.
+function tarjetaAportes(a, recargar) {
+  const filasSoc = (a.socios || []).filter((s) => Number(s.aportado_centavos) || Number(s.anulado_centavos)).map((s) => h('div', { class: 'fila', dataset: { aporteSocio: s.socio_id } },
+    h('span', {}, s.nombre, Number(s.aportes) ? h('span', { class: 'detalle' }, ` · ${s.aportes} aporte(s)`) : null),
+    monto(dinero(s.aportado_centavos), { sentido: 'entra', dato: 'aportado-socio' })));
+  const filas = (a.aportes || []).map((x) => filaIcono({
+    icono: 'sube', color: x.anulada ? 'neutro' : 'verde',
+    titulo: [h('strong', {}, `Aporte #${x.numero} de ${x.socio}`), ' ', x.anulada ? chipEstado('anulado') : null],
+    detalle: [fecha(x.fecha), x.cuenta ? `entró a ${x.cuenta}` : null, x.nota, x.referencia, x.anulada ? `anulado: ${x.motivo_anulacion}` : null].filter(Boolean).join(' · '),
+    derecha: monto(dinero(x.monto_centavos), { sentido: x.anulada ? null : 'entra', signo: x.anulada ? '' : '+' }),
+    abajo: !x.anulada && puede('fondos.aportes') ? h('div', { class: 'botones' },
+      h('button', { type: 'button', class: 'boton boton-peligro', 'aria-label': `Anular el aporte #${x.numero}`, dataset: { accion: 'anular-aporte' },
+        onclick: () => anularAporte(x, recargar) }, icono('anular'), 'Anular')) : null,
+    props: { dataset: { aporte: x.aporte_id } },
+  }));
+  return h('section', { class: 'tarjeta', 'aria-labelledby': 't-aportes' },
+    titulo('h2', 'sube', 'Aportes de los socios', { id: 't-aportes' }),
+    h('p', { class: 'ayuda' }, 'Dinero que un socio mete al negocio. Es capital del socio: entra a la caja o al banco, pero NO cuenta como ganancia.'),
+    h('div', { class: 'cifras' }, cifraChica('Aportado por los socios', dinero(a.total_centavos), { dato: 'total-aportes' })),
+    a.solo_mis_sucursales ? mensaje('info', 'Usted ve solo los aportes que entraron a cuentas de sus sucursales.', null) : null,
+    a.cuadra === false ? mensaje('error', 'Los aportes no cuadran con la contabilidad.', 'Avise al proveedor del programa.') : null,
+    filasSoc.length ? h('div', { class: 'lista', id: 'aportes-por-socio' }, filasSoc) : null,
+    filas.length ? h('div', { class: 'lista-filas', id: 'lista-aportes' }, filas)
+      : estadoVacio({ icono: 'sube', chico: true, texto: 'Todavía no hay aportes de socios.' }));
+}
+
+async function anularAporte(x, recargar) {
+  const ok = await pedirMotivo({ titulo: `Anular el aporte de ${x.socio}`, textoBoton: 'Sí, anular', peligro: true,
+    explicacion: `El aporte #${x.numero} de ${dinero(x.monto_centavos)} se deshace: el dinero sale otra vez de ${x.cuenta || 'la cuenta donde entró'} (nada se borra: queda el movimiento en contra con su motivo).`,
+    accion: (motivo) => escribir('anular_aporte_socio', { p_aporte_id: x.aporte_id, p_motivo: motivo }) });
+  if (!ok) return;
+  olvidarDatos('cuentas');
+  aviso(`Aporte de ${x.socio} anulado · salen ${dinero(x.monto_centavos)} de ${x.cuenta || 'la cuenta'}`, 'ok', 8000);
+  recargar();
+}
+
+// Registrar un aporte: socio, monto, a qué caja o banco entra, fecha y nota (núcleo 0.16.0).
+async function formularioAporte(vista, ctx, socios) {
+  const volver = () => { vista.replaceChildren(); mostrar(vista, ctx); };
+  vista.replaceChildren(h('p', { class: 'cargando', role: 'status' }, 'Cargando…'));
+  let cuentas;
+  try { cuentas = cuentasQuePagan(await cuentasDinero(true)); } catch (err) { vista.replaceChildren(await cajaError(err)); return; }
+  const id = nuevoId();   // el mismo id en los reintentos: el servidor no duplica el aporte
+  const selSocio = h('select', { id: 'aporte-socio' }, h('option', { value: '' }, 'Elija el socio'), socios.map((s) => h('option', { value: s.socio_id }, s.nombre)));
+  if (socios.length === 1) selSocio.value = socios[0].socio_id;
+  const montoIn = inputMonto('aporte-monto');
+  const selCuenta = selectCuentas(cuentas, { id: 'aporte-cuenta' }, { vacio: 'Elija a qué caja o banco entra' });
+  const fechaIn = inputFecha('aporte-fecha', hoy(), { max: hoy() });
+  const nota = h('input', { id: 'aporte-nota', type: 'text', maxlength: 300, placeholder: 'Ej.: capital para comprar mercadería' });
+  const referencia = h('input', { id: 'aporte-referencia', type: 'text', maxlength: 100, placeholder: 'Ej.: depósito 7788' });
+  const zonaError = h('div', { 'aria-live': 'assertive' });
+  const boton = h('button', { type: 'submit', class: 'boton boton-principal boton-ancho', id: 'aporte-guardar' }, icono('sube'), 'Registrar el aporte');
+  const form = h('form', { class: 'formulario', novalidate: true },
+    mensaje('info', 'Es dinero del socio que entra al negocio: no es una venta ni una ganancia.', 'En la contabilidad va a "Aportes de socios" (patrimonio).'),
+    campo('¿Qué socio aporta?', selSocio), campo('Monto (L)', montoIn), campo('¿A qué caja o banco entra?', selCuenta),
+    h('div', { class: 'dos-columnas' }, campo('Fecha', fechaIn), campo('Referencia (opcional)', referencia)),
+    campo('Nota (opcional)', nota), zonaError, boton, h('button', { type: 'button', class: 'boton boton-ancho', onclick: volver }, 'Cancelar'));
+  form.addEventListener('submit', async (ev) => {
+    ev.preventDefault();
+    zonaError.replaceChildren();
+    const falla = (t, foco = null) => { zonaError.append(errorSimple(t)); if (foco) foco.focus(); };
+    if (!selSocio.value) return falla('Elija el socio que aporta.', selSocio);
+    const m = aCentavos(montoIn.value);
+    if (!m) return falla(textoMonto(montoIn, 'Escriba el monto (mayor que cero).'), montoIn);
+    if (!selCuenta.value) return falla('Elija a qué caja o banco entra el dinero.', selCuenta);
+    const socio = socios.find((s) => s.socio_id === selSocio.value);
+    const cuenta = cuentas.find((c) => c.cuenta_dinero_id === selCuenta.value);
+    const ok = await confirmar({ titulo: `¿Registrar el aporte de ${socio.nombre}?`, textoBoton: 'Sí, registrar',
+      texto: `Aporte de ${dinero(m)} de ${socio.nombre} · entra a ${cuenta.nombre}. No cuenta como ganancia.` });
+    if (!ok) return;
+    const datos = { socio_id: socio.socio_id, monto_centavos: m, cuenta_dinero_id: cuenta.cuenta_dinero_id, fecha: fechaIn.value || hoy() };
+    if (nota.value.trim()) datos.nota = nota.value.trim();
+    if (referencia.value.trim()) datos.referencia = referencia.value.trim();
+    const r = await conBoton(boton, zonaError, () => escribir('registrar_aporte_socio', { p_empresa_id: empresaId(), p_datos: datos, p_id_operacion: id }));
+    if (!r) return;
+    olvidarDatos('cuentas');
+    aviso(`Aporte de ${dinero(r.monto_centavos)} de ${r.socio} · entra a ${r.cuenta}`, 'ok', 8000);
+    volver();
+  });
+  vista.replaceChildren(h('section', { class: 'tarjeta tarjeta-angosta', 'aria-labelledby': 't-aporte' },
+    titulo('h1', 'sube', 'Registrar aporte de un socio', { id: 't-aporte' }), form));
+  selSocio.focus();
 }
 
 // Usar un fondo: para qué (motivo), de qué cuenta sale, en qué se usa (categoría de gasto) y el comprobante.

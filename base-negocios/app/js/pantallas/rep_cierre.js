@@ -125,9 +125,13 @@ export async function mostrar(vista, ctx) {
     let reabrir;
     if (!puede('periodos.reabrir')) reabrir = h('p', { class: 'ayuda' }, 'Solo el dueño puede reabrir un mes cerrado.');
     else if (m.reparto) {
-      reabrir = mensaje('info', 'Este mes no se puede reabrir: ya se repartió su utilidad.',
-        `Tiene el reparto #${m.reparto.numero} por ${dinero(m.reparto.base_centavos)} hecho a fondos y socios. Para reabrirlo primero hay que anular ese reparto (hoy lo hace el proveedor del programa); así nadie reparte una utilidad que después cambia.`,
-        { dataset: { info: 'reabrir-con-reparto' } });
+      // app 0.10.0: el reparto se anula en Dinero > Fondos y socios ("Anular reparto"), solo el dueño.
+      reabrir = h('div', {}, mensaje('info', 'Este mes no se puede reabrir: ya se repartió su utilidad.',
+        `Tiene el reparto #${m.reparto.numero} por ${dinero(m.reparto.base_centavos)} hecho a fondos y socios. Para reabrirlo: 1) si ya se le pagó a algún socio de ese reparto, anule ese pago; 2) anule el reparto con su motivo; 3) vuelva aquí y reabra el mes. Las dos primeras se hacen en Dinero > Fondos y socios. Así nadie reparte una utilidad que después cambia.`,
+        { dataset: { info: 'reabrir-con-reparto' } }),
+        puede('fondos.distribuir') && hayEnMenu(ctx.menu, 'dinero', 'fondos')
+          ? h('div', { class: 'botones' }, h('a', { class: 'boton', href: '#/dinero/fondos', id: 'cierre-ir-anular-reparto' }, icono('capas'), 'Anular el reparto (Fondos y socios)'))
+          : null);
     } else if (posterior) {
       reabrir = mensaje('info', `Para reabrir ${m.texto}, primero reabra ${posterior.texto}.`, 'Los meses se reabren del último cerrado hacia atrás.', { dataset: { info: 'reabrir-en-orden' } });
     } else {

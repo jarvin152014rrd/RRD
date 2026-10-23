@@ -1,4 +1,4 @@
-# Pendientes (núcleo 0.16.0, 135 pruebas OK; también con probar.sh --paquete)
+# Pendientes (núcleo 0.16.0, 138 pruebas OK; también con probar.sh --paquete)
 
 Estado: etapa 2 terminada. Las correcciones de la revisión de la etapa 2 están
 HECHAS en la migración 038 (núcleo 0.9.1) y las de la revisión de 0.9.1 en la
@@ -25,6 +25,21 @@ etapa 3.
   `v_saldo_favor`, `bitacora_legible`, libros de ISV y cierres siguen siendo de toda la empresa.
 - FALTA: que el revisor revise 0.16.0. FALTA (dueño): pegar `actualizar_supabase_0.16.0.sql` en su Supabase real.
 - El revisor revisó 0.16.0 (sin nada grave); sus puntos medios y menores quedaron dentro de la 052.
+
+## Faltantes que pidió la app (HECHOS dentro de la misma 052, pruebas 136-138; app 0.10.0)
+
+- HECHO: cambio de producto con la diferencia a favor como saldo a favor / vale (o en dinero) y `calcular_cambio_previo`.
+- HECHO (ya existía en 0.10.0): anular un reparto (`anular_distribucion`); ahora con pantalla. Prueba 137: pagos a
+  socios primero, reabrir el mes, cerrar otra vez y repartir de nuevo.
+- HECHO: aporte de capital de un socio (`registrar_aporte_socio`, `anular_aporte_socio`, `aportes_socios`, cuenta
+  3.1.01.04, permiso `fondos.aportes`).
+- FALTA (menor): activar `fondos` con saldo manual previo en 3.1.01.04 no avisa `MODULO_CON_SALDO`; un comprobante
+  (foto) del aporte; anular una comisión de un vendedor dado de baja sigue igual.
+- FALTA (dueño): pegar `dist/actualizar_supabase_0.16.0.sql` (ya trae todo esto) en su Supabase real.
+- A CONFIRMAR (dueño) [DINERO]: los aportes van a una sola cuenta 3.1.01.04 "Aportes de socios" con el detalle por
+  socio en el sistema (no una cuenta por socio); que un contador valide el nombre y si se reclasifica a capital social.
+- A CONFIRMAR (dueño): en un cambio que vale menos, la pantalla ofrece primero devolver el dinero si está permitido
+  (el cajero elige); ¿prefiere que el saldo a favor sea la opción de siempre?
 
 ## Etapa 6: subir a Supabase real (PREPARADA en 0.15.0, migración 051, prueba 132)
 

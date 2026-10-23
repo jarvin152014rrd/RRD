@@ -1,9 +1,12 @@
 // Dinero · "¿Dónde está mi dinero?" (donde_esta_mi_dinero, permiso dinero.ver): saldo de cada
 // caja y banco, lo que está en tránsito y el total. Antes estaba dentro de Inicio (app 0.4.0).
-import { rpc } from '../api.js';
-import { empresaId } from '../sesion.js';
-import { dinero } from '../formato.js';
-import { h, icono, chip, burbuja, cajaError, mensaje } from '../ui.js';
+// app 0.10.0 (núcleo 0.16.0): debajo, las ENTRADAS de dinero de los socios este mes (aportes de capital,
+// aportes_socios), que no son ganancia. Con un núcleo 0.15.0 esa parte no se muestra.
+import { rpc, rpcSiExiste } from '../api.js';
+import { empresaId, puede, tieneModulo } from '../sesion.js';
+import { dinero, fecha } from '../formato.js';
+import { h, icono, chip, burbuja, cajaError, mensaje, filaIcono, monto } from '../ui.js';
+import { hoy } from '../formularios.js';
 
 // Ícono y color por tipo de cuenta (azul = información; dorado = por confirmar).
 const TIPO = {
@@ -40,13 +43,29 @@ export function tarjetaDinero(d, sucursales = null) {
     ...filas);
 }
 
+// Aportes de capital de los socios que entraron este mes (lista; el servidor ya filtra por sucursal).
+export function tarjetaAportesMes(a, desde) {
+  const lista = ((a && a.aportes) || []).filter((x) => !x.anulada && x.fecha >= desde);
+  if (!lista.length) return null;
+  return h('section', { class: 'tarjeta', 'aria-labelledby': 't-aportes-mes', id: 'aportes-mes' },
+    h('h2', { id: 't-aportes-mes', class: 'titulo-icono' }, icono('sube'), 'Entró de los socios este mes'),
+    h('p', { class: 'ayuda' }, 'Aportes de capital: el dinero ya está sumado en la cuenta donde entró. Es dinero de los socios, no es ganancia.'),
+    lista.map((x) => filaIcono({ icono: 'sube', color: 'verde', titulo: h('strong', {}, `Aporte de ${x.socio}`),
+      detalle: [fecha(x.fecha), x.cuenta ? `entró a ${x.cuenta}` : null, x.nota].filter(Boolean).join(' · '),
+      derecha: monto(dinero(x.monto_centavos), { sentido: 'entra', signo: '+' }), props: { dataset: { aporteMes: x.aporte_id } } })));
+}
+
 export async function mostrar(vista, ctx) {
   try {
-    const [d, estado] = await Promise.all([rpc('donde_esta_mi_dinero', { p_empresa_id: empresaId() }),
-      rpc('mi_estado_sesion', { p_empresa_id: empresaId() })]);
+    const conAportes = puede('fondos.ver') && tieneModulo('fondos');
+    const [d, estado, aportes] = await Promise.all([rpc('donde_esta_mi_dinero', { p_empresa_id: empresaId() }),
+      rpc('mi_estado_sesion', { p_empresa_id: empresaId() }),
+      conAportes ? rpcSiExiste('aportes_socios', { p_empresa_id: empresaId() }).catch(() => null) : null]);
     if (!ctx.sigueVigente()) return;
     const limitado = estado && estado.todas_las_sucursales === false;
     vista.append(tarjetaDinero(d, limitado ? (estado.sucursales || []).map((x) => x.sucursal_id) : null));
+    const extra = tarjetaAportesMes(aportes, hoy().slice(0, 8) + '01');
+    if (extra) vista.append(extra);
   } catch (err) {
     vista.append(await cajaError(err));
   }
