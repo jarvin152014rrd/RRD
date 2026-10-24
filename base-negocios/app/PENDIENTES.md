@@ -1,10 +1,12 @@
-# Pendientes de la app (0.11.0)
+# Pendientes de la app (0.11.1)
 
 - HECHO (0.11.0, núcleo 0.17.0): fotos de productos livianas con interruptor (Productos, Vender, Inicio e Inventario).
   Falta: probarlas contra un Supabase REAL (subir, bajar con token, "ya existe" al repetir, CORS de Storage desde
   Netlify); la columna "tiene foto" en el Excel (no se hizo); fotos en Compras, Devoluciones y Cotizaciones (no se
   pidieron). La miniatura de lo más vendido y de Existencias sale de la lista de productos activos (hasta 1,000).
   Sin internet se ven las fotos ya vistas en ESE equipo; la primera vez necesitan internet.
+  Archivos sueltos en Storage (respuesta perdida sin poder comprobar, app cerrada a mitad): quedan para una limpieza
+  futura (ver docs/PENDIENTES.md).
 
 - HECHO (0.8.0): comas en impuestos, topes, mínimo, traslados y conteo. Quedan los campos `type=number`
   (arqueo por billetes, devoluciones, plazos), que el navegador ya no deja escribir con coma.

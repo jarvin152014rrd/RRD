@@ -15,9 +15,13 @@ etapa 3.
   SQL Editor puede insertar en `storage.buckets` y crear políticas en `storage.objects`; si no, quedan los clics de
   `docs/SUPABASE.md` (la prueba 140 prueba ese camino). Confirmar también que el API de Storage contesta "ya existe"
   (409 / "Duplicate") al subir la misma foto otra vez (la app lo trata como bien).
+- FALTA (limpieza futura): archivos sueltos en Storage que ningún producto ni el historial usan (subidos sin llegar a
+  guardarse: app cerrada a mitad o respuesta perdida sin poder comprobar). La política de borrar ya deja borrarlos (y
+  solo esos); falta una tarea o función que los busque y borre. Las fotos quitadas o cambiadas se guardan a propósito.
+- HECHO (revisión de 0.17.0, dentro de la 053): borrar exige fotos encendidas y que el archivo no esté en uso; subir
+  exige licencia y módulo; LISTO revisa operación y regla de cada política; los ayudantes solo responden por sus empresas.
 - FALTA (menor): la columna informativa "tiene foto" en el Excel de productos (no se hizo: pedía reemplazar la hoja
-  completa de 046; el Excel sigue sin fotos). Borrar de Storage las fotos viejas que ya nadie usa (hoy se guardan
-  para que el historial no quede apuntando a nada; cada foto pesa ~50 KB).
+  completa de 046; el Excel sigue sin fotos).
 - FALTA: que el revisor revise 0.17.0.
 
 ## Pendientes del núcleo que anotó la app (HECHOS en 0.16.0, migración 052, pruebas 133-135)

@@ -20,9 +20,13 @@ pasan también con `probar.sh --paquete`. Para quien ya tiene 0.16.0 en Supabase
   `producto_foto` (foto anterior, nunca se borra ni edita), bitácora con motivo, reintento seguro. Errores nuevos
   `FOTOS_APAGADAS` y `FOTO_INVALIDA`.
 - **Supabase Storage:** bucket privado `fotos-productos` (WEBP/JPEG, 1 MB) y 4 políticas en `storage.objects` (leer:
-  usuarios de la empresa; subir/cambiar/borrar: `productos.editar`; nunca otra empresa) con los ayudantes
-  `empresas_fotos_productos(accion)` (una vez por consulta) y `ruta_foto_producto_valida(ruta)`. Se crean por SQL si el
-  rol puede; si no, la migración NO falla y `estado_fotos_storage()` dice qué falta (clics en `docs/SUPABASE.md`).
+  usuarios de la empresa; subir/cambiar: `productos.editar` con licencia y módulo; borrar: `productos.editar` y solo
+  archivos que ningún producto ni el historial usan; todo con fotos encendidas; nunca otra empresa) con los ayudantes
+  `empresas_fotos_productos(accion)` (una vez por consulta), `ruta_foto_producto_valida(ruta)` y
+  `foto_producto_en_uso(ruta)` (solo responden por empresas del usuario). Se crean por SQL si el rol puede; si no, la
+  migración NO falla y `estado_fotos_storage()` dice qué falta, revisando nombre, operación y regla de cada política
+  (clics en `docs/SUPABASE.md`). Revisión de 0.17.0 (dentro de la misma 053): borrar con fotos encendidas y sin
+  romper el historial, subir con licencia y módulo, LISTO más estricto, rutas solo de sus empresas.
 - **Paquete:** `verificar_instalacion.sql` y la actualización muestran la columna `fotos_productos` (LISTO o qué
   falta); `FALTA_VERSION_ANTERIOR` nombra la versión ("la migración 052 (núcleo 0.16.0)", sacado de este CHANGELOG).
 - **Simuladores:** `simular_supabase.sql` y `mini_supabase.sql` traen lo mínimo de Storage (`storage.buckets` y

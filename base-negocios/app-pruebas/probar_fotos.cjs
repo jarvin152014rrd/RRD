@@ -72,20 +72,24 @@ const imagenVisible = (loc) => loc.evaluate((img) => Boolean(img.closest('.con-f
   // Una foto "real" grande (3000 x 2000, con detalle, JPEG ~2 MB), hecha en el navegador.
   const { ctx: c0, p: p0 } = await nueva();
   await p0.goto(URL_APP + '/');
-  const fotoGrande = Buffer.from(await p0.evaluate(() => {
+  // colores y texto distintos = otra foto (otra huella, otro nombre de archivo)
+  const hacerFoto = async (c1, c2, c3, texto) => Buffer.from(await p0.evaluate(([c1, c2, c3, texto]) => {
     const c = document.createElement('canvas');
     c.width = 3000; c.height = 2000;
     const x = c.getContext('2d');
     const g = x.createLinearGradient(0, 0, 3000, 2000);
-    g.addColorStop(0, '#8a6d3b'); g.addColorStop(0.5, '#d9c7a1'); g.addColorStop(1, '#3b5a8a');
+    g.addColorStop(0, c1); g.addColorStop(0.5, c2); g.addColorStop(1, c3);
     x.fillStyle = g; x.fillRect(0, 0, 3000, 2000);
     const d = x.getImageData(0, 0, 3000, 2000);
     let s = 12345;
     for (let i = 0; i < d.data.length; i += 4) { s = (s * 1103515245 + 12345) & 0x7fffffff; const n = (s % 60) - 30; d.data[i] += n; d.data[i + 1] += n; d.data[i + 2] += n; }
     x.putImageData(d, 0, 0);
-    x.fillStyle = '#ffffff'; x.font = 'bold 300px sans-serif'; x.fillText('CEMENTO', 300, 1100);
+    x.fillStyle = '#ffffff'; x.font = 'bold 300px sans-serif'; x.fillText(texto, 300, 1100);
     return c.toDataURL('image/jpeg', 0.95).split(',')[1];
-  }), 'base64');
+  }, [c1, c2, c3, texto]), 'base64');
+  const fotoGrande = await hacerFoto('#8a6d3b', '#d9c7a1', '#3b5a8a', 'CEMENTO');
+  const fotoOtra = await hacerFoto('#2e7d32', '#a5d6a7', '#1b5e20', 'OTRA');
+  const fotoTercera = await hacerFoto('#6a1b9a', '#ce93d8', '#4a148c', 'TERCERA');
   await c0.close();
   const svg = Buffer.from('<svg xmlns="http://www.w3.org/2000/svg"><script>alert(1)</script></svg>');
   const pesada = Buffer.alloc(11 * 1024 * 1024, 7);
@@ -135,6 +139,7 @@ const imagenVisible = (loc) => loc.evaluate((img) => Boolean(img.closest('.con-f
   });
 
   let rutaMediana = null;
+  let rutaMini = null;
   await prueba('subir una foto real: se reduce en el navegador (600 px ~40 KB y miniatura 120 px ~8 KB) y se ve en la ficha', async () => {
     const { ctx, p } = await nueva();
     await entrar(p, 'dueno@demo.hn');
@@ -168,6 +173,7 @@ const imagenVisible = (loc) => loc.evaluate((img) => Boolean(img.closest('.con-f
     const prod = JSON.parse(sql('dueno@demo.hn', `(SELECT json_build_object('r', foto_ruta, 'm', foto_miniatura_ruta) FROM public.v_producto WHERE producto_id = '${PROD_ID}')`));
     afirmar(prod.r === med.n && prod.m === mini.n, 'el producto no guardó las rutas: ' + JSON.stringify(prod));
     rutaMediana = med.n;
+    rutaMini = mini.n;
     afirmar(sql(null, `(SELECT count(*) FROM public.bitacora WHERE empresa_id = '${EMPRESA}' AND tabla = 'producto' AND registro_id = '${PROD_ID}'
       AND despues->>'foto_ruta' = '${med.n}')`) === '1', 'el cambio de foto no quedó en la bitácora');
     // La miniatura se reduce de verdad (120 px)
@@ -353,6 +359,42 @@ const imagenVisible = (loc) => loc.evaluate((img) => Boolean(img.closest('.con-f
     await p.waitForSelector('#correo');
     const quedan = await p.evaluate(async () => (await caches.keys()).filter((k) => k.startsWith('fotos-')));
     afirmar(quedan.length === 0, 'quedó caché de fotos al salir: ' + quedan.join(', '));
+    await ctx.close();
+  });
+
+  await prueba('respuesta perdida al guardar la ruta: la app pregunta al servidor y NO borra lo subido; un error claro sí lo borra', async () => {
+    const { ctx, p } = await nueva();
+    await entrar(p, 'dueno@demo.hn');
+    const objetos = () => Number(sql('dueno@demo.hn', `(SELECT count(*) FROM storage.objects WHERE bucket_id = 'fotos-productos')`));
+    const antes = objetos();
+    // 1) El servidor guarda, pero la respuesta no llega (dos veces: la app reintenta con el mismo id_operacion).
+    paso = 'respuesta perdida';
+    let llamadas = 0;
+    await p.route('**/rest/v1/rpc/poner_foto_producto', async (route) => { llamadas++; await route.fetch(); await route.abort('connectionreset'); });
+    await abrirProducto(p, PRODUCTO);
+    await p.setInputFiles('#foto-archivo', { name: 'otra.jpg', mimeType: 'image/jpeg', buffer: fotoOtra });
+    await p.waitForSelector('#avisos .mensaje-ok:has-text("Foto guardada")', { timeout: 30000 });
+    afirmar(llamadas === 2, 'se esperaban 2 intentos con el mismo id, hubo ' + llamadas);
+    const r = JSON.parse(sql('dueno@demo.hn', `(SELECT json_build_object('r', foto_ruta, 'n', (SELECT count(*) FROM public.producto_foto f WHERE f.producto_id = p.id))
+      FROM public.producto p WHERE id = '${PROD_ID}')`));
+    afirmar(r.r && r.r !== rutaMediana, 'la ruta nueva no quedó en el producto');
+    afirmar(objetos() === antes + 2, 'se borraron (o faltan) los archivos subidos: ' + objetos());
+    afirmar(sql('dueno@demo.hn', `(SELECT count(*) FROM public.producto_foto WHERE producto_id = '${PROD_ID}' AND foto_ruta = '${r.r}')`) === '1', 'el reintento duplicó el historial');
+    await p.unroute('**/rest/v1/rpc/poner_foto_producto');
+    // 2) El servidor contesta un error claro: se borran los archivos recién subidos.
+    paso = 'error claro';
+    await p.route('**/rest/v1/rpc/poner_foto_producto', (route) => route.fulfill({ status: 400, contentType: 'application/json',
+      body: JSON.stringify({ code: 'P0001', message: 'FOTO_INVALIDA: prueba de error claro.' }) }));
+    await p.waitForSelector('#foto-archivo');   // sigue en la ficha (se volvió a dibujar al guardar)
+    await p.setInputFiles('#foto-archivo', { name: 'tercera.jpg', mimeType: 'image/jpeg', buffer: fotoTercera });
+    await p.waitForSelector('#seccion-foto .mensaje-error', { timeout: 30000 });
+    for (let i = 0; i < 20 && objetos() !== antes + 2; i++) await p.waitForTimeout(200);
+    afirmar(objetos() === antes + 2, 'con un error claro no se borraron los archivos recién subidos: ' + objetos());
+    afirmar(sql('dueno@demo.hn', `(SELECT foto_ruta FROM public.producto WHERE id = '${PROD_ID}')`) === r.r, 'cambió la foto con un error');
+    await p.unroute('**/rest/v1/rpc/poner_foto_producto');
+    // Deja la foto de antes (las pruebas de abajo la usan).
+    sqlEscribir('dueno@demo.hn', `SELECT public.poner_foto_producto(demo.id('EMPRESA'), demo.id('CEM'),
+      jsonb_build_object('ruta', '${rutaMediana}', 'miniatura', '${rutaMini}'), gen_random_uuid())`);
     await ctx.close();
   });
 

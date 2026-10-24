@@ -76,19 +76,22 @@ Fotos livianas, con interruptor por empresa. **Apagado por defecto**: hasta que 
   `null` quita la foto (se puede siempre). Reintento con el mismo `id_operacion` = misma respuesta (`duplicado`).
   Cada cambio queda en `producto_foto` (foto nueva y la anterior; nunca se borra ni se edita) y en la bitácora del
   producto con motivo ("Poner o cambiar la foto del producto" / "Quitar la foto del producto"). Los archivos viejos
-  NO se borran de Storage (el historial los nombra).
+  NO se borran de Storage (el historial los nombra; la política de borrar no lo deja). Archivos sueltos (subidos sin
+  llegar a guardarse, por ejemplo si se cerró la app a mitad) quedan hasta una limpieza futura (PENDIENTES).
 - **Supabase Storage:** bucket PRIVADO `fotos-productos` (solo `image/webp` e `image/jpeg`, hasta 1 MB). Políticas
-  en `storage.objects` (con los ayudantes `empresas_fotos_productos(accion)` y `ruta_foto_producto_valida(ruta)`):
+  en `storage.objects` (con los ayudantes `empresas_fotos_productos(accion)`, `ruta_foto_producto_valida(ruta)` y
+  `foto_producto_en_uso(ruta)`; los dos últimos solo responden por empresas del usuario conectado):
 
 | Política | Quién |
 |---|---|
 | `fotos_productos_leer` (SELECT) | usuarios de esa empresa (`mis_empresas`), con fotos encendidas |
-| `fotos_productos_subir` (INSERT) | `productos.editar` en esa empresa, fotos encendidas, ruta de un producto suyo |
+| `fotos_productos_subir` (INSERT) | `productos.editar` en esa empresa, fotos encendidas, licencia vigente, módulo de productos y ruta de un producto suyo (lo mismo que `poner_foto_producto`) |
 | `fotos_productos_cambiar` (UPDATE) | igual que subir |
-| `fotos_productos_borrar` (DELETE) | `productos.editar` en esa empresa |
+| `fotos_productos_borrar` (DELETE) | `productos.editar` en esa empresa, fotos encendidas (apagadas no se ve nada, ni para borrar) y solo archivos que NO usa ningún producto (foto o miniatura actual) ni el historial `producto_foto` |
 
   Una empresa nunca ve ni sube en la carpeta de otra (la primera carpeta de la ruta es el id de la empresa).
-  La 053 crea bucket y políticas por SQL si puede; si no, no falla: `estado_fotos_storage()` dice qué falta
+  La 053 crea bucket y políticas por SQL si puede; si no, no falla: `estado_fotos_storage()` dice qué falta (revisa
+  nombre, operación y que la regla llame al ayudante con su acción)
   (`verificar_instalacion.sql` lo muestra en la columna `fotos_productos`) y `docs/SUPABASE.md` explica los clics.
 - **Lo impreso y el Excel no llevan fotos.** (La columna "tiene foto" en el Excel no se hizo: anotado en PENDIENTES.)
 - Prueba 139 (políticas, permisos, interruptor, poner/cambiar/quitar, bitácora) y 140 (actualizar 0.16.0 -> 0.17.0).

@@ -1,5 +1,15 @@
 # Cambios de la app
 
+## app 0.11.1 (núcleo 0.17.0) — Arreglos de la revisión de las fotos
+
+- Si al guardar la ruta de la foto se pierde la respuesta (internet que se cae a medio camino), la app ya NO borra lo
+  que subió: pregunta al servidor (`v_producto`) si el producto quedó con esa foto; si quedó, avisa "Foto guardada".
+  Solo borra lo recién subido cuando el servidor contesta un error claro (FOTO_INVALIDA, SIN_PERMISO, ...).
+- Salir: primero se borra la sesión y a la vez la caché de fotos (antes se esperaba la caché y una recarga rápida
+  podía volver a entrar sola). La pantalla de entrar también borra fotos que hayan quedado de una salida cortada.
+- Prueba nueva en `probar_fotos.cjs` (respuesta perdida dos veces con el mismo `id_operacion` y error claro).
+  Cascarón `cascaron-0.11.1`.
+
 ## app 0.11.0 (núcleo 0.17.0; también funciona con 0.16.0 y 0.15.0, sin fotos) — Fotos de productos livianas
 
 - **Interruptor** en Ajustes > Mi negocio > "Fotos de productos" (solo el dueño, con motivo; `activar_fotos_productos`).

@@ -49,6 +49,7 @@ async function iniciar() {
 
 async function mostrarEntrar(mensaje = null) {
   window.removeEventListener('hashchange', alCambiarRuta);
+  olvidarFotos(); // sin sesión no quedan fotos guardadas (por si una salida anterior se cortó a mitad)
   const { mostrar } = await import('./pantallas/entrar.js');
   document.title = 'Entrar · Mi Negocio';
   raiz.replaceChildren();
@@ -64,8 +65,11 @@ async function salir(texto = 'Cerró su sesión.', tipo = 'ok') {
   olvidarCatalogo();
   reiniciarTodo(); // filtros de las pantallas (fechas, proveedor, banco...) vuelven a los de siempre
   olvidarDatos(); // listas en memoria (productos, cuentas, alcance...): el próximo usuario no ve las del anterior
-  await olvidarFotos(); // fotos de productos en memoria y en la caché del navegador
+  // Primero se borra la sesión (sin esperar nada antes: si la página se recarga enseguida, ya no entra sola) y a la
+  // vez las fotos de productos en memoria y en la caché del navegador.
+  const fotos = olvidarFotos();
   await api.salir();
+  await fotos;
   if (location.hash) history.replaceState(null, '', location.pathname);
   mostrarEntrar({ tipo, texto });
 }

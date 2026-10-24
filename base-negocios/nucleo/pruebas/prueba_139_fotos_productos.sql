@@ -1,4 +1,4 @@
--- PRUEBA: (0.17.0) fotos de productos: el interruptor empieza APAGADO y solo el dueño lo cambia (con motivo y bitácora; mi_perfil lo dice; la ficha del proveedor también lo pone); Storage (bucket privado fotos-productos con WEBP/JPEG y 1 MB; políticas): la empresa A sube y lee en su carpeta, B no lee ni sube en la carpeta de A, un rol sin productos.editar (vendedor) lee pero no sube ni borra, una ruta de un producto de otra empresa se rechaza, con fotos apagadas nadie lee ni sube; poner_foto_producto pone, cambia y quita con historial (la foto anterior queda), bitácora con motivo e id_operacion (reintento = misma respuesta, sin duplicar), rechazos (sin permiso, apagadas, ruta ajena o mala, producto de otra empresa); v_producto devuelve las rutas; la bitácora queda íntegra
+-- PRUEBA: (0.17.0) fotos de productos: el interruptor empieza APAGADO y solo el dueño lo cambia (con motivo y bitácora; mi_perfil lo dice; la ficha del proveedor también lo pone); Storage (bucket privado fotos-productos con WEBP/JPEG y 1 MB; políticas; LISTO revisa operación y regla): la empresa A sube y lee en su carpeta, sin módulo o con licencia vencida no sube, con fotos apagadas nadie lee, sube ni borra, un archivo en uso por el producto o el historial no se borra, B no lee ni sube en la carpeta de A, un rol sin productos.editar (vendedor) lee pero no sube ni borra, una ruta de un producto de otra empresa se rechaza, con fotos apagadas nadie lee ni sube; poner_foto_producto pone, cambia y quita con historial (la foto anterior queda), bitácora con motivo e id_operacion (reintento = misma respuesta, sin duplicar), rechazos (sin permiso, apagadas, ruta ajena o mala, producto de otra empresa); v_producto devuelve las rutas; la bitácora queda íntegra
 DO $$
 DECLARE
   e    uuid := pruebas.empresa('A');
@@ -134,13 +134,46 @@ BEGIN
   r := public.poner_foto_producto(e, p1, NULL, gen_random_uuid());
   PERFORM pruebas.afirmar((r->>'quitada')::boolean AND r->>'anterior_foto_ruta' = ruta2, 'quitada');
   PERFORM pruebas.afirmar((SELECT foto_ruta IS NULL AND foto_miniatura_ruta IS NULL FROM public.producto WHERE id = p1), 'producto sin foto');
-  -- Apagadas: nadie de A lee (ni el dueño) ni sube; borrar sí (limpieza).
+  -- Apagadas: nadie de A lee (ni el dueño), ni sube, ni borra (con fotos apagadas no se ve nada, ni para borrar).
   PERFORM pruebas.afirmar((SELECT count(*) FROM storage.objects WHERE bucket_id = 'fotos-productos') = 0, 'apagadas: no se leen');
   PERFORM pruebas.debe_fallar(format('INSERT INTO storage.objects (bucket_id, name) VALUES (%L, %L)', 'fotos-productos',
     e || '/' || p2 || '/dddddddddddd.webp'), '42501', 'apagadas: no se sube');
+  DELETE FROM storage.objects WHERE bucket_id = 'fotos-productos';
+  PERFORM pruebas.como('superusuario');
+  PERFORM pruebas.afirmar((SELECT count(*) FROM storage.objects WHERE bucket_id = 'fotos-productos') = 4, 'apagadas: el dueño no borra nada');
+  PERFORM pruebas.como('dueno_a');
   PERFORM public.activar_fotos_productos(e, true, 'Encender otra vez');
-  DELETE FROM storage.objects WHERE bucket_id = 'fotos-productos' AND name = ruta;
-  PERFORM pruebas.afirmar((SELECT count(*) FROM storage.objects WHERE bucket_id = 'fotos-productos') = 3, 'el dueño borra');
+  -- Encendidas: un archivo que el historial (o el producto) usa NO se borra; uno suelto sí.
+  DELETE FROM storage.objects WHERE bucket_id = 'fotos-productos' AND name IN (ruta, mini, ruta2, mini2);
+  PERFORM pruebas.afirmar((SELECT count(*) FROM storage.objects WHERE bucket_id = 'fotos-productos') = 4, 'en uso: no se borra');
+  PERFORM pruebas.afirmar(public.foto_producto_en_uso(ruta) AND public.foto_producto_en_uso(mini2), 'en uso por el historial');
+  INSERT INTO storage.objects (bucket_id, name) VALUES ('fotos-productos', e || '/' || p2 || '/eeeeeeeeeeee.webp');
+  PERFORM pruebas.afirmar(NOT public.foto_producto_en_uso(e || '/' || p2 || '/eeeeeeeeeeee.webp'), 'suelto: no en uso');
+  DELETE FROM storage.objects WHERE bucket_id = 'fotos-productos' AND name = e || '/' || p2 || '/eeeeeeeeeeee.webp';
+  PERFORM pruebas.afirmar((SELECT count(*) FROM storage.objects WHERE bucket_id = 'fotos-productos') = 4, 'el dueño borra el archivo suelto');
+  -- Sin el módulo de productos (inventario apagado y sin ventas): no se sube (igual que poner_foto_producto).
+  PERFORM pruebas.como('superusuario');
+  UPDATE public.modulo_activo SET activo = false WHERE empresa_id = e AND modulo = 'compras';
+  UPDATE public.modulo_activo SET activo = false WHERE empresa_id = e AND modulo IN ('inventario', 'ventas');
+  PERFORM pruebas.como('dueno_a');
+  PERFORM pruebas.debe_fallar(format('INSERT INTO storage.objects (bucket_id, name) VALUES (%L, %L)', 'fotos-productos',
+    e || '/' || p2 || '/ffffffffffff.webp'), '42501', 'sin módulo no se sube');
+  PERFORM pruebas.debe_fallar(format('SELECT public.poner_foto_producto(%L, %L, %L, gen_random_uuid())', e, p1,
+    jsonb_build_object('ruta', ruta, 'miniatura', mini)), 'MODULO_INACTIVO', 'sin módulo no se pone');
+  PERFORM pruebas.como('superusuario');
+  UPDATE public.modulo_activo SET activo = true WHERE empresa_id = e AND modulo = 'inventario';
+  UPDATE public.modulo_activo SET activo = true WHERE empresa_id = e AND modulo = 'compras';
+  -- Licencia vencida: tampoco.
+  UPDATE public.licencia SET vence_el = current_date - 60, dias_gracia = 0 WHERE empresa_id = e;
+  PERFORM pruebas.como('dueno_a');
+  PERFORM pruebas.debe_fallar(format('INSERT INTO storage.objects (bucket_id, name) VALUES (%L, %L)', 'fotos-productos',
+    e || '/' || p2 || '/ffffffffffff.webp'), '42501', 'licencia vencida no sube');
+  PERFORM pruebas.como('superusuario');
+  UPDATE public.licencia SET vence_el = current_date + 30, dias_gracia = 5 WHERE empresa_id = e;
+  -- Los ayudantes no responden por otra empresa.
+  PERFORM pruebas.como('dueno_b');
+  PERFORM pruebas.afirmar(NOT public.ruta_foto_producto_valida(ruta), 'B: la ruta de A no es válida para B');
+  PERFORM pruebas.afirmar(public.foto_producto_en_uso(e || '/' || p2 || '/eeeeeeeeeeee.webp'), 'B: lo de A cuenta como en uso (no se borra)');
 
   -- Historial y bitácora (nada se borra; el producto registra cada cambio con motivo).
   PERFORM pruebas.como('superusuario');
@@ -160,6 +193,19 @@ BEGIN
   -- anon: nada.
   PERFORM pruebas.como('anon');
   PERFORM pruebas.afirmar((SELECT count(*) FROM storage.objects) = 0, 'anon no ve nada');
+  -- LISTO revisa la operación y la regla de cada política, no solo el nombre.
+  PERFORM pruebas.como('superusuario');
+  DROP POLICY fotos_productos_leer ON storage.objects;
+  CREATE POLICY fotos_productos_leer ON storage.objects FOR SELECT TO authenticated USING (bucket_id = 'fotos-productos');
+  PERFORM pruebas.afirmar(public.estado_fotos_storage()->>'texto' LIKE 'FALTA:%fotos_productos_leer%', 'regla floja: ' || (public.estado_fotos_storage()->>'texto'));
+  DROP POLICY fotos_productos_leer ON storage.objects;
+  CREATE POLICY fotos_productos_leer ON storage.objects FOR DELETE TO authenticated
+    USING (bucket_id = 'fotos-productos' AND split_part(name, '/', 1) = ANY (ARRAY(SELECT public.empresas_fotos_productos('leer'))));
+  PERFORM pruebas.afirmar(public.estado_fotos_storage()->>'texto' LIKE 'FALTA:%fotos_productos_leer%', 'operación equivocada');
+  DROP POLICY fotos_productos_borrar ON storage.objects;
+  CREATE POLICY fotos_productos_borrar ON storage.objects FOR DELETE TO authenticated
+    USING (bucket_id = 'fotos-productos' AND split_part(name, '/', 1) = ANY (ARRAY(SELECT public.empresas_fotos_productos('borrar'))));
+  PERFORM pruebas.afirmar(public.estado_fotos_storage()->>'texto' LIKE 'FALTA:%fotos_productos_borrar%', 'borrar sin revisar el uso');
 END $$;
 
 -- La ficha del proveedor también enciende o apaga las fotos (opciones.fotos_productos).

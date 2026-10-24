@@ -156,7 +156,7 @@ SET ROLE supa_storage_ajeno;
 INSERT INTO storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
 VALUES ('fotos-productos', 'fotos-productos', false, 1048576, ARRAY['image/webp', 'image/jpeg']);
 SQL
-una "$SINPERM" "$TMP/dist/verificar_instalacion.sql" | grep -q "^TODO BIEN | $VERSION | 53 | 53 | FALTA: crear las políticas fotos_productos_leer, fotos_productos_subir" \
+una "$SINPERM" "$TMP/dist/verificar_instalacion.sql" | grep -q "^TODO BIEN | $VERSION | 53 | 53 | FALTA: crear (o corregir) las políticas fotos_productos_leer, fotos_productos_subir" \
   || falla "con el bucket y sin políticas debía decir qué políticas faltan"
 psql -X -q -v ON_ERROR_STOP=1 -d "$SINPERM" >/dev/null <<'SQL' || falla "las políticas de docs/SUPABASE.md"
 SET ROLE supa_storage_ajeno;
@@ -165,10 +165,10 @@ CREATE POLICY "fotos_productos_leer 1x2y_0" ON storage.objects FOR SELECT TO aut
 CREATE POLICY "fotos_productos_subir 1x2y_0" ON storage.objects FOR INSERT TO authenticated
   WITH CHECK (bucket_id = 'fotos-productos' AND split_part(name, '/', 1) = ANY (ARRAY(SELECT public.empresas_fotos_productos('subir'))) AND public.ruta_foto_producto_valida(name));
 CREATE POLICY "fotos_productos_cambiar 1x2y_0" ON storage.objects FOR UPDATE TO authenticated
-  USING (bucket_id = 'fotos-productos' AND split_part(name, '/', 1) = ANY (ARRAY(SELECT public.empresas_fotos_productos('subir'))))
+  USING (bucket_id = 'fotos-productos' AND split_part(name, '/', 1) = ANY (ARRAY(SELECT public.empresas_fotos_productos('subir'))) AND public.ruta_foto_producto_valida(name))
   WITH CHECK (bucket_id = 'fotos-productos' AND split_part(name, '/', 1) = ANY (ARRAY(SELECT public.empresas_fotos_productos('subir'))) AND public.ruta_foto_producto_valida(name));
 CREATE POLICY "fotos_productos_borrar 1x2y_0" ON storage.objects FOR DELETE TO authenticated
-  USING (bucket_id = 'fotos-productos' AND split_part(name, '/', 1) = ANY (ARRAY(SELECT public.empresas_fotos_productos('borrar'))));
+  USING (bucket_id = 'fotos-productos' AND split_part(name, '/', 1) = ANY (ARRAY(SELECT public.empresas_fotos_productos('borrar'))) AND NOT public.foto_producto_en_uso(name));
 SQL
 una "$SINPERM" "$TMP/dist/verificar_instalacion.sql" | grep -q "^TODO BIEN | $VERSION | 53 | 53 | LISTO" || falla "después de los clics debía decir LISTO"
 echo "ok"

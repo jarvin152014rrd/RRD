@@ -17,8 +17,11 @@
 --      hasta 1 MB) y sus políticas en storage.objects:
 --        leer:                  usuarios de esa empresa (con fotos encendidas)
 --        subir / cambiar:       quien tiene productos.editar en esa empresa
---                               (con fotos encendidas; ruta de un producto suyo)
---        borrar:                quien tiene productos.editar en esa empresa
+--                               (fotos encendidas, licencia vigente, módulo de
+--                               productos; ruta de un producto suyo)
+--        borrar:                quien tiene productos.editar en esa empresa, con
+--                               fotos encendidas, y solo archivos que NINGÚN
+--                               producto ni el historial usan (foto_producto_en_uso)
 --      Si la base no tiene Storage (no es Supabase) o el rol no puede crear el
 --      bucket o las políticas, la migración NO falla: estado_fotos_storage()
 --      dice qué falta (verificar_instalacion.sql lo muestra) y docs/SUPABASE.md
@@ -65,14 +68,16 @@ ALTER TABLE public.producto
       AND split_part(foto_miniatura_ruta, '/', 1) = empresa_id::text AND split_part(foto_miniatura_ruta, '/', 2) = id::text
       AND foto_ruta <> foto_miniatura_ruta));
 
--- ¿Esta ruta de Storage es de una foto válida de un producto de su empresa?
--- (la usan la política de subir de storage.objects y poner_foto_producto)
+-- ¿Esta ruta de Storage es de una foto válida de un producto de una empresa DEL USUARIO conectado?
+-- (la usan la política de subir de storage.objects y poner_foto_producto; nunca responde por otra empresa)
 CREATE FUNCTION public.ruta_foto_producto_valida(p_ruta text) RETURNS boolean
 LANGUAGE sql STABLE SECURITY DEFINER SET search_path = '' AS $$
   SELECT coalesce(p_ruta ~ '^[0-9a-f-]{36}/[0-9a-f-]{36}/[a-z0-9_-]{8,80}\.(webp|jpg)$', false)
+     AND split_part(p_ruta, '/', 1) IN (SELECT x::text FROM public.mis_empresas() x)
      AND EXISTS (SELECT 1 FROM public.producto p
                   WHERE p.empresa_id::text = split_part(p_ruta, '/', 1) AND p.id::text = split_part(p_ruta, '/', 2))
 $$;
+
 
 -- Historial de fotos: solo agregar (la foto anterior queda anotada).
 CREATE TABLE public.producto_foto (
@@ -103,6 +108,19 @@ REVOKE ALL ON public.producto_foto FROM PUBLIC, anon, authenticated;
 GRANT SELECT ON public.producto_foto TO authenticated, service_role;
 CREATE POLICY leer ON public.producto_foto FOR SELECT TO authenticated
   USING (empresa_id IN (SELECT public.mis_empresas()));
+
+-- ¿Algún producto (foto o miniatura actual) o el historial de fotos usa este archivo? Así borrar en
+-- Storage nunca deja al producto ni al historial apuntando a nada. Solo responde por empresas del usuario.
+CREATE FUNCTION public.foto_producto_en_uso(p_ruta text) RETURNS boolean
+LANGUAGE sql STABLE SECURITY DEFINER SET search_path = '' AS $$
+  SELECT split_part(p_ruta, '/', 1) NOT IN (SELECT x::text FROM public.mis_empresas() x)
+      OR EXISTS (SELECT 1 FROM public.producto p
+                  WHERE p.empresa_id::text = split_part(p_ruta, '/', 1) AND p.id::text = split_part(p_ruta, '/', 2)
+                    AND p_ruta IN (p.foto_ruta, p.foto_miniatura_ruta))
+      OR EXISTS (SELECT 1 FROM public.producto_foto f
+                  WHERE f.empresa_id::text = split_part(p_ruta, '/', 1) AND f.producto_id::text = split_part(p_ruta, '/', 2)
+                    AND p_ruta IN (f.foto_ruta, f.foto_miniatura_ruta, f.anterior_foto_ruta, f.anterior_foto_miniatura_ruta))
+$$;
 
 INSERT INTO interno.id_operacion_uso (tabla, columna, tipo, orden) VALUES
   ('producto_foto', 'id_operacion', 'foto_producto', 94);
@@ -208,14 +226,19 @@ CREATE OR REPLACE VIEW public.v_producto WITH (security_invoker = true) AS
 -- ---------------------------------------------------------------------
 -- Empresas (como texto: la primera carpeta de la ruta) donde el usuario conectado puede:
 --   'leer'   -> pertenece a la empresa y las fotos están encendidas
---   'subir'  -> tiene productos.editar y las fotos están encendidas (también cambiar)
---   'borrar' -> tiene productos.editar (aunque las fotos estén apagadas: limpiar)
+--   'subir'  -> tiene productos.editar, fotos encendidas, licencia vigente y el módulo de productos
+--               (lo mismo que pide poner_foto_producto); también cambiar
+--   'borrar' -> tiene productos.editar y fotos encendidas (con fotos apagadas no se ve nada, ni para borrar;
+--               la política además exige que el archivo no esté en uso)
 CREATE FUNCTION public.empresas_fotos_productos(p_accion text) RETURNS SETOF text
 LANGUAGE sql STABLE SECURITY DEFINER SET search_path = '' AS $$
   SELECT e.id::text FROM public.empresa e
-   WHERE (p_accion = 'leer' AND e.fotos_productos AND e.id IN (SELECT public.mis_empresas()))
-      OR (p_accion = 'subir' AND e.fotos_productos AND e.id IN (SELECT public.empresas_con_permiso('productos.editar')))
-      OR (p_accion = 'borrar' AND e.id IN (SELECT public.empresas_con_permiso('productos.editar')))
+   WHERE e.fotos_productos
+     AND ((p_accion = 'leer' AND e.id IN (SELECT public.mis_empresas()))
+       OR (p_accion = 'subir' AND e.id IN (SELECT public.empresas_con_permiso('productos.editar'))
+           AND public.licencia_activa(e.id)
+           AND (public.modulo_esta_activo(e.id, 'inventario') OR interno.modulo_permite_apagado(e.id, 'inventario', 'productos.editar')))
+       OR (p_accion = 'borrar' AND e.id IN (SELECT public.empresas_con_permiso('productos.editar'))))
 $$;
 
 -- ¿Quedó listo Storage para las fotos? (bucket privado y las 4 políticas)
@@ -226,15 +249,27 @@ DECLARE
   v_bucket  jsonb;
   v_faltan  text[] := '{}';
   v_nombre  text;
+  r         record;
 BEGIN
   IF to_regclass('storage.buckets') IS NULL OR to_regclass('storage.objects') IS NULL THEN
     RETURN jsonb_build_object('listo', false, 'storage', false, 'texto', 'FALTA: esta base no tiene Supabase Storage.');
   END IF;
   EXECUTE 'SELECT to_jsonb(b) FROM storage.buckets b WHERE b.id = $1' INTO v_bucket USING 'fotos-productos';
-  FOREACH v_nombre IN ARRAY ARRAY['fotos_productos_leer', 'fotos_productos_subir', 'fotos_productos_cambiar', 'fotos_productos_borrar'] LOOP
-    -- El panel de Supabase agrega un sufijo al nombre de la política (ej. "fotos_productos_leer 1a2b_0").
+  -- Cada política: nombre (el panel de Supabase le agrega un sufijo, ej. "fotos_productos_leer 1a2b_0"),
+  -- operación y que su regla llame al ayudante con la acción que le toca (no basta el nombre).
+  FOR r IN SELECT * FROM (VALUES
+      ('fotos_productos_leer',    'SELECT', 'leer',   NULL::text),
+      ('fotos_productos_subir',   'INSERT', NULL,     'subir'),
+      ('fotos_productos_cambiar', 'UPDATE', 'subir',  'subir'),
+      ('fotos_productos_borrar',  'DELETE', 'borrar', NULL)) AS v(nombre, cmd, en_using, en_check) LOOP
+    v_nombre := r.nombre;
     IF NOT EXISTS (SELECT 1 FROM pg_catalog.pg_policies x WHERE x.schemaname = 'storage' AND x.tablename = 'objects'
-                    AND x.policyname LIKE v_nombre || '%') THEN
+                    AND x.policyname LIKE r.nombre || '%' AND x.cmd = r.cmd
+                    AND coalesce(x.qual, '') || coalesce(x.with_check, '') LIKE '%fotos-productos%'
+                    AND (r.en_using IS NULL OR x.qual LIKE '%empresas_fotos_productos(''' || r.en_using || '''%')
+                    AND (r.en_check IS NULL OR (x.with_check LIKE '%empresas_fotos_productos(''' || r.en_check || '''%'
+                                                AND x.with_check LIKE '%ruta_foto_producto_valida(%'))
+                    AND (r.cmd <> 'DELETE' OR x.qual LIKE '%foto_producto_en_uso(%')) THEN
       v_faltan := v_faltan || v_nombre;
     END IF;
   END LOOP;
@@ -247,7 +282,7 @@ BEGIN
     'texto', CASE
       WHEN v_bucket IS NULL THEN 'FALTA: crear el bucket fotos-productos (docs/SUPABASE.md, Fotos de productos).'
       WHEN coalesce((v_bucket->>'public')::boolean, false) THEN 'FALTA: el bucket fotos-productos debe ser PRIVADO (apague "Public bucket").'
-      WHEN cardinality(v_faltan) > 0 THEN 'FALTA: crear las políticas ' || array_to_string(v_faltan, ', ') || ' (docs/SUPABASE.md, Fotos de productos).'
+      WHEN cardinality(v_faltan) > 0 THEN 'FALTA: crear (o corregir) las políticas ' || array_to_string(v_faltan, ', ') || ' (docs/SUPABASE.md, Fotos de productos).'
       ELSE 'LISTO' END);
 END $$;
 
@@ -294,7 +329,8 @@ BEGIN
                     AND public.ruta_foto_producto_valida(name));
       CREATE POLICY fotos_productos_borrar ON storage.objects FOR DELETE TO authenticated
         USING (bucket_id = 'fotos-productos'
-               AND split_part(name, '/', 1) = ANY (ARRAY(SELECT public.empresas_fotos_productos('borrar'))));
+               AND split_part(name, '/', 1) = ANY (ARRAY(SELECT public.empresas_fotos_productos('borrar')))
+               AND NOT public.foto_producto_en_uso(name));
     $p$;
   EXCEPTION WHEN OTHERS THEN
     RAISE WARNING 'Fotos de productos: no se pudieron crear las políticas por SQL (%). Créelas con clics (docs/SUPABASE.md).', SQLERRM;
@@ -585,8 +621,10 @@ GRANT EXECUTE ON FUNCTION
 TO authenticated;
 -- Las políticas de storage.objects corren como el usuario: necesita ejecutar los ayudantes.
 REVOKE EXECUTE ON FUNCTION
-  public.empresas_fotos_productos(text), public.ruta_foto_producto_valida(text), public.estado_fotos_storage()
+  public.empresas_fotos_productos(text), public.ruta_foto_producto_valida(text), public.foto_producto_en_uso(text),
+  public.estado_fotos_storage()
 FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION
-  public.empresas_fotos_productos(text), public.ruta_foto_producto_valida(text), public.estado_fotos_storage()
+  public.empresas_fotos_productos(text), public.ruta_foto_producto_valida(text), public.foto_producto_en_uso(text),
+  public.estado_fotos_storage()
 TO authenticated, service_role;

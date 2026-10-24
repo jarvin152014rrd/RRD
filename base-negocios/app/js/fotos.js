@@ -9,7 +9,7 @@
 // - Para mostrarla: descarga con el token y la guarda en la caché del navegador ("fotos-<empresa>"): una foto ya
 //   vista no se vuelve a bajar y se ve sin internet. Al salir se borra esa caché.
 // - Nunca innerHTML: <img> con src = blob: (URL.createObjectURL). Lo impreso no lleva fotos.
-import { subirArchivo, bajarArchivo, borrarArchivo, escribir, ErrorServidor } from './api.js';
+import { subirArchivo, bajarArchivo, borrarArchivo, escribir, leer, ErrorServidor } from './api.js';
 import { perfilActual, empresaId } from './sesion.js';
 import { h, burbuja } from './ui.js';
 
@@ -140,25 +140,42 @@ export async function subirFotoProducto(producto, archivo) {
   const ruta = `${base}.${r.ext}`;
   const mini = `${base}_mini.${r.ext}`;
   const creados = [];
+  // Un error es "claro" cuando el servidor contestó (FOTO_INVALIDA, SIN_PERMISO, ...). Sin respuesta (internet que se
+  // cae a medio camino) no se sabe si quedó guardado: no se borra nada (lo suelto se limpia después, PENDIENTES).
+  const claro = (err) => !err.sinConexion && Number(err.http) >= 400;
+  const traducir = (err) => {
+    if (err.sinConexion) return sinInternet();
+    if (err.clave === 'SIN_PERMISO' && !err.sqlstate) {
+      return errorLocal('Su usuario no puede subir fotos de productos (o las fotos están apagadas).', { clave: 'SIN_PERMISO', http: err.http,
+        queHacer: 'Pídale al dueño el permiso de editar productos.' });
+    }
+    return err;
+  };
+  const borrarCreados = () => { for (const nombre of creados) borrarArchivo(BUCKET, nombre).catch(() => {}); };
   try {
     for (const [nombre, blob] of [[ruta, r.mediana], [mini, r.mini]]) {
       const s = await subirArchivo(BUCKET, nombre, blob);
       if (s.creado) creados.push(nombre);
     }
-    const res = await escribir('poner_foto_producto', { p_empresa_id: e, p_producto_id: producto.producto_id, p_foto: { ruta, miniatura: mini } });
-    await guardarCache(ruta, r.mediana);
-    await guardarCache(mini, r.mini);
-    return { ...res, bytes_mediana: r.mediana.size, bytes_mini: r.mini.size, ancho: r.ancho, alto: r.alto };
   } catch (err) {
-    // No quedó puesta: se borran los archivos que ESTA vez se subieron (los de antes pueden estar en el historial).
-    for (const nombre of creados) borrarArchivo(BUCKET, nombre).catch(() => {});
-    if (err.sinConexion) throw sinInternet();
-    if (err.clave === 'SIN_PERMISO' && !err.sqlstate) {
-      throw errorLocal('Su usuario no puede subir fotos de productos (o las fotos están apagadas).', { clave: 'SIN_PERMISO', http: err.http,
-        queHacer: 'Pídale al dueño el permiso de editar productos.' });
-    }
-    throw err;
+    if (claro(err)) borrarCreados();
+    throw traducir(err);
   }
+  let res;
+  try {
+    res = await escribir('poner_foto_producto', { p_empresa_id: e, p_producto_id: producto.producto_id, p_foto: { ruta, miniatura: mini } });
+  } catch (err) {
+    if (claro(err)) { borrarCreados(); throw traducir(err); }
+    // Respuesta perdida: se pregunta al servidor si el producto quedó con ESTA foto.
+    const quedo = await leer('v_producto', { producto_id: producto.producto_id })
+      .then((filas) => Boolean(filas && filas[0] && filas[0].foto_ruta === ruta && filas[0].foto_miniatura_ruta === mini))
+      .catch(() => null);
+    if (!quedo) throw traducir(err);
+    res = { producto_id: producto.producto_id, foto_ruta: ruta, foto_miniatura_ruta: mini, quitada: false, duplicado: true, comprobada: true };
+  }
+  await guardarCache(ruta, r.mediana);
+  await guardarCache(mini, r.mini);
+  return { ...res, bytes_mediana: r.mediana.size, bytes_mini: r.mini.size, ancho: r.ancho, alto: r.alto };
 }
 
 export function quitarFotoProducto(producto) {

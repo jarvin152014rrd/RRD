@@ -216,9 +216,11 @@ en **Target roles** elija **authenticated**; copie el nombre y la definición EX
 | `fotos_productos_leer` | SELECT | `bucket_id = 'fotos-productos' AND split_part(name, '/', 1) = ANY (ARRAY(SELECT public.empresas_fotos_productos('leer')))` |
 | `fotos_productos_subir` | INSERT | `bucket_id = 'fotos-productos' AND split_part(name, '/', 1) = ANY (ARRAY(SELECT public.empresas_fotos_productos('subir'))) AND public.ruta_foto_producto_valida(name)` |
 | `fotos_productos_cambiar` | UPDATE | `bucket_id = 'fotos-productos' AND split_part(name, '/', 1) = ANY (ARRAY(SELECT public.empresas_fotos_productos('subir'))) AND public.ruta_foto_producto_valida(name)` |
-| `fotos_productos_borrar` | DELETE | `bucket_id = 'fotos-productos' AND split_part(name, '/', 1) = ANY (ARRAY(SELECT public.empresas_fotos_productos('borrar')))` |
+| `fotos_productos_borrar` | DELETE | `bucket_id = 'fotos-productos' AND split_part(name, '/', 1) = ANY (ARRAY(SELECT public.empresas_fotos_productos('borrar'))) AND NOT public.foto_producto_en_uso(name)` |
 
-(Si el panel agrega letras al final del nombre, como `fotos_productos_leer 1abc_0`, está bien.)
+(Si el panel agrega letras al final del nombre, como `fotos_productos_leer 1abc_0`, está bien. La revisión de
+**LISTO** mira el nombre, la operación y que la definición sea esta: si una quedó distinta dice "FALTA: crear (o
+corregir) ...": bórrela y créela otra vez copiando la definición completa.)
 
 **C. Comprobar:** pegue otra vez `dist/verificar_instalacion.sql` > **Run**: **fotos_productos** debe decir **LISTO**.
 En la app, el dueño ve en Ajustes > Mi negocio un aviso rojo si todavía falta algo.
