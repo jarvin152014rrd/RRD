@@ -11,6 +11,8 @@
 #    en /opt/pw-browsers; no descarga nada).
 # 3b. Corre app-pruebas/probar_compras_dinero.cjs: Compras y Dinero (app 0.7.0), con
 #    la misma base y el mismo servidor; después app-pruebas/probar_reportes.cjs (app 0.8.0).
+# 3d. Corre app-pruebas/probar_fotos.cjs: fotos de productos (app 0.11.0) con el Storage mínimo del
+#    servidor (al final: enciende las fotos y sube una).
 # 4. Corre app-pruebas/probar_funciones.mjs: las Edge Functions reales de
 #    supabase/functions/ contra el emulador (con una llave de servicio de
 #    prueba) y la app de armar_app.sh con sus cabeceras de Netlify.
@@ -34,6 +36,7 @@ SERVIDOR_PID=""
 terminar() {
   [ -n "$SERVIDOR_PID" ] && kill "$SERVIDOR_PID" 2>/dev/null
   dropdb --if-exists "$BASE_DEMO" >/dev/null 2>&1
+  [ -n "${ALMACEN:-}" ] && rm -rf "$ALMACEN"
   local_apagar
 }
 trap terminar EXIT
@@ -42,6 +45,7 @@ SOLO_PREPARAR=1 bash "$RAIZ/herramientas/demo_app.sh" || { echo "FALLA: no se pu
 
 # SERVICE_KEY: solo para probar las Edge Functions reales (probar_funciones.mjs).
 export SERVICE_KEY="prueba-servicio-$RANDOM$RANDOM"
+export ALMACEN="$(mktemp -d)"   # archivos del Storage de la demo (se borran al terminar)
 BASE="$BASE_DEMO" PUERTO="$PUERTO_PRUEBA" REVISAR_SESION_SEGUNDOS=2 node "$RAIZ/herramientas/servidor_app.js" \
   > "$CAPTURAS/servidor.log" 2>&1 &
 SERVIDOR_PID=$!
@@ -64,4 +68,8 @@ echo
 #    para Netlify (armar_app.sh) con sus cabeceras (CSP) en Chromium.
 URL_APP="http://127.0.0.1:$PUERTO_PRUEBA" node "$RAIZ/app-pruebas/probar_funciones.mjs" 2> >(grep -v ExperimentalWarning >&2)
 codigo_funciones=$?
-[ "$codigo_app" = "0" ] && [ "$codigo_dinero" = "0" ] && [ "$codigo_reportes" = "0" ] && [ "$codigo_funciones" = "0" ]
+echo
+# 5. Fotos de productos (app 0.11.0): al final, porque enciende las fotos y sube archivos.
+URL_APP="http://127.0.0.1:$PUERTO_PRUEBA" node "$RAIZ/app-pruebas/probar_fotos.cjs"
+codigo_fotos=$?
+[ "$codigo_app" = "0" ] && [ "$codigo_dinero" = "0" ] && [ "$codigo_reportes" = "0" ] && [ "$codigo_funciones" = "0" ] && [ "$codigo_fotos" = "0" ]

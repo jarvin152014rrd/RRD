@@ -596,3 +596,26 @@ a.fila-icono:hover .fila-icono-titulo { text-decoration: underline; }
 }
 #cierre-detalle .titulo-chico, .tarjeta-interna .titulo-chico { margin-top: 14px; }
 #cierre-detalle .cifras { margin: 8px 0; }
+
+/* ---------------- Fotos de productos (app 0.11.0) ----------------
+   La burbuja del producto muestra la miniatura encima del ícono; si no hay foto (o no cargó), queda el ícono. */
+.burbuja-foto { position: relative; overflow: hidden; }
+.burbuja-foto .foto-producto { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; border-radius: inherit;
+  background: var(--color-tarjeta); opacity: 0; }
+.burbuja-foto.con-foto .foto-producto { opacity: 1; }
+.burbuja-foto.con-foto .icono { visibility: hidden; }
+.resultado-texto { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.linea-cabeza { display: flex; align-items: center; gap: 12px; min-width: 0; }
+.linea-cabeza .linea-nombre { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.producto-con-foto { display: inline-flex; align-items: center; gap: 10px; min-width: 0; }
+.seccion-foto { display: flex; flex-direction: column; gap: 10px; margin: 8px 0 16px; }
+.foto-ficha { margin: 0; width: 100%; max-width: 320px; aspect-ratio: 1 / 1; border-radius: 12px; overflow: hidden;
+  background: var(--color-neutro-fondo); display: flex; align-items: center; justify-content: center; }
+.foto-ficha-img { width: 100%; height: 100%; object-fit: contain; display: block; opacity: 0; }
+.foto-ficha.con-foto .foto-ficha-img { opacity: 1; }
+.foto-ficha figcaption { padding: 12px; text-align: center; }
+.archivo-oculto { position: absolute; width: 1px; height: 1px; opacity: 0; overflow: hidden; pointer-events: none; }
+@media print {
+  /* Lo impreso (comprobantes y reportes) nunca lleva fotos. */
+  .foto-producto, .foto-ficha, .seccion-foto { display: none !important; }
+}

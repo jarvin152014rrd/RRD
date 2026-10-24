@@ -5,10 +5,13 @@ import { empresaId, puede } from '../sesion.js';
 import { dinero, cantidad } from '../formato.js';
 import { h, campo, titulo, tabla, chipEstado, chip, estadoVacio } from '../ui.js';
 import { hayEnMenu } from '../menu.js';
-import { filtrar } from '../datos.js';
+import { filtrar, productos } from '../datos.js';
+import { fotosActivas, miniatura, porProducto } from '../fotos.js';
 
 export async function mostrar(vista, ctx) {
-  const filas = await leer('v_existencia', { empresa_id: empresaId() }, { orden: 'nombre.asc', limite: 1000 });
+  const [filas, fotos] = await Promise.all([leer('v_existencia', { empresa_id: empresaId() }, { orden: 'nombre.asc', limite: 1000 }),
+    // Fotos encendidas (app 0.11.0): la miniatura sale de la lista de productos.
+    fotosActivas() ? productos().then(porProducto).catch(() => new Map()) : new Map()]);
   if (!ctx.sigueVigente()) return;
   const costos = puede('inventario.costos');
   const bodegas = [...new Map(filas.map((f) => [f.bodega_id, `${f.bodega_codigo} · ${f.bodega_nombre}`])).entries()];
@@ -27,7 +30,9 @@ export async function mostrar(vista, ctx) {
       .concat(costos ? [{ titulo: 'Costo promedio', num: true }, { titulo: 'Valor', num: true }] : []);
     zona.replaceChildren(vistas.length ? tabla({ columnas, filaProps: (i) => ({ dataset: { producto: vistas[i].producto_id } }),
       filas: vistas.map((f) => [
-        h('span', {}, h('strong', {}, f.nombre), h('span', { class: 'detalle' }, ` ${f.codigo}`)),
+        fotosActivas() ? h('span', { class: 'producto-con-foto' }, miniatura(fotos.get(f.producto_id) || null, { props: { class: 'burbuja-chica' } }),
+          h('span', {}, h('strong', {}, f.nombre), h('span', { class: 'detalle' }, ` ${f.codigo}`)))
+          : h('span', {}, h('strong', {}, f.nombre), h('span', { class: 'detalle' }, ` ${f.codigo}`)),
         f.bodega_codigo,
         h('span', {}, `${cantidad(f.cantidad)} ${f.unidad || ''}`, f.bajo_minimo ? [' ', chipEstado('bajo_minimo', 'Bajo el mínimo')] : null),
         cantidad(f.stock_minimo || 0),

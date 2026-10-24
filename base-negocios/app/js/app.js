@@ -8,6 +8,7 @@ import { h, icono, chip, cajaError, limpiarAvisos } from './ui.js';
 import { vigilarImpresion } from './imprimible.js';
 import { olvidarDatos, reiniciarTodo } from './datos.js';
 import { comaInvalida, MENSAJE_COMA } from './formato.js';
+import { olvidarFotos, prepararFotos } from './fotos.js';
 
 const raiz = document.getElementById('app');
 const bandaSinConexion = document.getElementById('sin-conexion');
@@ -63,6 +64,7 @@ async function salir(texto = 'Cerró su sesión.', tipo = 'ok') {
   olvidarCatalogo();
   reiniciarTodo(); // filtros de las pantallas (fechas, proveedor, banco...) vuelven a los de siempre
   olvidarDatos(); // listas en memoria (productos, cuentas, alcance...): el próximo usuario no ve las del anterior
+  await olvidarFotos(); // fotos de productos en memoria y en la caché del navegador
   await api.salir();
   if (location.hash) history.replaceState(null, '', location.pathname);
   mostrarEntrar({ tipo, texto });
@@ -106,6 +108,7 @@ function mostrarApp() {
   zonas = { pestanas, subpestanas, contenido, barra, campana };
   numeroPendientes = 0;
   cargarMarca(); // nombre comercial, logo y colores (si no hay, quedan los del tema)
+  prepararFotos(); // borra la caché de fotos de OTRO negocio que haya usado este equipo
   contarPendientes();
   vigilarSesion((motivo) => forzarSalida(motivo));
   window.addEventListener('hashchange', alCambiarRuta);

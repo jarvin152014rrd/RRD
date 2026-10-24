@@ -1,4 +1,10 @@
-# Pendientes de la app (0.10.1)
+# Pendientes de la app (0.11.0)
+
+- HECHO (0.11.0, núcleo 0.17.0): fotos de productos livianas con interruptor (Productos, Vender, Inicio e Inventario).
+  Falta: probarlas contra un Supabase REAL (subir, bajar con token, "ya existe" al repetir, CORS de Storage desde
+  Netlify); la columna "tiene foto" en el Excel (no se hizo); fotos en Compras, Devoluciones y Cotizaciones (no se
+  pidieron). La miniatura de lo más vendido y de Existencias sale de la lista de productos activos (hasta 1,000).
+  Sin internet se ven las fotos ya vistas en ESE equipo; la primera vez necesitan internet.
 
 - HECHO (0.8.0): comas en impuestos, topes, mínimo, traslados y conteo. Quedan los campos `type=number`
   (arqueo por billetes, devoluciones, plazos), que el navegador ya no deja escribir con coma.
@@ -70,7 +76,7 @@
 - HECHO (núcleo 0.16.0): `donde_esta_mi_dinero` ya trae solo sus cuentas al limitado (la app conserva su filtro).
 - Inicio: a un usuario restringido por sucursal no se le muestra la gráfica de 7 días (`v_ventas_por_dia` es de toda
   la empresa).
-- Fotos de productos: la burbuja de "Lo más vendido" ya está lista para la miniatura.
+- HECHO (0.11.0): la burbuja de "Lo más vendido" muestra la miniatura de la foto.
 - Fotos de comprobantes: se suben a Supabase Storage solo con `bucketComprobantes` en config.js (no probado
   contra Supabase real); en la demo no hay Storage y se guarda solo el nombre de la foto en la descripción.
 - HECHO (0.10.0, núcleo 0.16.0): cambio de producto en Devoluciones (la diferencia se cobra, o se devuelve / queda

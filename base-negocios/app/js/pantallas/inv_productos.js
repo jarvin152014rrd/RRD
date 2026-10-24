@@ -2,12 +2,15 @@
 // de barras, nombre, categoría, unidad, impuesto, precio, ¿incluye ISV?, mínimo, campos extra),
 // cambiar el precio con motivo (queda en el historial: producto_precio) y activar o desactivar.
 // Llama crear_producto / editar_producto / cambiar_precio_producto. El servidor revisa todo.
+// App 0.11.0: foto del producto (si la empresa tiene fotos encendidas): miniatura en la lista; en la ficha, la foto
+// y (con productos.editar) tomar / elegir / quitar foto. La app la reduce antes de subirla (js/fotos.js).
 import { rpc, leer, escribir } from '../api.js';
 import { empresaId, puede, tieneModulo } from '../sesion.js';
 import { dinero, fechaHora, aCentavos, paraCampo, cantidad, aNumero, comaInvalida, MENSAJE_COMA } from '../formato.js';
-import { h, icono, aviso, errorSimple, campo, conBoton, pedirMotivo, confirmar, titulo, filaIcono, burbuja, chipEstado, monto, estadoVacio } from '../ui.js';
+import { h, icono, aviso, errorSimple, campo, conBoton, pedirMotivo, confirmar, titulo, filaIcono, chipEstado, monto, estadoVacio } from '../ui.js';
 import { hayEnMenu } from '../menu.js';
 import { filtrar, olvidarDatos } from '../datos.js';
+import { fotosActivas, miniatura, fotoGrande, subirFotoProducto, quitarFotoProducto, revisarArchivo } from '../fotos.js';
 
 const E = () => empresaId();
 
@@ -31,8 +34,8 @@ export async function mostrar(vista, ctx) {
   const pintar = () => {
     const vistos = filtrar(lista.filter((p) => verInactivos.checked || p.activo), buscar.value, ['nombre', 'codigo', 'codigo_barras', 'categoria']);
     zona.replaceChildren(...(vistos.length ? vistos.slice(0, 200).map((p) => filaIcono({
-      // Burbuja lista para la foto del producto (más adelante); por ahora, el ícono.
-      burbuja: burbuja(p.tipo === 'servicio' ? 'servicio' : 'etiqueta', p.activo ? 'neutro' : 'neutro', { class: 'burbuja-foto' }),
+      // Miniatura de la foto (fotos encendidas y con foto); si no, el ícono.
+      burbuja: miniatura(p, { icono: p.tipo === 'servicio' ? 'servicio' : 'etiqueta' }),
       titulo: [h('strong', {}, p.nombre), !p.activo ? [' ', chipEstado('inactivo')] : null],
       detalle: [p.codigo, p.categoria, p.tipo === 'servicio' ? 'Servicio' : p.unidad].filter(Boolean).join(' · '),
       derecha: monto(dinero(p.precio_con_isv_centavos)),
@@ -76,6 +79,7 @@ async function ficha(vista, ctx, id) {
     h('section', { class: 'tarjeta', 'aria-labelledby': 't-pficha' },
       h('div', { class: 'titulo-con-total' }, titulo('h1', p.tipo === 'servicio' ? 'servicio' : 'etiqueta', p.nombre, { id: 't-pficha' }),
         chipEstado(p.activo ? 'activo' : 'inactivo')),
+      seccionFoto(vista, ctx, p),
       dato('Código', p.codigo), dato('Código de barras', p.codigo_barras), dato('Tipo', p.tipo === 'servicio' ? 'Servicio' : 'Bien'),
       dato('Categoría', p.categoria), dato('Unidad', p.unidad), dato('Impuesto', p.impuesto || p.tipo_impuesto),
       h('div', { class: 'fila' }, h('span', {}, 'Precio'), h('span', { class: 'monto', dataset: { dato: 'precio' } },
@@ -96,6 +100,55 @@ async function ficha(vista, ctx, id) {
         h('span', {}, `${x.precio_anterior_centavos === null ? 'Precio inicial' : dinero(x.precio_anterior_centavos) + ' → '}${dinero(x.precio_nuevo_centavos)}`,
           h('span', { class: 'detalle' }, `${fechaHora(x.cambiado_en)}${x.motivo ? ' · ' + x.motivo : ''}`)))))
         : estadoVacio({ icono: 'reloj', chico: true, texto: 'Sin cambios de precio.' })));
+}
+
+// Foto del producto en la ficha (solo con fotos encendidas). Tomar con la cámara o elegir de la galería: la app
+// la reduce (unos 600 px y una miniatura de 120 px) y la sube; el núcleo guarda la ruta con bitácora.
+function seccionFoto(vista, ctx, p) {
+  if (!fotosActivas()) return null;
+  const editar = puede('productos.editar');
+  const zonaError = h('div', { 'aria-live': 'assertive' });
+  const estado = h('p', { class: 'ayuda', 'aria-live': 'polite', id: 'foto-estado' });
+  const foto = fotoGrande(p);
+  const cuerpo = [foto || h('p', { class: 'vacio', id: 'sin-foto' }, 'Este producto no tiene foto.')];
+  if (editar) {
+    const tomar = h('input', { type: 'file', accept: 'image/jpeg,image/png,image/webp', capture: 'environment', id: 'foto-camara', class: 'archivo-oculto', tabindex: '-1', 'aria-hidden': 'true' });
+    const elegir = h('input', { type: 'file', accept: 'image/jpeg,image/png,image/webp', id: 'foto-archivo', class: 'archivo-oculto', tabindex: '-1', 'aria-hidden': 'true' });
+    const bTomar = h('button', { type: 'button', class: 'boton boton-principal', id: 'foto-tomar', onclick: () => tomar.click() }, icono('foto'), p.foto_ruta ? 'Tomar otra foto' : 'Tomar foto');
+    const bElegir = h('button', { type: 'button', class: 'boton', id: 'foto-elegir', onclick: () => elegir.click() }, p.foto_ruta ? 'Cambiar por otra' : 'Elegir foto');
+    const bQuitar = p.foto_ruta ? h('button', { type: 'button', class: 'boton boton-peligro', id: 'foto-quitar' }, 'Quitar foto') : null;
+    const subir = async (input, boton) => {
+      const archivo = input.files && input.files[0];
+      input.value = '';
+      zonaError.replaceChildren();
+      if (!archivo) return;
+      const problema = revisarArchivo(archivo);
+      if (problema) { zonaError.append(errorSimple(problema)); return; }
+      if (navigator.onLine === false) { zonaError.append(errorSimple('Subir una foto necesita internet.', 'Conéctese y vuelva a intentar. No se cambió nada.')); return; }
+      estado.textContent = 'Preparando y subiendo la foto…';
+      const r = await conBoton(boton, zonaError, () => subirFotoProducto(p, archivo), 'Subiendo…');
+      estado.textContent = '';
+      if (!r) return;
+      olvidarDatos('productos');
+      aviso(`Foto guardada · ${p.nombre} (${Math.max(1, Math.round(r.bytes_mediana / 1024))} KB)`);
+      ficha(vista, ctx, p.producto_id);
+    };
+    tomar.addEventListener('change', () => subir(tomar, bTomar));
+    elegir.addEventListener('change', () => subir(elegir, bElegir));
+    if (bQuitar) {
+      bQuitar.addEventListener('click', async () => {
+        if (!await confirmar({ titulo: 'Quitar foto', texto: `¿Quitar la foto de ${p.nombre}? Queda anotado en el historial.`, textoBoton: 'Sí, quitar', peligro: true })) return;
+        const r = await conBoton(bQuitar, zonaError, () => quitarFotoProducto(p), 'Quitando…');
+        if (!r) return;
+        olvidarDatos('productos');
+        aviso(`Foto quitada · ${p.nombre}`);
+        ficha(vista, ctx, p.producto_id);
+      });
+    }
+    cuerpo.push(h('div', { class: 'botones' }, bTomar, bElegir, bQuitar), tomar, elegir,
+      h('p', { class: 'ayuda' }, 'La app achica la foto antes de subirla (queda liviana). Subir necesita internet.'), estado, zonaError);
+  }
+  return h('div', { class: 'seccion-foto', id: 'seccion-foto' }, ...cuerpo);
 }
 
 // Cambiar precio: pide el nuevo precio y el motivo (queda en el historial).

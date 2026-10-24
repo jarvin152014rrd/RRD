@@ -14,6 +14,11 @@
 //   DELETE /auth/v1/admin/users/<id>   borrar cuenta } no existen): para probar las Edge Functions
 //        reales de supabase/functions/ (app-pruebas/probar_funciones.mjs). Con SERVICE_KEY,
 //        /rest/v1 también acepta esa llave como service_role.
+//   POST   /storage/v1/object/<bucket>/<ruta>                 } Storage mínimo (app 0.11.0, fotos de
+//   GET    /storage/v1/object/authenticated/<bucket>/<ruta>   } productos): subir, bajar con el token y
+//   DELETE /storage/v1/object/<bucket>/<ruta>                 } borrar. La fila va a storage.objects COMO el
+//        usuario (las políticas de la migración 053 deciden, igual que en Supabase); el tamaño y el tipo se
+//        revisan contra storage.buckets; los bytes van a una carpeta (variable ALMACEN).
 //   POST /functions/v1/crear-usuario   imita la Edge Function (la real: supabase/functions/):
 //        crea el usuario de Auth (si no existe) y llama agregar_usuario_empresa COMO quien
 //        llama, en la MISMA transacción: si el núcleo lo rechaza (permiso, límite del contrato)
@@ -25,7 +30,8 @@
 // simulador de las pruebas. Los datos viajan a psql dentro de cadenas con
 // comillas $etiqueta$ aleatorias (nunca pegados al SQL sin comillas).
 //
-// Variables: SERVICE_KEY (solo pruebas; ver arriba), PUERTO (8080), BASE (demo_app), DEMO_CLAVE (clave de todos los
+// Variables: SERVICE_KEY (solo pruebas; ver arriba), PUERTO (8080), BASE (demo_app), ALMACEN (carpeta de los archivos
+// de Storage; defecto: <temporal>/demo-storage-<BASE>), DEMO_CLAVE (clave de todos los
 // usuarios de la demo), REVISAR_SESION_SEGUNDOS (60), PGHOST/PGPORT/PGUSER,
 // CONFIG_CLIENTE (opcional: clientes/<cliente>/app.json que arma el Armador; de ahí
 // salen las "palabras" del rubro y el rubro para /config.js, como en la app publicada).
@@ -36,6 +42,7 @@ const http = require('node:http');
 const fs = require('node:fs');
 const path = require('node:path');
 const crypto = require('node:crypto');
+const os = require('node:os');
 const { spawn } = require('node:child_process');
 
 const RAIZ_APP = path.resolve(__dirname, '..', 'app');
@@ -49,6 +56,7 @@ const REVISAR_SESION = Number(process.env.REVISAR_SESION_SEGUNDOS || 60);
 const DURACION_TOKEN = 3600; // segundos
 const SECRETO = crypto.randomBytes(32); // cambia en cada arranque: tokens viejos dejan de valer
 const refrescos = new Map(); // refresh_token -> { uid, sid, email }
+const ALMACEN = path.resolve(process.env.ALMACEN || path.join(os.tmpdir(), 'demo-storage-' + BASE));
 
 // Palabras del rubro del cliente (solo títulos del menú). Nada secreto viaja en este archivo.
 function configCliente() {
@@ -295,6 +303,94 @@ COMMIT;
   }
 }
 
+// ---------------------------------------------------------------------
+// Storage (lo mínimo de Supabase Storage). Ver arriba.
+// ---------------------------------------------------------------------
+function leerCrudo(req, limite) {
+  return new Promise((resolve, reject) => {
+    const partes = [];
+    let total = 0;
+    // Si pasa del límite se sigue leyendo (sin guardar) para poder contestar 413 como Supabase.
+    req.on('data', (d) => { total += d.length; if (total <= limite) partes.push(d); });
+    req.on('end', () => (total > limite ? reject(Object.assign(new Error('grande'), { grande: true })) : resolve(Buffer.concat(partes))));
+    req.on('error', reject);
+  });
+}
+function errorStorage(res, http, error, message) {
+  enviar(res, http, { statusCode: String(http), error, message });
+}
+// bucket y ruta de /storage/v1/object/[authenticated/]<bucket>/<ruta> (null si no son válidos)
+function rutaStorage(resto) {
+  const partes = resto.split('/').map((x) => { try { return decodeURIComponent(x); } catch { return ''; } });
+  const bucket = partes.shift();
+  if (!/^[a-z0-9][a-z0-9_-]{0,62}$/.test(bucket || '') || !partes.length) return null;
+  if (partes.some((x) => !/^[A-Za-z0-9._-]{1,120}$/.test(x) || x === '.' || x === '..')) return null;
+  const nombre = partes.join('/');
+  const archivo = path.resolve(ALMACEN, bucket, ...partes);
+  if (!archivo.startsWith(ALMACEN + path.sep)) return null;
+  return { bucket, nombre, archivo };
+}
+function guionStorage(claims, sql) {
+  const rol = ['authenticated', 'service_role'].includes(claims.role) ? claims.role : 'anon';
+  return `BEGIN;
+SELECT set_config('request.jwt.claims', ${lit(JSON.stringify(claims))}, true) \\g /dev/null
+SET LOCAL ROLE ${rol};
+${sql};
+COMMIT;
+`;
+}
+
+async function manejarStorage(req, res, url) {
+  if (req.headers.apikey !== ANON_KEY && !esServicio(req)) return errorStorage(res, 401, 'Unauthorized', 'Falta la clave anónima (apikey).');
+  const claims = claimsDe(req);
+  if (!claims) return errorStorage(res, 401, 'Unauthorized', 'JWT expired');
+  let resto = url.pathname.slice('/storage/v1/object/'.length);
+  const bajar = req.method === 'GET' && resto.startsWith('authenticated/');
+  if (bajar) resto = resto.slice('authenticated/'.length);
+  const r = rutaStorage(resto);
+  if (!r) return errorStorage(res, 400, 'InvalidKey', 'Ruta no válida');
+  const quien = claims.sub ? `${lit(claims.sub)}::uuid` : 'NULL';
+  try {
+    if (req.method === 'POST') {
+      const conf = await psql(`SELECT '@@R@@' || coalesce((SELECT json_build_object('limite', file_size_limit, 'tipos', allowed_mime_types)::text
+        FROM storage.buckets WHERE id = ${lit(r.bucket)}), 'null');`);
+      const b = JSON.parse(conf || 'null');
+      if (!b) return errorStorage(res, 404, 'Bucket not found', 'Bucket not found');
+      const tipo = String(req.headers['content-type'] || '').split(';')[0].trim().toLowerCase();
+      if (b.tipos && b.tipos.length && !b.tipos.includes(tipo)) return errorStorage(res, 415, 'invalid_mime_type', `mime type ${tipo} is not supported`);
+      let datos;
+      try { datos = await leerCrudo(req, (b.limite || 50 * 1024 * 1024)); } catch (e) {
+        if (e.grande) return errorStorage(res, 413, 'Payload too large', 'The object exceeded the maximum allowed size');
+        throw e;
+      }
+      const meta = JSON.stringify({ mimetype: tipo, size: datos.length });
+      const fila = await psql(guionStorage(claims, `INSERT INTO storage.objects (bucket_id, name, owner, metadata)
+        VALUES (${lit(r.bucket)}, ${lit(r.nombre)}, ${quien}, ${lit(meta)}::jsonb) RETURNING '@@R@@' || id::text`));
+      fs.mkdirSync(path.dirname(r.archivo), { recursive: true });
+      fs.writeFileSync(r.archivo, datos);
+      return enviar(res, 200, { Key: `${r.bucket}/${r.nombre}`, Id: fila });
+    }
+    if (bajar) {
+      const tipo = await psql(guionComo(claims, `SELECT metadata->>'mimetype' FROM storage.objects WHERE bucket_id = ${lit(r.bucket)} AND name = ${lit(r.nombre)}`));
+      if (!tipo || tipo === 'null' || !fs.existsSync(r.archivo)) return errorStorage(res, 404, 'not_found', 'Object not found');
+      res.writeHead(200, { 'Content-Type': tipo, 'Cache-Control': 'private, max-age=3600', 'X-Content-Type-Options': 'nosniff' });
+      return fs.createReadStream(r.archivo).pipe(res);
+    }
+    if (req.method === 'DELETE') {
+      const fila = await psql(guionStorage(claims, `DELETE FROM storage.objects WHERE bucket_id = ${lit(r.bucket)} AND name = ${lit(r.nombre)}
+        RETURNING '@@R@@' || id::text`));
+      if (!fila) return errorStorage(res, 404, 'not_found', 'Object not found');
+      fs.rmSync(r.archivo, { force: true });
+      return enviar(res, 200, { message: 'Successfully deleted' });
+    }
+    return errorStorage(res, 404, 'not_found', 'Ruta no emulada');
+  } catch (e) {
+    if (e.sqlstate === '42501') return errorStorage(res, 403, 'Unauthorized', 'new row violates row-level security policy');
+    if (e.sqlstate === '23505') return errorStorage(res, 409, 'Duplicate', 'The resource already exists');
+    return errorStorage(res, 400, 'Error', e.message);
+  }
+}
+
 function servirArchivo(req, res, url) {
   if (url.pathname === '/config.js') {
     return enviar(res, 200, `// Configuración de la DEMO local (generada por servidor_app.js)
@@ -325,6 +421,7 @@ const servidor = http.createServer(async (req, res) => {
     if (url.pathname.startsWith('/auth/v1/')) return await manejarAuth(req, res, url);
     if (url.pathname.startsWith('/rest/v1/')) return await manejarRest(req, res, url);
     if (url.pathname.startsWith('/functions/v1/')) return await manejarFuncion(req, res, url);
+    if (url.pathname.startsWith('/storage/v1/object/')) return await manejarStorage(req, res, url);
     if (req.method !== 'GET' && req.method !== 'HEAD') return enviar(res, 405, { message: 'Método no permitido' });
     servirArchivo(req, res, url);
   } catch (e) {

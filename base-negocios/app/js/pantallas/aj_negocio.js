@@ -1,8 +1,10 @@
 // Ajustes · Mi negocio: nombre comercial, logo y colores con vista previa y "Volver al anterior"
 // (marca_empresa / configurar_marca, permiso empresa.marca: dueño y admin). Los datos fiscales
 // (nombre legal y RTN) solo los ve el dueño y se cambian con el proveedor (ficha del cliente).
-import { rpc } from '../api.js';
-import { empresaId, puede } from '../sesion.js';
+// App 0.11.0: interruptor "Fotos de productos" (solo el dueño: activar_fotos_productos, con motivo y bitácora).
+import { rpc, rpcSiExiste } from '../api.js';
+import { empresaId, puede, cargarPerfil } from '../sesion.js';
+import { fotosActivas, nucleoConFotos } from '../fotos.js';
 import { h, icono, aviso, errorSimple, campo, pedirMotivo, titulo, burbuja, chip, mensaje } from '../ui.js';
 import { guardarMarcaLocal, aplicarMarca, textoSobre, iniciales } from '../marca.js';
 
@@ -95,6 +97,7 @@ export async function mostrar(vista, ctx) {
 
   vista.append(...[
     h('section', { class: 'tarjeta tarjeta-angosta', 'aria-labelledby': 't-neg' }, titulo('h1', 'tienda', 'Mi negocio', { id: 't-neg' }), form),
+    await seccionFotos(vista, ctx),
     puede('empresa.configurar') ? h('section', { class: 'tarjeta tarjeta-angosta', 'aria-labelledby': 't-fis' },
       titulo('h2', 'documento', 'Datos fiscales', { id: 't-fis' }),
       h('div', { class: 'fila' }, h('span', {}, 'Nombre legal'), h('span', {}, m.nombre)),
@@ -102,4 +105,38 @@ export async function mostrar(vista, ctx) {
       h('p', { class: 'ayuda' }, 'Salen en las facturas. Para cambiarlos hable con su proveedor (quedan en la ficha del negocio).')) : null].filter(Boolean));
   // Al salir de esta pantalla sin guardar, el programa sigue con la marca guardada.
   aplicarMarca(marca);
+}
+
+// Fotos de productos: encendidas o apagadas (apagadas por defecto). Con un núcleo sin fotos (antes de 0.17.0) no sale.
+async function seccionFotos(vista, ctx) {
+  if (!puede('empresa.configurar') || !nucleoConFotos()) return null;
+  const activas = fotosActivas();
+  const interruptor = h('input', { type: 'checkbox', role: 'switch', id: 'fotos-interruptor', checked: activas ? true : null,
+    'aria-describedby': 'fotos-ayuda' });
+  const zona = h('div', { 'aria-live': 'polite' });
+  // Encendidas: ¿quedó listo Supabase Storage (bucket y políticas)? Si no, se avisa qué falta.
+  if (activas) {
+    const est = await rpcSiExiste('estado_fotos_storage', {}).catch(() => null);
+    if (est && est.listo === false) {
+      zona.append(mensaje('error', 'Falta preparar el lugar de las fotos en Supabase.', `${est.texto} Pídaselo a su proveedor.`, { dataset: { info: 'storage-falta' } }));
+    }
+  }
+  interruptor.addEventListener('change', async () => {
+    const quiere = interruptor.checked;
+    interruptor.checked = !quiere; // hasta que se confirme
+    const ok = await pedirMotivo({ titulo: quiere ? 'Encender fotos de productos' : 'Apagar fotos de productos',
+      textoBoton: quiere ? 'Encender' : 'Apagar',
+      explicacion: quiere ? 'Se podrán poner fotos livianas a los productos y se verán en Productos, Vender, Inicio e Inventario.'
+        : 'No se verá ninguna foto. Las fotos guardadas no se borran: vuelven si las enciende otra vez.',
+      accion: (motivo) => rpc('activar_fotos_productos', { p_empresa_id: empresaId(), p_activo: quiere, p_motivo: motivo }) });
+    if (!ok) return;
+    await cargarPerfil();
+    aviso(quiere ? 'Fotos de productos encendidas' : 'Fotos de productos apagadas');
+    vista.replaceChildren(); await mostrar(vista, ctx);
+  });
+  return h('section', { class: 'tarjeta tarjeta-angosta', 'aria-labelledby': 't-fotos', id: 'tarjeta-fotos' },
+    titulo('h2', 'foto', 'Fotos de productos', { id: 't-fotos' }),
+    h('label', { class: 'opcion-check' }, interruptor, ' Usar fotos de productos ', chip(activas ? 'Encendidas' : 'Apagadas', activas ? 'verde' : 'neutro', { dataset: { dato: 'fotos-estado' } })),
+    h('p', { class: 'ayuda', id: 'fotos-ayuda' }, 'Fotos livianas (la app las achica antes de subirlas) en Productos, Vender, Inicio e Inventario. No salen en lo impreso ni en el Excel. Subir una foto necesita internet.'),
+    zona);
 }

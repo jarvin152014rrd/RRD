@@ -12,6 +12,8 @@ import { h, icono, chip, burbuja, cajaError, tarjetaCifra, botonAccion, graficaB
 import { MENU, hayEnMenu } from '../menu.js';
 import { tarjetaAlerta, leerAlertas } from './alertas.js';
 import { pendientes, listaAprobaciones } from './aprobaciones.js';
+import { fotosActivas, miniatura, porProducto } from '../fotos.js';
+import { productos } from '../datos.js';
 
 const LIMITE_LINEAS = 1000; // líneas de venta que se leen para "lo más vendido"
 
@@ -149,9 +151,11 @@ function vendidos(n) {
 // servidor (mas_vendido), ya restadas las devoluciones y solo de sus sucursales si el usuario es limitado. Núcleo
 // anterior: se suman aquí las últimas líneas de venta (sin restar devoluciones).
 async function leerMasVendido(e, hoy) {
+  // Fotos encendidas: la lista de productos (en memoria un rato) da la miniatura de cada uno.
+  const fotos = fotosActivas() ? productos().then(porProducto).catch(() => new Map()) : Promise.resolve(new Map());
   const mv = await rpcSiExiste('mas_vendido', { p_empresa_id: e, p_desde: sumarDias(hoy, -6), p_hasta: hoy, p_limite: 5 });
-  if (mv) return { servidor: true, filas: mv.filas || [] };
-  return { servidor: false, lineas: await leer('v_venta_linea', { empresa_id: e, estado: 'emitida', fecha_contable: { gte: sumarDias(hoy, -7) } },
+  if (mv) return { servidor: true, filas: mv.filas || [], fotos: await fotos };
+  return { servidor: false, fotos: await fotos, lineas: await leer('v_venta_linea', { empresa_id: e, estado: 'emitida', fecha_contable: { gte: sumarDias(hoy, -7) } },
     { orden: 'fecha_contable.desc', limite: LIMITE_LINEAS }) };
 }
 
@@ -179,8 +183,8 @@ function masVendido(dato, hoy) {
     return tarjeta;
   }
   tarjeta.append(h('div', { class: 'lista-filas' }, top.map((x) => filaIcono({
-    // Burbuja lista para la miniatura de la foto (más adelante): por ahora, el ícono.
-    burbuja: burbuja(x.servicio ? 'servicio' : 'etiqueta', 'neutro', { class: 'burbuja-foto', dataset: { productoId: x.id } }),
+    // Miniatura de la foto (app 0.11.0) si las fotos están encendidas y el producto tiene; si no, el ícono.
+    burbuja: miniatura((dato.fotos && dato.fotos.get(x.id)) || null, { icono: x.servicio ? 'servicio' : 'etiqueta', props: { dataset: { productoId: x.id } } }),
     titulo: x.nombre, detalle: x.codigo,
     derecha: [h('span', { class: 'monto' }, dinero(x.total)), h('span', { class: 'suave' }, vendidos(Math.round(x.cantidad * 10000) / 10000))],
     props: { dataset: { productoTop: x.id } },

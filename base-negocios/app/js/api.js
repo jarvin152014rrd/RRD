@@ -108,15 +108,21 @@ export async function salir() {
   }
 }
 
-async function conToken(ruta, opciones, reintento = true) {
+// Pide con el token de la sesión (lo renueva si está por vencer o si el servidor dice 401). Devuelve la respuesta cruda.
+async function pedirConToken(ruta, opciones, reintento = true) {
   if (!sesion) throw new ErrorServidor('Debe iniciar sesión.', { clave: 'SIN_SESION' });
   if (sesion.expires_at - 30 < Date.now() / 1000) await renovar();
   const r = await pedir(ruta, { ...opciones, headers: { ...opciones.headers, apikey: CLAVE_ANON,
     Authorization: 'Bearer ' + sesion.access_token } });
   if (r.status === 401 && reintento) {
     await renovar();
-    return conToken(ruta, opciones, false);
+    return pedirConToken(ruta, opciones, false);
   }
+  return r;
+}
+
+async function conToken(ruta, opciones) {
+  const r = await pedirConToken(ruta, opciones);
   const texto = await r.text();
   let datos = null;
   try { datos = texto ? JSON.parse(texto) : null; } catch { datos = texto; }
@@ -213,6 +219,39 @@ export async function subirComprobante(empresa, carpeta, archivo) {
   await conToken(`/storage/v1/object/${encodeURIComponent(bucket)}/${ruta}`, {
     method: 'POST', headers: { 'Content-Type': archivo.type || 'application/octet-stream', 'x-upsert': 'true' }, body: datos });
   return { ruta, tipo: archivo.type || 'image/jpeg', sha256: huella };
+}
+
+// ---------------- Storage (app 0.11.0: fotos de productos) ----------------
+// El bucket es PRIVADO: todo va con el token del usuario y las políticas de la base deciden.
+const rutaStorage = (bucket, ruta) => `${encodeURIComponent(bucket)}/${String(ruta).split('/').map(encodeURIComponent).join('/')}`;
+async function errorStorage(r) {
+  const datos = await r.json().catch(() => ({}));
+  const codigo = String(datos.statusCode || r.status);
+  const texto = datos.message || datos.error || 'El servidor de archivos no pudo hacer la operación.';
+  return new ErrorServidor(texto, { http: Number(codigo) || r.status, clave: codigo === '403' || /row-level security|Unauthorized/i.test(texto) ? 'SIN_PERMISO' : null });
+}
+
+// Sube un archivo. Devuelve { creado: true } o { creado: false } si ese archivo ya estaba (mismo nombre = misma
+// huella = mismo contenido): no es un error.
+export async function subirArchivo(bucket, ruta, blob) {
+  const r = await pedirConToken('/storage/v1/object/' + rutaStorage(bucket, ruta), {
+    method: 'POST', headers: { 'Content-Type': blob.type || 'application/octet-stream', 'Cache-Control': 'max-age=31536000' }, body: blob });
+  if (r.ok) return { creado: true };
+  const err = await errorStorage(r);
+  if (err.http === 409 || /Duplicate|already exists/i.test(err.message)) return { creado: false };
+  throw err;
+}
+
+// Baja un archivo con el token (descarga autenticada). -> Blob
+export async function bajarArchivo(bucket, ruta) {
+  const r = await pedirConToken('/storage/v1/object/authenticated/' + rutaStorage(bucket, ruta), { method: 'GET', headers: {} });
+  if (!r.ok) throw await errorStorage(r);
+  return r.blob();
+}
+
+export async function borrarArchivo(bucket, ruta) {
+  const r = await pedirConToken('/storage/v1/object/' + rutaStorage(bucket, ruta), { method: 'DELETE', headers: {} });
+  if (!r.ok) throw await errorStorage(r);
 }
 
 export { config };

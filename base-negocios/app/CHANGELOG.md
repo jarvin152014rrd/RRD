@@ -1,5 +1,29 @@
 # Cambios de la app
 
+## app 0.11.0 (núcleo 0.17.0; también funciona con 0.16.0 y 0.15.0, sin fotos) — Fotos de productos livianas
+
+- **Interruptor** en Ajustes > Mi negocio > "Fotos de productos" (solo el dueño, con motivo; `activar_fotos_productos`).
+  Apagado (como viene): no se ve nada de fotos. Encendido sin Storage listo: el dueño ve un aviso de qué falta.
+- **Ficha del producto:** la foto (unos 600 px) y, con `productos.editar`: "Tomar foto" (cámara del celular), "Elegir
+  foto" y "Quitar foto". Antes de subir, la app **reduce la foto en el navegador** (canvas): mediana de 600 px y
+  miniatura de 120 px, en WEBP (o JPEG si el navegador no hace WEBP), buscando ~40 KB y ~8 KB (máximo 60 y 12 KB).
+  Rechaza lo que no es imagen, los SVG y lo que pesa más de 10 MB, antes de reducir. Sube a Supabase Storage (bucket
+  privado `fotos-productos`, `<empresa>/<producto>/<huella>.webp`) y el núcleo guarda la ruta
+  (`poner_foto_producto`, con `id_operacion`). Si guardar la ruta falla, borra lo que acaba de subir.
+- **Miniatura** (carga perezosa, `loading="lazy"` y se pide al acercarse a la vista) en Productos (lista), Vender
+  (buscador y líneas), Inicio (lo más vendido) e Inventario > Existencias. Sin foto: el ícono de siempre.
+- **Caché:** las fotos se bajan con el token (el bucket es privado) y se guardan en la caché del navegador
+  `fotos-<empresa>`: una foto ya vista no se vuelve a bajar y se ve sin internet. Al salir se borra; al entrar se
+  borran las de otro negocio. El service worker no toca `/storage/` ni nada con token, y al actualizarse solo borra
+  cascarones viejos. Sin internet: subir o quitar dice "necesita internet".
+- Sin innerHTML (imágenes con `blob:`; solo se muestran `image/webp` o `image/jpeg`). Lo impreso y el Excel no llevan fotos.
+- **Núcleo 0.16.0 o anterior:** `mi_perfil` no trae `fotos_productos` y la app oculta todo lo de fotos.
+- Pruebas: `app-pruebas/probar_fotos.cjs` (12: interruptor apagado y encendido, foto real de 3000 x 2000 reducida a
+  600 x 400 y 120 x 80 con su peso, rechazos, miniatura en las 4 pantallas y una sola descarga, vendedor sin botón y
+  403 del servidor, tipo y tamaño del bucket, sin internet, celular de 390 px, quitar y volver a poner, caché borrada
+  al salir, núcleo viejo). El servidor de la demo imita Storage (subir, bajar y borrar con las políticas de la base).
+  Cascarón `cascaron-0.11.0`.
+
 ## app 0.10.1 (núcleo 0.16.0; también funciona con 0.15.0) — Arreglos de la revisión
 
 - Devoluciones: el código del vale solo aparece si de verdad queda saldo; al cambiar de destino se cancela el cálculo

@@ -11,6 +11,7 @@ import { hayEnMenu } from '../menu.js';
 import { productos, clientes, miTurno, filtrar, olvidarDatos } from '../datos.js';
 import { vistaComprobante, nombreForma } from '../comprobante.js';
 import { abrirTurnoDialogo } from './caja_turno.js';
+import { fotosActivas, miniatura } from '../fotos.js';
 
 export async function mostrar(vista, ctx) {
   await armarCarrito(vista, ctx, { modo: 'venta' });
@@ -83,7 +84,9 @@ export async function armarCarrito(vista, ctx, { modo, alTerminar = null }) {
     const q = buscar.value.trim();
     resultados.replaceChildren(...(q ? filtrar(lista, q, ['nombre', 'codigo', 'codigo_barras']).slice(0, 8).map((p) =>
       h('button', { type: 'button', class: 'resultado-producto', role: 'listitem', onclick: () => agregar(p) },
-        h('span', {}, p.nombre, h('span', { class: 'detalle' }, [p.codigo, p.tipo === 'servicio' ? 'Servicio' : null, p.unidad].filter(Boolean).join(' · '))),
+        // Fotos encendidas (app 0.11.0): miniatura (o el ícono si no tiene foto).
+        fotosActivas() ? miniatura(p, { icono: p.tipo === 'servicio' ? 'servicio' : 'etiqueta', props: { class: 'burbuja-chica' } }) : null,
+        h('span', { class: 'resultado-texto' }, p.nombre, h('span', { class: 'detalle' }, [p.codigo, p.tipo === 'servicio' ? 'Servicio' : null, p.unidad].filter(Boolean).join(' · '))),
         h('span', { class: 'monto' }, dinero(p.precio_venta_centavos)))) : []));
     if (q && !resultados.children.length) resultados.append(h('p', { class: 'vacio' }, 'No hay productos con ese nombre o código.'));
   }
@@ -144,11 +147,13 @@ export async function armarCarrito(vista, ctx, { modo, alTerminar = null }) {
         step: p.permite_fracciones ? '0.001' : '1', inputmode: p.permite_fracciones ? 'decimal' : 'numeric', value: l.cantidad,
         'aria-label': `Cantidad de ${p.nombre}` });
       cant.addEventListener('change', () => { l.cantidad = cant.value; if (!l.elegida) l.promocionId = null; cambio(); });
-      const partes = [
-        h('div', { class: 'linea-nombre' }, h('strong', {}, p.nombre),
+      const nombreLinea = h('div', { class: 'linea-nombre' }, h('strong', {}, p.nombre),
           h('span', { class: 'detalle' }, [p.tipo === 'servicio' ? 'Servicio · no mueve inventario' : p.codigo,
             p.impuesto_clase === 'gravado' ? `${p.impuesto || p.tipo_impuesto} ${p.precio_incluye_isv ? 'incluido' : 'aparte'}` : 'Exento',
-            p.permite_fracciones ? `por ${p.unidad}, admite decimales` : null].filter(Boolean).join(' · '))),
+            p.permite_fracciones ? `por ${p.unidad}, admite decimales` : null].filter(Boolean).join(' · ')));
+      const partes = [
+        fotosActivas() ? h('div', { class: 'linea-cabeza' }, miniatura(p, { icono: p.tipo === 'servicio' ? 'servicio' : 'etiqueta', props: { class: 'burbuja-chica' } }), nombreLinea)
+          : nombreLinea,
         h('div', { class: 'linea-datos' },
           campo('Cantidad', cant),
           h('div', { class: 'campo' }, h('span', { class: 'etiqueta-campo' }, 'Precio'), h('span', { class: 'monto valor-campo' }, dinero(p.precio_venta_centavos))),

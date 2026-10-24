@@ -24,6 +24,8 @@ export function olvidarCatalogo() { catalogo = null; }
 // -> { mensaje, queHacer }
 export async function traducir(err) {
   if (!err) return { mensaje: 'Algo salió mal.', queHacer: 'Intente otra vez.' };
+  // Error armado en la app (ej. fotos: "pesa más de 10 MB", "necesita internet"): su texto ya es sencillo.
+  if (err.local) return { mensaje: String(err.message || 'Algo salió mal.'), queHacer: err.queHacer || '' };
   if (err.sinConexion) {
     return { mensaje: 'No hay conexión a internet.', queHacer: 'Revise su conexión y vuelva a intentar. No se guardó nada.' };
   }
