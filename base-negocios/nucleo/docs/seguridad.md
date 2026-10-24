@@ -29,6 +29,10 @@
 - **Usuario limitado a su sucursal (047, 052):** políticas RLS restrictivas `por_sucursal` en las tablas con
   sucursal, bodega o cuenta de dinero; desde 0.16.0 también líneas y pagos de compras, saldos iniciales de
   proveedor (solo sin restricción, `empresas_sin_restriccion()`) y la conciliación (`sucursales.md`).
+- **Fotos de productos (053):** bucket privado `fotos-productos` en Supabase Storage (solo WEBP/JPEG, 1 MB). Políticas
+  en `storage.objects`: leer = usuarios de esa empresa con fotos encendidas; subir/cambiar/borrar = `productos.editar`
+  en esa empresa (la primera carpeta de la ruta es el id de la empresa). Ayudantes `empresas_fotos_productos(accion)`
+  (una vez por consulta) y `ruta_foto_producto_valida`. Ver `productos.md`.
 - **Límite honesto:** quien tiene la llave `service_role` o la clave
   `postgres` puede leer todo; eso se regula por contrato y bitácora
   (PROCEDIMIENTOS P-04).

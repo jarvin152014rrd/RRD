@@ -192,6 +192,23 @@ function sql(consulta) {
     afirmar(await p.locator('#problemas .mensaje-error').count() === 0, 'el error no se quitó al corregir');
   });
 
+  await prueba('fotos de productos (núcleo 0.17.0): el interruptor del Armador las enciende con vista previa y queda en la ficha', async () => {
+    await p.goto(URL + '/#/editar/taller-prueba');
+    await p.waitForSelector('#opc-fotos');
+    afirmar(!(await p.isChecked('#opc-fotos')), 'las fotos ya estaban encendidas (deben venir apagadas)');
+    await p.click('#opc-fotos');
+    await p.click('#btn-ver-cambios');
+    await p.waitForSelector('#diferencias', { timeout: 30000 });
+    const d = await p.locator('#diferencias').innerText();
+    afirmar(/Fotos de productos: no -> sí/.test(d), 'la vista previa no muestra las fotos: ' + d);
+    await p.fill('#confirmar-cliente', 'taller-prueba');
+    await p.click('#btn-aplicar');
+    await p.waitForSelector('#resultado .mensaje-ok', { timeout: 30000 });
+    afirmar(sql("(SELECT fotos_productos FROM public.empresa WHERE nombre = 'Taller Prueba')") === 'true', 'no quedó encendido en la base');
+    const f = JSON.parse(fs.readFileSync(path.join(DIR_CLIENTES, 'taller-prueba', 'ficha.json'), 'utf8'));
+    afirmar(f.opciones && f.opciones.fotos_productos === true, 'la ficha no guardó opciones.fotos_productos');
+  });
+
   await prueba('lista de clientes: muestra el nuevo con su uso y la marca de 80 %', async () => {
     await p.goto(URL + '/#/clientes');
     await p.waitForSelector('#cliente-taller-prueba', { timeout: 30000 });

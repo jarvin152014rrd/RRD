@@ -231,6 +231,17 @@
             }
           }
         },
+        "opciones": {
+          "description": "Opciones del negocio (núcleo 0.17.0). Lo que no aparece no cambia.",
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "fotos_productos": {
+              "description": "Fotos livianas de productos (Supabase Storage). Apagado por defecto. El dueño también lo cambia en Ajustes > Mi negocio.",
+              "type": "boolean"
+            }
+          }
+        },
         "conexion": {
           "description": "Cadena de conexión SIN clave (postgresql://postgres@db.<ref>.supabase.co:5432/postgres). La clave nunca va aquí.",
           "type": [

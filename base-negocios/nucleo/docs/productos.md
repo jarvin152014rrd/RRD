@@ -60,3 +60,35 @@ Permisos por defecto: dueño y admin. Vendedor y cajero solo leen el catálogo.
 tabla de impuestos de la empresa (en Honduras ISV15, ISV18, EXENTO, EXONERADO; sin indicarlo, el
 predeterminado). Nuevo `"tipo": "bien" | "servicio"` y, en servicios, `"costo_estimado_centavos"`
 (lo ve solo quien ve costos). Un servicio no lleva inventario.
+
+## Fotos de productos (0.17.0, migración 053)
+
+Fotos livianas, con interruptor por empresa. **Apagado por defecto**: hasta que se enciende no se ve nada de fotos
+(la app no muestra nada y Storage no deja leer ni subir).
+
+- **Interruptor:** `empresa.fotos_productos`. Lo cambia el dueño con `activar_fotos_productos(empresa, true|false, motivo)`
+  (`empresa.configurar`, motivo y bitácora; en la app: Ajustes > Mi negocio) o el proveedor con la ficha
+  (`"opciones": {"fotos_productos": true}`; Armador o `aplicar_ficha`). `mi_perfil` lo devuelve en `empresa`.
+- **El producto guarda la RUTA, no la imagen:** `foto_ruta` (unos 600 px) y `foto_miniatura_ruta` (unos 120 px), las
+  dos `<empresa_id>/<producto_id>/<nombre>.webp|jpg` (el nombre: la huella del archivo). `v_producto` las devuelve.
+- **`poner_foto_producto(empresa, producto, {"ruta","miniatura"} | null, id_operacion)`** (`productos.editar`, módulo de
+  productos): poner o cambiar exige las fotos encendidas y rutas de ESTE producto (`FOTO_INVALIDA`, `FOTOS_APAGADAS`);
+  `null` quita la foto (se puede siempre). Reintento con el mismo `id_operacion` = misma respuesta (`duplicado`).
+  Cada cambio queda en `producto_foto` (foto nueva y la anterior; nunca se borra ni se edita) y en la bitácora del
+  producto con motivo ("Poner o cambiar la foto del producto" / "Quitar la foto del producto"). Los archivos viejos
+  NO se borran de Storage (el historial los nombra).
+- **Supabase Storage:** bucket PRIVADO `fotos-productos` (solo `image/webp` e `image/jpeg`, hasta 1 MB). Políticas
+  en `storage.objects` (con los ayudantes `empresas_fotos_productos(accion)` y `ruta_foto_producto_valida(ruta)`):
+
+| Política | Quién |
+|---|---|
+| `fotos_productos_leer` (SELECT) | usuarios de esa empresa (`mis_empresas`), con fotos encendidas |
+| `fotos_productos_subir` (INSERT) | `productos.editar` en esa empresa, fotos encendidas, ruta de un producto suyo |
+| `fotos_productos_cambiar` (UPDATE) | igual que subir |
+| `fotos_productos_borrar` (DELETE) | `productos.editar` en esa empresa |
+
+  Una empresa nunca ve ni sube en la carpeta de otra (la primera carpeta de la ruta es el id de la empresa).
+  La 053 crea bucket y políticas por SQL si puede; si no, no falla: `estado_fotos_storage()` dice qué falta
+  (`verificar_instalacion.sql` lo muestra en la columna `fotos_productos`) y `docs/SUPABASE.md` explica los clics.
+- **Lo impreso y el Excel no llevan fotos.** (La columna "tiene foto" en el Excel no se hizo: anotado en PENDIENTES.)
+- Prueba 139 (políticas, permisos, interruptor, poner/cambiar/quitar, bitácora) y 140 (actualizar 0.16.0 -> 0.17.0).

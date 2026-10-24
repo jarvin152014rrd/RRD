@@ -117,7 +117,7 @@ def q(t):
             return "$%s$%s$%s$" % (m, t, m)
 print("BEGIN;")
 print("SELECT public.crear_empresa_inicial(%s::jsonb) AS empresa_nueva \\gset" % q(json.dumps(n["crear"], ensure_ascii=False)))
-extra = {k: n["cambios"][k] for k in ("licencia", "limites") if k in n["cambios"]}
+extra = {k: n["cambios"][k] for k in ("licencia", "limites", "opciones") if k in n["cambios"]}
 if extra:
     print("SELECT (public.aplicar_ficha(:'empresa_nueva'::uuid, %s::jsonb, %s))->>'aplicado' AS ficha_aplicada \\gset"
           % (q(json.dumps(extra, ensure_ascii=False)), q("Ficha inicial del cliente " + (n.get("cliente") or ""))))

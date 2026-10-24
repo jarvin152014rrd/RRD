@@ -13,6 +13,7 @@ todos sin perder lo propio de nadie.
 | Días al futuro permitidos para fechas (0-31, defecto 3) | ficha (`dias_futuro_max`) | proveedor |
 | Módulos activos (contabilidad, ventas, inventario, compras, dinero, apartados, comisiones; fiscal_hn en `regimen_fiscal`) | ficha (`modulos` con true/false) y `aplicar_ficha.sh` (P-09) | proveedor |
 | Licencia y límites del contrato (usuarios, cajas, sucursales, bodegas) | ficha (`licencia`, `limites`) y `aplicar_ficha.sh` | proveedor |
+| Fotos de productos (sí/no, apagado por defecto; núcleo 0.17.0) | ficha (`opciones.fotos_productos`), Armador o app: Ajustes > Mi negocio (`activar_fotos_productos`) | proveedor o dueño |
 | Vendedor que cobra (sí/no) | `configurar_empresa` (`vendedor_cobra`); el perfil pequeño lo sugiere | dueño |
 | Colores y logo | ficha (`tema`) | proveedor |
 | Usuarios y su rol | app: `agregar_usuario_empresa` / `desactivar_usuario_empresa` | dueño (admin: solo cajero y vendedor) |

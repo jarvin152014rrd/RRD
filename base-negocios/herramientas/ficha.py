@@ -24,7 +24,8 @@
 # Formatos de ficha:
 #   2 (actual, clientes/<cliente>/ficha.json): "cliente", "paquete", "negocio",
 #     "perfil", "modulos" {nombre: true/false}, "regimen_fiscal", "licencia",
-#     "limites", "conexion" (sin clave), "dueno", "proveedor", "tema".
+#     "limites", "opciones" ({"fotos_productos": true|false}, núcleo 0.17.0),
+#     "conexion" (sin clave), "dueno", "proveedor", "tema".
 #   1 (de antes, personal/ficha.ejemplo.json): plana, "modulos" como lista.
 #     Se sigue aceptando para crear empresas.
 # =====================================================================
@@ -117,6 +118,8 @@ def normalizar(archivo):
             cambios["licencia"] = f["licencia"]
         if f.get("limites") is not None:
             cambios["limites"] = {k: f["limites"][k] for k in LIMITES if k in f["limites"]}
+        if f.get("opciones") is not None:      # 0.17.0: {"fotos_productos": true|false}
+            cambios["opciones"] = dict(f["opciones"])
         salida = {"formato": 2, "cliente": f.get("cliente"), "paquete": f.get("paquete"), "nombre": n.get("nombre"),
                   "empresa_id": n.get("empresa_id"), "conexion": f.get("conexion"), "crear": crear, "cambios": cambios,
                   "licencia": f.get("licencia"), "limites": f.get("limites")}
@@ -157,7 +160,7 @@ def primer_cliente(archivo, id_dueno="", id_proveedor="", ultima=0):
     prov_nombre = (crear.get("proveedor") or {}).get("nombre") or "Proveedor"
     crear.pop("dueno", None)
     crear.pop("proveedor", None)
-    extra = {k: n["cambios"][k] for k in ("licencia", "limites") if k in n["cambios"]}
+    extra = {k: n["cambios"][k] for k in ("licencia", "limites", "opciones") if k in n["cambios"]}
     cliente = n.get("cliente") or "cliente"
     motivo = "Ficha inicial del cliente " + cliente
     print(f"""-- =====================================================================
@@ -258,6 +261,12 @@ def vista_previa():
             if lims[k].get("aviso"):
                 linea += "   (" + lims[k]["aviso"] + ")"
         print(linea)
+    opc = v.get("opciones") or {}
+    hoy_opc = v.get("opciones_hoy") or {}
+    if "fotos_productos" in hoy_opc or "fotos_productos" in opc:
+        fp = opc.get("fotos_productos")
+        print("Fotos de productos: " + ("%s -> %s" % (si_no(fp.get("actual")), si_no(fp.get("nuevo"))) if fp
+                                        else "%s (sin cambio)" % si_no(hoy_opc.get("fotos_productos"))))
     errores = v.get("errores") or []
     for e in errores:
         print("  PROBLEMA: " + e)

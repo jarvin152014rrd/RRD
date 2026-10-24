@@ -91,6 +91,25 @@ END {tag_d};
 
 bloques = [bloque(a) for a in archivos]
 
+# Columna extra "fotos_productos" (0.17.0) en verificar y actualizar: el estado de Storage
+# (bucket y políticas). Se llama por query_to_xml para que, en una base sin la 053 (faltan
+# partes), la consulta no falle por una función que todavía no existe.
+COL_FOTOS = """,
+       CASE WHEN to_regprocedure('public.estado_fotos_storage()') IS NULL THEN 'no aplica'
+            ELSE (xpath('/row/t/text()', query_to_xml('SELECT public.estado_fotos_storage()->>''texto'' AS t', false, true, '')))[1]::text
+       END AS fotos_productos"""
+
+def version_de_migracion(n):
+    """Versión del núcleo que trajo la migración n (de CHANGELOG.md: "Migración nueva 0NN")."""
+    try:
+        texto = open(os.path.join(raiz, "CHANGELOG.md"), encoding="utf-8").read()
+    except OSError:
+        return None
+    for m in re.finditer(r"^## (\d+\.\d+\.\d+)[^\n]*\n(.*?)(?=^## |\Z)", texto, re.S | re.M):
+        if re.search(r"[Mm]igraci[oó]n(?:es)? nuevas? %03d\b" % n, m.group(2)):
+            return m.group(1)
+    return None
+
 # Partes: se juntan migraciones seguidas mientras quepan en MAX_KB.
 limite = max_kb * 1024 - 6000          # espacio para el encabezado y el final
 partes, actual, tam = [], [], 0
@@ -169,7 +188,7 @@ SELECT CASE WHEN count(*) = {total} AND max(numero) = {ultima}
             THEN 'TODO BIEN' ELSE 'FALTAN PARTES: corra las que faltan, en orden' END AS resultado,
        (SELECT version_nucleo FROM public.version_esquema) AS version,
        count(*) AS migraciones,
-       {total} AS migraciones_esperadas
+       {total} AS migraciones_esperadas{COL_FOTOS}
 FROM interno._migraciones;
 """)
 
@@ -208,7 +227,9 @@ if previa_inst >= 1 and nuevos:
         desde, hasta = parte[0][1], parte[-1][1]
         nombre = "actualizar_supabase_%s.sql" % version if cuantas_a == 1 else "actualizar_supabase_%s_parte%02d.sql" % (version, i)
         anterior = "actualizar_supabase_%s_parte%02d.sql" % (version, i - 1)
-        quien = ("la migración %03d (núcleo anterior a %s)" % (previa_inst, version)) if i == 1 else ("la parte %02d (%s)" % (i - 1, anterior))
+        v_ant = version_de_migracion(previa_inst)
+        quien = (("la migración %03d (núcleo %s)" % (previa_inst, v_ant)) if v_ant else ("la migración %03d (núcleo anterior a %s)" % (previa_inst, version))) \
+            if i == 1 else ("la parte %02d (%s)" % (i - 1, anterior))
         cabeza = f"""-- =====================================================================
 -- {nombre}  -  Actualizar el núcleo a {version}{"" if cuantas_a == 1 else ", parte %d de %d" % (i, cuantas_a)}
 -- Para una base que YA tiene el núcleo instalado hasta la migración {previa_inst:03d}.
@@ -252,7 +273,7 @@ END $revisar$;
             THEN 'ACTUALIZADO A {version}' ELSE 'ALGO FALTA: avise a su proveedor' END AS resultado,
        (SELECT version_nucleo FROM public.version_esquema) AS version,
        (SELECT count(*) FROM interno._migraciones) AS migraciones,
-       {total} AS migraciones_esperadas;
+       {total} AS migraciones_esperadas{COL_FOTOS};
 """
         else:
             final = f"""SELECT 'Parte {i} de {cuantas_a} lista' AS resultado,

@@ -60,3 +60,40 @@ GRANT USAGE ON SCHEMA public TO anon, authenticated, service_role;
 ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES    TO anon, authenticated, service_role;
 ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON SEQUENCES TO anon, authenticated, service_role;
 ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON FUNCTIONS TO anon, authenticated, service_role;
+
+-- ---------------------------------------------------------------------
+-- Storage (0.17.0, fotos de productos): lo mínimo de Supabase Storage.
+-- storage.buckets (con file_size_limit y allowed_mime_types) y
+-- storage.objects (una fila por archivo; los bytes NO van en la base: en
+-- Supabase van a S3 y en la demo, a una carpeta de servidor_app.js). RLS
+-- activado y sin políticas: las pone la migración 053. El API de Storage
+-- hace INSERT / SELECT / DELETE en storage.objects COMO el usuario
+-- (authenticated + JWT), así que las políticas deciden igual que en la nube.
+-- ---------------------------------------------------------------------
+CREATE SCHEMA IF NOT EXISTS storage;
+CREATE TABLE IF NOT EXISTS storage.buckets (
+  id                 text PRIMARY KEY,
+  name               text NOT NULL UNIQUE,
+  owner              uuid,
+  public             boolean DEFAULT false,
+  file_size_limit    bigint,
+  allowed_mime_types text[],
+  created_at         timestamptz DEFAULT now(),
+  updated_at         timestamptz DEFAULT now()
+);
+CREATE TABLE IF NOT EXISTS storage.objects (
+  id               uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  bucket_id        text REFERENCES storage.buckets(id),
+  name             text,
+  owner            uuid,
+  metadata         jsonb,
+  created_at       timestamptz DEFAULT now(),
+  updated_at       timestamptz DEFAULT now(),
+  last_accessed_at timestamptz DEFAULT now(),
+  UNIQUE (bucket_id, name)
+);
+ALTER TABLE storage.buckets ENABLE ROW LEVEL SECURITY;
+ALTER TABLE storage.objects ENABLE ROW LEVEL SECURITY;
+GRANT USAGE ON SCHEMA storage TO anon, authenticated, service_role;
+GRANT SELECT, INSERT, UPDATE, DELETE ON storage.objects TO anon, authenticated, service_role;
+GRANT SELECT ON storage.buckets TO anon, authenticated, service_role;

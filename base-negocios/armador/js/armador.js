@@ -108,6 +108,9 @@ function estadoInicial() {
     limites: { usuarios: 3, cajas: 1, sucursales: 1, bodegas: 1 },
     licencia: { vence_el: hoyMas(31), dias_gracia: 5 },
     palabras: {}, campos_orden: [], puesto: 'dueno', destino: 'demo', conexion: '', confirmacion: '', notas: '',
+    // Fotos de productos (núcleo 0.17.0). fotosEnFicha: solo se manda si la ficha ya lo traía o se tocó aquí
+    // (así una ficha vieja no apaga lo que el dueño encendió en la app).
+    fotos_productos: false, fotosEnFicha: false,
   };
 }
 
@@ -135,6 +138,7 @@ function desdeFicha(f, app) {
     palabras: { ...((app && app.palabras) || {}) }, campos_orden: (app && app.campos_orden) || [] });
   e.modulos = Object.fromEntries(ORDEN_MODULOS.map((m) => [m, Boolean((f.modulos || {})[m])]));
   e.modulos.contabilidad = true;
+  if (f.opciones && typeof f.opciones.fotos_productos === 'boolean') { e.fotos_productos = f.opciones.fotos_productos; e.fotosEnFicha = true; }
   const p = catalogo.plantillas.find((x) => x.nombre === n.rubro || x.id === (app && app.plantilla));
   if (p) { e.plantilla = p.id; e.respuestas = { ...p.respuestas }; }
   e.rubro = n.rubro || '';
@@ -149,6 +153,7 @@ function fichaDe(e) {
     licencia: { vence_el: e.licencia.vence_el, dias_gracia: Number(e.licencia.dias_gracia) },
     limites: e.limites, dueno: { correo: e.dueno_correo, nombre: e.dueno_nombre },
     tema: { color_principal: e.color_principal, color_acento: e.color_acento }, notas: e.notas || null,
+    opciones: e.fotosEnFicha ? { fotos_productos: Boolean(e.fotos_productos) } : undefined,
   };
 }
 
@@ -276,8 +281,18 @@ async function pantallaArmar(vista, editar) {
     const sel = (id, etiqueta, valor, opciones, alCambiar) => h('div', { class: 'campo' }, h('label', { for: id }, etiqueta),
       h('select', { id, onchange: (ev) => { alCambiar(ev.target.value); pintar(); } },
         opciones.map(([v, t]) => h('option', { value: v, selected: v === valor ? true : null }, t))));
+    const filaFotos = () => {
+      const input = h('input', { type: 'checkbox', role: 'switch', id: 'opc-fotos', checked: e.fotos_productos ? true : null,
+        'aria-describedby': 'opc-fotos-ayuda',
+        onchange: (ev) => { e.fotos_productos = ev.target.checked; e.fotosEnFicha = true; estado.textContent = ev.target.checked ? 'Sí' : 'No'; pintar(); } });
+      const estado = h('span', { class: 'estado-sino' }, e.fotos_productos ? 'Sí' : 'No');
+      return h('div', { class: 'interruptor', id: 'fila-fotos' },
+        h('label', { class: 'interruptor-texto', for: 'opc-fotos' }, h('strong', {}, 'Fotos de productos'),
+          h('small', { id: 'opc-fotos-ayuda' }, 'Fotos livianas en Productos, Vender e Inventario. Necesita Supabase Storage. El dueño también lo cambia en la app.')),
+        h('div', { class: 'fila' }, estado, h('span', { class: 'switch' }, input, h('span', {}))));
+    };
     armado.replaceChildren(
-      h('div', { class: 'interruptores' }, ORDEN_MODULOS.map(fila)),
+      h('div', { class: 'interruptores' }, ORDEN_MODULOS.map(fila), filaFotos()),
       h('div', { class: 'dos-columnas' },
         sel('regimen', 'Régimen fiscal', e.regimen_fiscal, [['ninguno', 'Sin CAI (comprobante interno)'], ['fiscal_hn', 'Facturas con CAI (Honduras)']], (v) => { e.regimen_fiscal = v; }),
         sel('perfil', 'Perfil (tamaño)', e.perfil, [['pequeno', 'Pequeño'], ['mediano', 'Mediano'], ['grande', 'Grande']], (v) => { e.perfil = v; }),
@@ -392,7 +407,7 @@ async function pantallaArmar(vista, editar) {
         diferencias.append(r.hay_cambios ? h('div', { class: 'formulario' },
           h('div', { class: 'campo' }, h('label', { for: 'confirmar-cliente' }, `Para aplicar escriba el identificador del cliente: ${e.cliente}`), confirmar),
           h('p', { class: 'ayuda' }, 'Nunca se borran datos: apagar un módulo solo impide operaciones nuevas.'),
-          h('div', { class: 'botones' }, aplicar)) : msg('info', 'No hay cambios en módulos, perfil, licencia ni límites. Las palabras del rubro se guardan al aplicar.'));
+          h('div', { class: 'botones' }, aplicar)) : msg('info', 'No hay cambios en módulos, perfil, licencia, límites ni fotos. Las palabras del rubro se guardan al aplicar.'));
       } catch (err) { resultado.replaceChildren(msg('error', err.message)); } finally { listo(); pintarProblemas(); }
     });
     const abrir = h('button', { type: 'button', class: 'boton', id: 'btn-abrir-app' }, 'Abrir la app del cliente');

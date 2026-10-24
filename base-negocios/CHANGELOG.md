@@ -4,6 +4,35 @@ Formato: versión (fecha) y lista de cambios. La versión vive en `VERSION_NUCLE
 y queda guardada en cada base al migrar (vista `version_esquema`).
 Números: MAYOR.MENOR.ARREGLO (ver `docs/CONVENCIONES.md`).
 
+## 0.17.0 (2026-10-24) — Fotos de productos livianas, con interruptor
+
+Migración nueva 053 (las 001-052 no se tocaron). 140 pruebas (nuevas 139 y 140; la 135 queda fija en 0.16.0). Todas
+pasan también con `probar.sh --paquete`. Para quien ya tiene 0.16.0 en Supabase: `dist/actualizar_supabase_0.17.0.sql`
+(una sola pegada, unos 37 KB; ver `docs/SUPABASE.md`, "Actualizar de 0.16.0 a 0.17.0"). Detalle: `nucleo/docs/productos.md`.
+
+- **Interruptor por empresa** `empresa.fotos_productos`, **apagado por defecto**: `activar_fotos_productos(empresa,
+  activo, motivo)` (solo el dueño, `empresa.configurar`, bitácora) y la ficha del cliente (`"opciones":
+  {"fotos_productos": true}` en `vista_previa_ficha` / `aplicar_ficha`; Armador, `ficha.py`, `nuevo_cliente.sh` y el
+  SQL del primer cliente). `mi_perfil` lo devuelve en `empresa` (reemplaza la de 032, misma firma).
+- **Ruta de la foto en el producto:** `producto.foto_ruta` y `foto_miniatura_ruta` (`<empresa>/<producto>/<nombre>.webp|jpg`,
+  revisado por CHECK); `v_producto` las devuelve al final. **`poner_foto_producto(empresa, producto, {ruta, miniatura} |
+  null, id_operacion)`** (`productos.editar`): poner o cambiar con fotos encendidas, quitar siempre; historial
+  `producto_foto` (foto anterior, nunca se borra ni edita), bitácora con motivo, reintento seguro. Errores nuevos
+  `FOTOS_APAGADAS` y `FOTO_INVALIDA`.
+- **Supabase Storage:** bucket privado `fotos-productos` (WEBP/JPEG, 1 MB) y 4 políticas en `storage.objects` (leer:
+  usuarios de la empresa; subir/cambiar/borrar: `productos.editar`; nunca otra empresa) con los ayudantes
+  `empresas_fotos_productos(accion)` (una vez por consulta) y `ruta_foto_producto_valida(ruta)`. Se crean por SQL si el
+  rol puede; si no, la migración NO falla y `estado_fotos_storage()` dice qué falta (clics en `docs/SUPABASE.md`).
+- **Paquete:** `verificar_instalacion.sql` y la actualización muestran la columna `fotos_productos` (LISTO o qué
+  falta); `FALTA_VERSION_ANTERIOR` nombra la versión ("la migración 052 (núcleo 0.16.0)", sacado de este CHANGELOG).
+- **Simuladores:** `simular_supabase.sql` y `mini_supabase.sql` traen lo mínimo de Storage (`storage.buckets` y
+  `storage.objects` con RLS; en el mini, de otro dueño). `herramientas/servidor_app.js` imita subir, bajar con token y
+  borrar (la fila va a `storage.objects` como el usuario; tamaño y tipo contra el bucket).
+- Pruebas: 139 (políticas A/B, vendedor sin `productos.editar`, fotos apagadas, rutas ajenas, poner/cambiar/quitar con
+  historial y bitácora, interruptor y ficha) y 140 (de 0.16.0 a 0.17.0 como en Supabase: dos veces sin daño, sin la
+  052 lo dice claro, un error a mitad no deja nada ni el bucket, bitácora íntegra; y un Supabase donde el rol no puede
+  crear el bucket ni las políticas: termina, dice qué falta y con los clics queda LISTO).
+
 ## 0.16.0 (2026-10-22) — Cada sucursal recibe solo lo suyo; totales en el servidor
 
 Migración nueva 052 (las 001-051 no se tocaron). 138 pruebas (nuevas 133 a 138). Todas pasan también con

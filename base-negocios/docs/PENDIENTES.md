@@ -1,10 +1,24 @@
-# Pendientes (núcleo 0.16.0, 138 pruebas OK; también con probar.sh --paquete)
+# Pendientes (núcleo 0.17.0, 140 pruebas OK; también con probar.sh --paquete)
 
 Estado: etapa 2 terminada. Las correcciones de la revisión de la etapa 2 están
 HECHAS en la migración 038 (núcleo 0.9.1) y las de la revisión de 0.9.1 en la
 migración 039 (núcleo 0.9.2), cada una con su prueba (falla contra la versión
 anterior y pasa con la nueva). Falta que el revisor las confirme antes de la
 etapa 3.
+
+## Fotos de productos (HECHO en 0.17.0, migración 053, pruebas 139-140; app 0.11.0)
+
+- HECHO: interruptor por empresa (apagado por defecto), ruta de la foto en el producto, `poner_foto_producto` con
+  historial y bitácora, bucket privado `fotos-productos` y sus 4 políticas (o los clics si Supabase no deja por SQL).
+- FALTA (dueño): pegar `dist/actualizar_supabase_0.17.0.sql` en su Supabase real y revisar que `fotos_productos` diga
+  LISTO. **NO PROBADO contra un Supabase real** (aquí no hay red a supabase.co): confirmar que el rol `postgres` del
+  SQL Editor puede insertar en `storage.buckets` y crear políticas en `storage.objects`; si no, quedan los clics de
+  `docs/SUPABASE.md` (la prueba 140 prueba ese camino). Confirmar también que el API de Storage contesta "ya existe"
+  (409 / "Duplicate") al subir la misma foto otra vez (la app lo trata como bien).
+- FALTA (menor): la columna informativa "tiene foto" en el Excel de productos (no se hizo: pedía reemplazar la hoja
+  completa de 046; el Excel sigue sin fotos). Borrar de Storage las fotos viejas que ya nadie usa (hoy se guardan
+  para que el historial no quede apuntando a nada; cada foto pesa ~50 KB).
+- FALTA: que el revisor revise 0.17.0.
 
 ## Pendientes del núcleo que anotó la app (HECHOS en 0.16.0, migración 052, pruebas 133-135)
 
@@ -53,7 +67,8 @@ etapa 3.
 - RIESGO: plan gratis sin respaldos descargables → respaldo manual semanal (P-03) con la cadena del Session
   pooler. Pausa por 7 días sin uso. Tiempo máximo de 8 s por consulta de la app (reportes grandes).
 - RIESGO: lecturas directas de la app (`/rest/v1/<vista>`) se cortan en 1000 filas sin aviso (`max_rows`).
-- Pendiente (menor): Storage para fotos de comprobantes (bucket y sus políticas) no está armado.
+- Pendiente (menor): Storage para fotos de comprobantes (bucket y sus políticas) no está armado. (El de fotos de
+  productos sí, en 0.17.0: se puede copiar el mismo patrón.)
 
 ## Etapa 3a (HECHA en 0.10.0, migraciones 040-042, pruebas 120-123)
 

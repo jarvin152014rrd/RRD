@@ -114,3 +114,50 @@ GRANT USAGE ON SCHEMA extensions TO anon, authenticated, service_role, supa_post
 ALTER DEFAULT PRIVILEGES FOR ROLE supa_postgres IN SCHEMA public GRANT ALL ON TABLES    TO anon, authenticated, service_role;
 ALTER DEFAULT PRIVILEGES FOR ROLE supa_postgres IN SCHEMA public GRANT ALL ON SEQUENCES TO anon, authenticated, service_role;
 ALTER DEFAULT PRIVILEGES FOR ROLE supa_postgres IN SCHEMA public GRANT ALL ON FUNCTIONS TO anon, authenticated, service_role;
+
+-- ---------------------------------------------------------------------
+-- storage (0.17.0): de supa_storage_admin, como supabase_storage_admin.
+-- En Supabase el rol postgres puede crear buckets (INSERT en storage.buckets)
+-- y políticas en storage.objects desde el SQL Editor; aquí se imita con
+-- permisos sobre buckets y siendo miembro del dueño de storage (sin ser
+-- superusuario). La prueba 139 también prueba una base donde NO puede
+-- (la migración no falla y estado_fotos_storage dice qué falta).
+-- ---------------------------------------------------------------------
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'supa_storage_admin') THEN
+    CREATE ROLE supa_storage_admin NOLOGIN NOSUPERUSER;
+  END IF;
+END $$;
+CREATE SCHEMA storage AUTHORIZATION supa_storage_admin;
+CREATE TABLE storage.buckets (
+  id                 text PRIMARY KEY,
+  name               text NOT NULL UNIQUE,
+  owner              uuid,
+  public             boolean DEFAULT false,
+  file_size_limit    bigint,
+  allowed_mime_types text[],
+  created_at         timestamptz DEFAULT now(),
+  updated_at         timestamptz DEFAULT now()
+);
+CREATE TABLE storage.objects (
+  id               uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  bucket_id        text REFERENCES storage.buckets(id),
+  name             text,
+  owner            uuid,
+  metadata         jsonb,
+  created_at       timestamptz DEFAULT now(),
+  updated_at       timestamptz DEFAULT now(),
+  last_accessed_at timestamptz DEFAULT now(),
+  UNIQUE (bucket_id, name)
+);
+ALTER TABLE storage.buckets OWNER TO supa_storage_admin;
+ALTER TABLE storage.objects OWNER TO supa_storage_admin;
+ALTER TABLE storage.buckets ENABLE ROW LEVEL SECURITY;
+ALTER TABLE storage.objects ENABLE ROW LEVEL SECURITY;
+GRANT USAGE ON SCHEMA storage TO anon, authenticated, service_role, supa_postgres;
+GRANT SELECT, INSERT, UPDATE, DELETE ON storage.objects TO anon, authenticated, service_role;
+GRANT SELECT ON storage.buckets TO anon, authenticated, service_role;
+GRANT SELECT, INSERT, UPDATE ON storage.buckets TO supa_postgres;
+GRANT ALL ON storage.objects TO supa_postgres;
+GRANT supa_storage_admin TO supa_postgres;

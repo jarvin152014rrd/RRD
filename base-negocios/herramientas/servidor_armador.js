@@ -254,6 +254,8 @@ function armarFicha(d, extra = {}) {
     if (v === null || v === '') ficha.limites[k] = null;
     else if (v !== undefined) ficha.limites[k] = Math.floor(Number(v));
   }
+  // Opciones (núcleo 0.17.0): solo si vienen (si no, la ficha no toca lo que el dueño eligió en la app).
+  if (f.opciones && typeof f.opciones.fotos_productos === 'boolean') ficha.opciones = { fotos_productos: f.opciones.fotos_productos };
   if (extra.logo) ficha.tema.logo = 'logo' + extra.logo;
   if (f.proveedor && f.proveedor.correo) ficha.proveedor = { correo: String(f.proveedor.correo).trim().toLowerCase(), nombre: 'Soporte' };
   return ficha;

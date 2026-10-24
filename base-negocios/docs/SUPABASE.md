@@ -3,7 +3,7 @@
 Guía paso a paso para el dueño. Hágala con calma, en una computadora, en orden.
 Tiempo: más o menos 1 hora la primera vez.
 
-**Qué va a tener al final:** la base de datos en Supabase (con el núcleo 0.16.0), la empresa
+**Qué va a tener al final:** la base de datos en Supabase (con el núcleo 0.17.0), la empresa
 creada con su usuario dueño, las 2 funciones de usuarios publicadas y la app en internet
 (Netlify), instalada en su celular.
 
@@ -22,8 +22,8 @@ En la carpeta `base-negocios`, abra una terminal y corra:
 bash herramientas/armar_instalacion.sh
 ```
 
-Debe decir `Listo: 14 partes del núcleo 0.16.0 en .../dist`. En la carpeta `dist/` quedan:
-`instalar_supabase_parte01.sql` … `parte14.sql`, `verificar_instalacion.sql`, `actualizar_supabase_0.16.0.sql`
+Debe decir `Listo: 14 partes del núcleo 0.17.0 en .../dist`. En la carpeta `dist/` quedan:
+`instalar_supabase_parte01.sql` … `parte14.sql`, `verificar_instalacion.sql`, `actualizar_supabase_0.17.0.sql`
 (solo para quien ya lo tenía instalado, ver más abajo) y `LEEME.txt`.
 (El número de partes puede cambiar con versiones nuevas; siga el que diga.)
 
@@ -79,7 +79,7 @@ Si por error pega una parte dos veces, no pasa nada: lo ya instalado se salta.
 ## 6. Comprobar que quedó bien
 
 1. **SQL Editor** > **New query**, pegue `dist/verificar_instalacion.sql` y **Run**.
-2. Debe decir: **resultado = TODO BIEN**, **version = 0.16.0**, **migraciones = 52** (igual a
+2. Debe decir: **resultado = TODO BIEN**, **version = 0.17.0**, **migraciones = 53** (igual a
    "migraciones_esperadas"). Si dice "FALTAN PARTES", corra las que faltan en orden.
 
 ## 7. Crear el usuario dueño
@@ -159,7 +159,73 @@ Queda la carpeta `dist/app-<cliente>/`. Si por error pega la llave secreta, la h
 
 ---
 
-## Actualizar de 0.15.0 a 0.16.0 (si YA lo tenía instalado)
+## Actualizar de 0.16.0 a 0.17.0 (si YA lo tenía instalado) — fotos de productos
+
+Si su Supabase ya tiene la versión 0.16.0 (ya pegó `actualizar_supabase_0.16.0.sql` o instaló las 14 partes de
+0.16.0), **no** vuelva a pegar las partes. Solo hay que pegar **un archivo**. Tarda unos segundos y los datos de su
+negocio no se tocan. Las fotos quedan **apagadas**: nada cambia hasta que usted las encienda.
+
+1. **Haga un respaldo primero** (vea "Respaldos" más abajo). Es por si acaso.
+2. En la computadora del proyecto, en la carpeta `base-negocios`, abra una terminal y corra:
+   `bash herramientas/armar_instalacion.sh`
+   En la carpeta `dist/` aparece el archivo **`actualizar_supabase_0.17.0.sql`**.
+3. Entre a Supabase > **SQL Editor** > **New query** (revise que arriba a la derecha diga el rol **postgres**).
+4. Abra `actualizar_supabase_0.17.0.sql` con el Bloc de notas, seleccione todo (**Ctrl+A**), copie (**Ctrl+C**),
+   péguelo en el editor (**Ctrl+V**) y toque **Run**.
+5. Si Supabase pregunta por "operaciones destructivas", toque **Run this query** (es normal).
+6. Abajo debe salir: **resultado = ACTUALIZADO A 0.17.0**, **version = 0.17.0**, **migraciones = 53** y
+   **fotos_productos = LISTO**.
+   - Si en **fotos_productos** dice **FALTA: ...**, la actualización SÍ quedó hecha; solo falta preparar el lugar
+     de las fotos con unos clics: siga "Fotos de productos: crear el bucket y las políticas con clics" (abajo).
+7. Suba la app nueva a Netlify (paso 10 y 11). La app vieja sigue funcionando mientras tanto (no muestra fotos).
+8. Para usar fotos: en la app, **Ajustes > Mi negocio > Fotos de productos** > marque **Usar fotos de productos**
+   y escriba el motivo. (También se puede encender desde la ficha del cliente o el Armador.)
+
+Si sale un error en rojo, **no se cambió nada**:
+
+| Lo que sale | Qué hacer |
+|---|---|
+| `FALTA_VERSION_ANTERIOR ... 052 (núcleo 0.16.0)` | Su base no tiene la 0.16.0. Pegue primero `actualizar_supabase_0.16.0.sql` (de la versión anterior; pídalo a su proveedor) y después este. |
+| `FALTA_NUCLEO` | Esa base no tiene el sistema. Haga la instalación completa (paso 5), no la actualización. |
+| `PAQUETE_VIEJO` | Su base ya tiene algo más nuevo. No haga nada y avise a su proveedor. |
+| `MIGRACION_DISTINTA` | No siga. Avise a su proveedor. |
+| `ROL_EQUIVOCADO` | Arriba a la derecha elija el rol **postgres** y vuelva a correr. |
+
+Si la pega dos veces no pasa nada: la segunda vez dice igual **ACTUALIZADO A 0.17.0** sin cambiar nada.
+
+### Fotos de productos: crear el bucket y las políticas con clics (solo si dice FALTA)
+
+Normalmente el archivo de actualización (o la instalación) lo deja **LISTO** solo. Si `fotos_productos` dice
+**FALTA**, Supabase no dejó hacerlo por SQL; hágalo así (una sola vez):
+
+**A. El bucket (si dice "FALTA: crear el bucket")**
+1. Menú izquierdo **Storage** > **New bucket**.
+2. **Name:** `fotos-productos` (exacto, con guion).
+3. **Public bucket:** APAGADO (muy importante: las fotos son privadas).
+4. Encienda **Restrict file upload size** y ponga **1 MB**.
+5. Encienda **Restrict MIME types** (o "Allowed MIME types") y escriba: `image/webp, image/jpeg`
+6. Toque **Create bucket** (o **Save**).
+
+**B. Las 4 políticas (si dice "FALTA: crear las políticas ...")**
+En **Storage** > **Policies** (o en el bucket `fotos-productos` > **Policies**), en la sección **fotos-productos**
+toque **New policy** > **For full customization** (o "Create a policy from scratch"). Haga una por cada fila;
+en **Target roles** elija **authenticated**; copie el nombre y la definición EXACTOS; **Review** > **Save policy**.
+
+| Policy name | Allowed operation | Policy definition (copie todo) |
+|---|---|---|
+| `fotos_productos_leer` | SELECT | `bucket_id = 'fotos-productos' AND split_part(name, '/', 1) = ANY (ARRAY(SELECT public.empresas_fotos_productos('leer')))` |
+| `fotos_productos_subir` | INSERT | `bucket_id = 'fotos-productos' AND split_part(name, '/', 1) = ANY (ARRAY(SELECT public.empresas_fotos_productos('subir'))) AND public.ruta_foto_producto_valida(name)` |
+| `fotos_productos_cambiar` | UPDATE | `bucket_id = 'fotos-productos' AND split_part(name, '/', 1) = ANY (ARRAY(SELECT public.empresas_fotos_productos('subir'))) AND public.ruta_foto_producto_valida(name)` |
+| `fotos_productos_borrar` | DELETE | `bucket_id = 'fotos-productos' AND split_part(name, '/', 1) = ANY (ARRAY(SELECT public.empresas_fotos_productos('borrar')))` |
+
+(Si el panel agrega letras al final del nombre, como `fotos_productos_leer 1abc_0`, está bien.)
+
+**C. Comprobar:** pegue otra vez `dist/verificar_instalacion.sql` > **Run**: **fotos_productos** debe decir **LISTO**.
+En la app, el dueño ve en Ajustes > Mi negocio un aviso rojo si todavía falta algo.
+
+---
+
+## Actualizar de 0.15.0 a 0.16.0 (versión anterior)
 
 Si usted ya instaló el sistema antes (con las partes 01 a 13 y la versión 0.15.0), **no** vuelva a pegar las
 partes. Solo hay que pegar **un archivo**. Tarda unos segundos y los datos de su negocio no se tocan.
@@ -233,7 +299,7 @@ Otros límites del plan gratis: si **nadie usa** el proyecto por 7 días, Supaba
 
 - [ ] Contraseña de la base guardada en lugar seguro (no en el celular sin clave, no en chats).
 - [ ] "Allow new users to sign up" apagado (paso 4).
-- [ ] `verificar_instalacion.sql` dice **TODO BIEN**, versión **0.16.0**, **52** migraciones.
+- [ ] `verificar_instalacion.sql` dice **TODO BIEN**, versión **0.17.0**, **53** migraciones y **fotos_productos = LISTO**.
 - [ ] El dueño existe en Authentication > Users (confirmado).
 - [ ] La empresa salió con **Empresa creada** y la licencia con su fecha.
 - [ ] Edge Functions `crear-usuario` y `cerrar-sesion-remota` publicadas (Verify JWT encendido).
@@ -250,7 +316,7 @@ Otros límites del plan gratis: si **nadie usa** el proyecto por 7 días, Supaba
 Revisadas en la etapa 6 (núcleo 0.15.0). Se probó el paquete en un "mini Supabase" local
 (`bash herramientas/probar.sh --paquete`): rol dueño **sin superusuario** (como `postgres` en
 Supabase), esquema `auth` de otro dueño, `auth.uid()` con la definición de Supabase, pgcrypto en
-`extensions`, cada parte en **una sola petición** como el SQL Editor; las pruebas pasan encima (135 en 0.16.0).
+`extensions`, cada parte en **una sola petición** como el SQL Editor; las pruebas pasan encima (140 en 0.17.0).
 No se pudo probar con la imagen oficial `supabase/postgres` (Docker Hub respondió 429 y el espejo
 de AWS estaba bloqueado desde este entorno) ni contra un proyecto real (sin red a supabase.co).
 
@@ -270,4 +336,5 @@ de AWS estaba bloqueado desde este entorno) ni contra un proyecto real (sin red 
 | Transacción | `migrar.sh`: una por archivo | SQL Editor: el texto entero en una | Cada parte es todo-o-nada; se probó así (`sql_una_peticion.py`). |
 | Huella de migraciones | `migrar.sh` | paquete | Misma tabla `interno._migraciones` y misma sha256: después se puede seguir con `migrar.sh`. |
 | Llaves nuevas (`sb_publishable_`, `sb_secret_`) | — | proyectos nuevos | La app acepta la publishable; las funciones mandan la secreta solo en `apikey` si no es JWT; `armar_app.sh` rechaza llaves secretas. |
-| Actualizar una versión | `migrar.sh` | `actualizar_supabase_<versión>.sql` | Solo las migraciones nuevas, en una petición, con la misma huella; revisa que esté la anterior (`FALTA_VERSION_ANTERIOR`). Probado desde 0.15.0 instalado por partes (prueba 135). |
+| Actualizar una versión | `migrar.sh` | `actualizar_supabase_<versión>.sql` | Solo las migraciones nuevas, en una petición, con la misma huella; revisa que esté la anterior (`FALTA_VERSION_ANTERIOR`). Probado desde 0.15.0 instalado por partes (prueba 135) y de 0.16.0 a 0.17.0 (prueba 140). |
+| Storage (0.17.0, fotos) | `storage.buckets` / `storage.objects` mínimos (`simular_supabase.sql`, `mini_supabase.sql`); el servidor de la demo imita subir, bajar y borrar con la fila COMO el usuario | El rol `postgres` del SQL Editor normalmente puede insertar en `storage.buckets` y crear políticas en `storage.objects` (Supabase lo documenta así) | La 053 lo intenta por SQL; si Supabase no lo deja (permisos que cambian), NO falla: `estado_fotos_storage()` y `verificar_instalacion.sql` dicen qué falta y arriba están los clics (prueba 140 prueba los dos casos). NO probado contra un Supabase real. |
