@@ -14,7 +14,8 @@
 #
 # Usuarios: dueno@demo.hn, admin@demo.hn, cajero@demo.hn, vendedor@demo.hn
 # Clave de todos: demo1234 (o la que ponga en DEMO_CLAVE).
-# Variables: PUERTO, BASE_DEMO (demo_app), REVISAR_SESION_SEGUNDOS.
+# Variables: PUERTO, BASE_DEMO (demo_app), REVISAR_SESION_SEGUNDOS; NUCLEO_HASTA y NUCLEO_VERSION (probar la
+# app con un núcleo anterior, ej. 053 y 0.17.0).
 # =====================================================================
 set -euo pipefail
 RAIZ="$(cd "$(dirname "$0")/.." && pwd)"
@@ -33,7 +34,22 @@ echo "Preparando la base de demostración \"$BASE_DEMO\" ..."
 dropdb --if-exists "$BASE_DEMO" >/dev/null 2>&1
 createdb "$BASE_DEMO"
 psql_q -d "$BASE_DEMO" -f "$RAIZ/nucleo/pruebas/simular_supabase.sql" >/dev/null
-PGDATABASE="$BASE_DEMO" SIN_PREGUNTAR=1 SIN_RESPALDO=1 bash "$RAIZ/herramientas/migrar.sh" >/dev/null
+if [ -n "${NUCLEO_HASTA:-}" ]; then
+  # Solo para probar la app con un núcleo anterior: NUCLEO_HASTA=053 NUCLEO_VERSION=0.17.0 (copia aparte de las
+  # migraciones hasta esa, con su versión; el repositorio no se toca).
+  VIEJO="$(mktemp -d)"
+  mkdir -p "$VIEJO/nucleo/sql/migraciones"
+  cp -r "$RAIZ/herramientas" "$VIEJO/"
+  for f in "$RAIZ"/nucleo/sql/migraciones/[0-9][0-9][0-9]_*.sql; do
+    n="$(basename "$f" | cut -c1-3)"
+    [ "$((10#$n))" -le "$((10#$NUCLEO_HASTA))" ] && cp "$f" "$VIEJO/nucleo/sql/migraciones/"
+  done
+  echo "${NUCLEO_VERSION:?indique NUCLEO_VERSION}" > "$VIEJO/VERSION_NUCLEO"
+  PGDATABASE="$BASE_DEMO" SIN_PREGUNTAR=1 SIN_RESPALDO=1 BASE_LOCAL_SOCKET="$PGHOST" bash "$VIEJO/herramientas/migrar.sh" >/dev/null
+  rm -rf "$VIEJO"
+else
+  PGDATABASE="$BASE_DEMO" SIN_PREGUNTAR=1 SIN_RESPALDO=1 bash "$RAIZ/herramientas/migrar.sh" >/dev/null
+fi
 psql_q -d "$BASE_DEMO" -f "$RAIZ/herramientas/emulador_supabase.sql" >/dev/null
 psql_q -d "$BASE_DEMO" -f "$RAIZ/herramientas/demo_datos.sql" >/dev/null
 echo "Base lista."

@@ -4,6 +4,39 @@ Formato: versión (fecha) y lista de cambios. La versión vive en `VERSION_NUCLE
 y queda guardada en cada base al migrar (vista `version_esquema`).
 Números: MAYOR.MENOR.ARREGLO (ver `docs/CONVENCIONES.md`).
 
+## 0.18.0 (2026-10-25) — Precio mayorista, garantías, cheques y antigüedad de saldos
+
+Migración nueva 054 (las 001-053 no se tocaron). 145 pruebas (nuevas 141 a 145; la 140 queda fija en 0.17.0). Todas
+pasan también con `probar.sh --paquete`. Para quien ya tiene 0.17.0 en Supabase: `dist/actualizar_supabase_0.18.0.sql`
+(una sola pegada; ver `docs/SUPABASE.md`, "Actualizar de 0.17.0 a 0.18.0").
+
+- **Precio mayorista** (`nucleo/docs/productos.md`, `ventas.md`): `producto.precio_mayorista_centavos` y
+  `cantidad_mayorista` (desde cuántas unidades); `tercero.es_mayorista` (cliente con precio mayorista siempre). Se usa
+  en `calcular_venta_previa` (ahora recibe `cliente_id`), `registrar_venta`, cotizaciones, apartados, devoluciones y
+  cambios. Es un PRECIO, no un descuento: no cuenta para el tope de descuentos, pero es la rebaja de la línea y no se
+  suma a promociones ni descuentos manuales (`DESCUENTO_DOBLE`). Sin elegir, gana lo mejor para el cliente (empate:
+  mayorista); el vendedor puede elegir con `"precio_tipo": "normal" | "mayorista"`. La línea guarda `precio_tipo` y el
+  precio normal. Nunca mayor que el precio normal (`PRECIO_MAYORISTA_INVALIDO`); por debajo del costo, aviso.
+  Columnas nuevas en la plantilla y el Excel de productos y clientes.
+- **Garantías** (`nucleo/docs/garantias.md`): `producto.dias_garantia`; la línea guarda `garantia_hasta` al emitir
+  y el comprobante dice "Garantía hasta dd/mm/aaaa". Reclamos `garantia_reclamo` (recibido, en revisión, resuelto o rechazado) con
+  historial; `buscar_garantia`, `registrar_reclamo_garantia`, `cambiar_estado_reclamo`, `resolver_reclamo_garantia`
+  (reparado, cambiado o devuelto; cambiado y devuelto con la devolución de siempre), `documento_reclamo_garantia`.
+  Fuera de plazo solo con `garantias.resolver` y motivo. Permisos nuevos `garantias.registrar` (dueño, admin, cajero,
+  vendedor) y `garantias.resolver` (dueño, admin). Errores `GARANTIA_VENCIDA` y `GARANTIA_INVALIDA`.
+- **Abonos con cheque** (`nucleo/docs/cheques.md`): forma `cheque` en `registrar_cobro` (número, banco emisor y
+  fecha; se acepta posfechado, pero no se deposita antes de su fecha). Va a la cuenta nueva "Cheques por depositar" (tipo
+  `cheques_por_depositar`, se crea sola). `depositar_cheque` (depósito normal en tránsito, se confirma como siempre) y
+  `registrar_cheque_rechazado` (deshace el depósito, anula el cobro: la deuda vuelve, y registra el cargo del banco
+  como gasto si se pide). Sale en `donde_esta_mi_dinero` y `proyeccion_flujo` (por la fecha del cheque); el depósito se
+  cuadra en la conciliación como cualquier otro. Errores `CHEQUE_INVALIDO`, `CHEQUE_POSFECHADO`, `CHEQUE_DEPOSITADO`. Las ventas al contado NO aceptan
+  cheque (decisión: solo abonos).
+- **Antigüedad de saldos** (`nucleo/docs/antiguedad.md`): `antiguedad_saldos(empresa, al, 'cxc'|'cxp')`: por cliente
+  (o proveedor) corriente, 1-30, 31-60, 61-90 y más de 90 días vencido a la fecha de corte, con totales; incluye saldos
+  iniciales, respeta la sucursal y dice si cuadra con la cuenta de Clientes (o Proveedores) de los libros.
+- Pruebas: 141 (mayorista), 142 (garantías), 143 (cheques), 144 (antigüedad) y 145 (de 0.17.0 a 0.18.0 como en
+  Supabase: dos veces sin daño, sin la 053 lo dice claro, un error a mitad no deja nada, bitácora íntegra).
+
 ## 0.17.0 (2026-10-24) — Fotos de productos livianas, con interruptor
 
 Migración nueva 053 (las 001-052 no se tocaron). 140 pruebas (nuevas 139 y 140; la 135 queda fija en 0.16.0). Todas

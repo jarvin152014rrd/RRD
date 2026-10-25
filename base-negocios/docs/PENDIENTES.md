@@ -1,10 +1,27 @@
-# Pendientes (núcleo 0.17.0, 140 pruebas OK; también con probar.sh --paquete)
+# Pendientes (núcleo 0.18.0, 145 pruebas OK; también con probar.sh --paquete)
 
 Estado: etapa 2 terminada. Las correcciones de la revisión de la etapa 2 están
 HECHAS en la migración 038 (núcleo 0.9.1) y las de la revisión de 0.9.1 en la
 migración 039 (núcleo 0.9.2), cada una con su prueba (falla contra la versión
 anterior y pasa con la nueva). Falta que el revisor las confirme antes de la
 etapa 3.
+
+## Mayorista, garantías, cheques y antigüedad (HECHO en 0.18.0, migración 054, pruebas 141-145; app 0.12.0)
+
+- HECHO: precio mayorista por cantidad o por cliente mayorista (sin descuento sobre descuento), garantías con
+  reclamos, abonos con cheque (depositar y rebote) y antigüedad de saldos de clientes y proveedores.
+- FALTA (dueño): pegar `dist/actualizar_supabase_0.18.0.sql` en su Supabase real. **NO PROBADO en un Supabase real**
+  (solo en el mini Supabase de la prueba 145).
+- A CONFIRMAR (dueño) [DINERO]: las ventas al contado NO aceptan cheque (solo abonos de clientes). Si lo quiere en
+  ventas, es otra parte.
+- A CONFIRMAR (dueño): con precio mayorista no se suma ninguna promoción ni descuento en esa línea (DESCUENTO_DOBLE);
+  si hay una promoción, gana lo más barato para el cliente.
+- FALTA (menor): `resumen_hoy` no cuenta los cheques recibidos hoy aparte (van en cobros); un producto devuelto por
+  garantía vuelve al inventario como cualquier devolución (no hay bodega de "dañados"); el Excel no deja BORRAR el
+  precio mayorista (se quita en la ficha).
+- NOTA: si el cheque rebota después de confirmar el depósito, el sistema hace solo un traslado del banco a "Cheques
+  por depositar" y luego anula el cobro (la deuda vuelve).
+- FALTA: que el revisor revise 0.18.0.
 
 ## Fotos de productos (HECHO en 0.17.0, migración 053, pruebas 139-140; app 0.11.0)
 

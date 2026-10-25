@@ -74,6 +74,8 @@ export const MENU = [
     { id: 'valorizado', titulo: 'Inventario valorizado', icono: 'inventario', modulos: ['inventario'], permisos: ['inventario.costos'], todos: ['inventario.ver'], pantalla: 'rep_valorizado' },
     // vigilancia_empleados pide bitacora.ver; v_comision, comisiones.ver (cada parte sale solo con su permiso).
     { id: 'empleados', titulo: 'Empleados y comisiones', icono: 'credencial', permisos: ['bitacora.ver', 'comisiones.ver'], pantalla: 'rep_empleados' },
+    // App 0.12.0 (núcleo 0.18.0): antigüedad de saldos de clientes (ventas.ver o cobros.ver_saldos) y proveedores (compras.ver).
+    { id: 'antiguedad', titulo: 'Antigüedad de saldos', icono: 'antiguedad', modulos: ['ventas', 'compras'], permisos: ['ventas.ver', 'compras.ver'], nucleo: '0.18.0', pantalla: 'rep_antiguedad' },
     { id: 'bitacora', titulo: 'Quién hizo qué', icono: 'bitacora', permisos: ['bitacora.ver'], pantalla: 'rep_bitacora' },
     // cerrar_mes pide periodos.cerrar; leer los meses (historial_cierres, exportar_mes, libros_isv), contabilidad.ver.
     { id: 'cierre', titulo: 'Cierre de mes', icono: 'cierre', permisos: ['periodos.cerrar'], todos: ['contabilidad.ver'], pantalla: 'rep_cierre' },

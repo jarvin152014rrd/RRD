@@ -11,7 +11,8 @@
 #    en /opt/pw-browsers; no descarga nada).
 # 3b. Corre app-pruebas/probar_compras_dinero.cjs: Compras y Dinero (app 0.7.0), con
 #    la misma base y el mismo servidor; después app-pruebas/probar_reportes.cjs (app 0.8.0).
-# 3e. Corre app-pruebas/probar_0120.cjs: lo nuevo de la app 0.12.0 (núcleo 0.18.0).
+# 3e. Corre app-pruebas/probar_0120.cjs: lo nuevo de la app 0.12.0 (núcleo 0.18.0), y probar_0120_nucleo_viejo.cjs:
+#    la misma app con una demo de núcleo 0.17.0 (lo nuevo se oculta).
 # 3d. Corre app-pruebas/probar_fotos.cjs: fotos de productos (app 0.11.0) con el Storage mínimo del
 #    servidor (al final: enciende las fotos y sube una).
 # 4. Corre app-pruebas/probar_funciones.mjs: las Edge Functions reales de
@@ -74,7 +75,21 @@ echo
 URL_APP="http://127.0.0.1:$PUERTO_PRUEBA" node "$RAIZ/app-pruebas/probar_0120.cjs"
 codigo_0120=$?
 echo
+# 4c. La app 0.12.0 con un núcleo 0.17.0 (base de demo hasta la 053): lo nuevo se oculta y nada se rompe.
+BASE_VIEJA="${BASE_DEMO}_017"
+SOLO_PREPARAR=1 BASE_DEMO="$BASE_VIEJA" NUCLEO_HASTA=053 NUCLEO_VERSION=0.17.0 bash "$RAIZ/herramientas/demo_app.sh" >/dev/null \
+  || { echo "FALLA: no se pudo preparar la demo con el núcleo 0.17.0."; codigo_viejo=1; }
+if [ -z "${codigo_viejo:-}" ]; then
+  BASE="$BASE_VIEJA" PUERTO=$((PUERTO_PRUEBA + 1)) node "$RAIZ/herramientas/servidor_app.js" > "$CAPTURAS/servidor_017.log" 2>&1 &
+  PID_VIEJO=$!
+  for _ in $(seq 1 50); do curl -s -o /dev/null "http://127.0.0.1:$((PUERTO_PRUEBA + 1))/" && break; sleep 0.2; done
+  URL_APP="http://127.0.0.1:$((PUERTO_PRUEBA + 1))" BASE_DEMO="$BASE_VIEJA" node "$RAIZ/app-pruebas/probar_0120_nucleo_viejo.cjs"
+  codigo_viejo=$?
+  kill "$PID_VIEJO" 2>/dev/null
+fi
+dropdb --if-exists "$BASE_VIEJA" >/dev/null 2>&1
+echo
 # 5. Fotos de productos (app 0.11.0): al final, porque enciende las fotos y sube archivos.
 URL_APP="http://127.0.0.1:$PUERTO_PRUEBA" node "$RAIZ/app-pruebas/probar_fotos.cjs"
 codigo_fotos=$?
-[ "$codigo_app" = "0" ] && [ "$codigo_dinero" = "0" ] && [ "$codigo_reportes" = "0" ] && [ "$codigo_funciones" = "0" ] && [ "$codigo_fotos" = "0" ] && [ "$codigo_0120" = "0" ]
+[ "$codigo_app" = "0" ] && [ "$codigo_dinero" = "0" ] && [ "$codigo_reportes" = "0" ] && [ "$codigo_funciones" = "0" ] && [ "$codigo_fotos" = "0" ] && [ "$codigo_0120" = "0" ] && [ "$codigo_viejo" = "0" ]

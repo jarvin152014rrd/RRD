@@ -287,6 +287,13 @@ h1.titulo-icono > .icono { width: 26px; height: 26px; }
 .chip-dorado { background: var(--color-dorado-fondo); color: var(--color-dorado); }
 .chip-azul { background: var(--color-azul-fondo); color: var(--color-azul); }
 .chip-neutro { background: var(--color-neutro-fondo); color: var(--color-neutro); }
+/* App 0.12.0: antigüedad de saldos, más rojo mientras más viejo (contraste AA en cada uno). */
+.tramo-0 { background: var(--color-verde-fondo); color: var(--color-verde); }
+.tramo-1 { background: #fdf3d8; color: #6b4c00; }
+.tramo-2 { background: #fde4cf; color: #7a3a00; }
+.tramo-3 { background: #f9d3cc; color: #8a1f12; }
+.tramo-4 { background: #a12a1e; color: #ffffff; }
+.enlace { background: none; border: 0; padding: 0; min-height: 44px; color: var(--color-azul); text-decoration: underline; font: inherit; font-weight: 600; cursor: pointer; text-align: left; }
 
 /* Burbujas de ícono */
 .burbuja { width: 44px; height: 44px; border-radius: 12px; display: inline-flex; align-items: center; justify-content: center; flex: none; }

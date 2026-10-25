@@ -1,4 +1,8 @@
-# Pendientes de la app (0.11.1)
+# Pendientes de la app (0.12.0)
+
+- HECHO (0.12.0, núcleo 0.18.0): precio mayorista, garantías, abonos con cheque y antigüedad de saldos. Falta:
+  probarlo contra un Supabase REAL; vender al contado con cheque (el núcleo no lo acepta, decisión); la antigüedad
+  muestra hasta lo que devuelve el servidor (sin paginar).
 
 - HECHO (0.11.0, núcleo 0.17.0): fotos de productos livianas con interruptor (Productos, Vender, Inicio e Inventario).
   Falta: probarlas contra un Supabase REAL (subir, bajar con token, "ya existe" al repetir, CORS de Storage desde

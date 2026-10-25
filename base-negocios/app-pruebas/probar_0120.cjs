@@ -330,7 +330,60 @@ async function venderCon(p, codigos) {
     await c2.ctx.close();
   });
 
-  // [PARTES SIGUIENTES]
+  // ===================== 4) Antigüedad de saldos =====================
+  await prueba('antigüedad de saldos: totales como el servidor y cuadra, chips por tramo, ordenar, clic al estado de cuenta, Excel e imprimir', async () => {
+    const p = usar(dueno.p);
+    await p.goto(URL_APP + '/#/reportes/antiguedad');
+    await p.waitForSelector('#tabla-antiguedad');
+    afirmar(await p.locator('a.subpestana[href="#/reportes/antiguedad"] svg').count() === 1, 'subpestaña sin ícono');
+    const r = JSON.parse(sql('dueno@demo.hn', `public.antiguedad_saldos(demo.id('EMPRESA'))`));
+    afirmar(r.cuadra === true, 'el servidor dice que no cuadra');
+    afirmar((await textoDe(p, '[data-dato=antiguedad-total] .cifra-valor, [data-dato=antiguedad-total]')).includes(lempiras(r.totales.saldo_centavos)), 'total');
+    for (const k of ['corriente', 'de_1_a_30', 'de_31_a_60', 'de_61_a_90', 'mas_de_90']) {
+      afirmar((await textoDe(p, `[data-dato=total-${k}]`)).trim() === lempiras(r.totales[k + '_centavos']), 'total ' + k);
+    }
+    afirmar(await p.locator('[data-info=cuadra]').count() === 1, 'no dice que cuadra');
+    afirmar(await p.locator('#tabla-antiguedad .tramo-4').count() >= 1, 'no hay chips de más de 90 (rojo)');
+    // Mayor saldo primero (como el servidor); por nombre cambia el orden.
+    const primero = await p.locator('#tabla-antiguedad tbody tr:first-child [data-tercero]').getAttribute('data-tercero');
+    afirmar(primero === r.terceros[0].tercero_id, 'no empieza por el mayor saldo');
+    await p.selectOption('#antiguedad-orden', 'nombre');
+    const nombres = await p.locator('#tabla-antiguedad tbody [data-tercero]').allInnerTexts();
+    afirmar(nombres.join('|') === [...nombres].sort((a, b) => a.localeCompare(b, 'es')).join('|'), 'no ordena por nombre');
+    await p.screenshot({ path: path.join(CAPTURAS, 'v12_antiguedad.png'), fullPage: true });
+    // Excel
+    const [desc] = await Promise.all([p.waitForEvent('download'), p.click('#antiguedad-excel')]);
+    afirmar(/^antiguedad_de_saldos_de_clientes.*\.xlsx$/.test(desc.suggestedFilename()), 'archivo: ' + desc.suggestedFilename());
+    // Imprimir: solo la hoja, sin colores ni íconos.
+    await p.evaluate(() => { window.print = () => { window.__impreso = document.querySelector('.reporte-impreso'); }; });
+    await p.click('#antiguedad-imprimir');
+    await p.waitForFunction(() => window.__impreso, null, { timeout: 15000 });
+    const imp = await p.evaluate(() => { const x = window.__impreso; return { t: x.textContent, raro: x.querySelectorAll('svg, .icono, .chip-color, .burbuja').length }; });
+    afirmar(imp.raro === 0 && !emojis.test(imp.t) && imp.t.includes('Antigüedad de saldos de clientes'), 'impreso: ' + JSON.stringify(imp.raro));
+    await p.evaluate(() => { window.dispatchEvent(new Event('afterprint')); window.__impreso = null; });
+    // Clic en un cliente: su estado de cuenta.
+    await p.locator('#tabla-antiguedad tbody [data-tercero]').first().click();
+    await p.waitForSelector('#t-ec', { timeout: 15000 });
+    // Proveedores
+    await p.goto(URL_APP + '/#/reportes/ventas');
+    await p.goto(URL_APP + '/#/reportes/antiguedad');
+    await p.waitForSelector('#antiguedad-tipo');
+    await p.selectOption('#antiguedad-tipo', 'cxp');
+    await p.waitForFunction(() => /Proveedor/.test((document.querySelector('#tabla-antiguedad thead') || {}).innerText || ''));
+    const rp = JSON.parse(sql('dueno@demo.hn', `public.antiguedad_saldos(demo.id('EMPRESA'), NULL, 'cxp')`));
+    afirmar(rp.cuadra === true && (await textoDe(p, '[data-dato=total-mas_de_90]')).trim() === lempiras(rp.totales.mas_de_90_centavos), 'proveedores');
+  });
+
+  await prueba('antigüedad en el celular: la tabla se ve como tarjetas sin salirse de la pantalla', async () => {
+    const { ctx, p } = await nueva(celular);
+    usar(p);
+    await entrar(p, 'dueno@demo.hn');
+    await p.goto(URL_APP + '/#/reportes/antiguedad');
+    await p.waitForSelector('#tabla-antiguedad');
+    afirmar(await anchoPagina(p) <= 390, 'se sale a lo ancho');
+    await p.screenshot({ path: path.join(CAPTURAS, 'v12_antiguedad_celular.png'), fullPage: true });
+    await ctx.close();
+  });
 
   afirmar(true, '');
   if (erroresJs.length) { fallas++; console.log('  FALLA  errores de JavaScript: ' + erroresJs.slice(0, 3).join(' | ')); }

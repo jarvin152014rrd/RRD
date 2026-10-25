@@ -2770,3 +2770,97 @@ TO authenticated;
 -- Lecturas: como antes (también service_role).
 REVOKE EXECUTE ON FUNCTION public.donde_esta_mi_dinero(uuid), public.proyeccion_flujo(uuid, integer, text) FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION public.donde_esta_mi_dinero(uuid), public.proyeccion_flujo(uuid, integer, text) TO authenticated, service_role;
+
+-- =====================================================================
+-- 4) ANTIGÜEDAD DE SALDOS (nucleo/docs/antiguedad.md)
+--    antiguedad_saldos(empresa, al?, tipo?) -> por cliente (o proveedor): corriente (no vencido),
+--    1-30, 31-60, 61-90 y más de 90 días VENCIDO a la fecha de corte, con totales. Incluye los
+--    saldos iniciales, respeta la sucursal del usuario y, para quien ve toda la empresa, dice si
+--    cuadra con la cuenta de Clientes (o Proveedores) de los libros a esa fecha.
+-- =====================================================================
+CREATE FUNCTION public.antiguedad_saldos(p_empresa_id uuid, p_al date DEFAULT NULL, p_tipo text DEFAULT 'cxc') RETURNS jsonb
+LANGUAGE plpgsql STABLE SECURITY DEFINER SET search_path = '' AS $$
+DECLARE
+  v_al    date;
+  v_restr boolean;
+  v_docs  jsonb;
+  v_terc  jsonb;
+  v_tot   jsonb;
+  v_libro bigint;
+  v_cod   text;
+BEGIN
+  IF p_tipo IS NULL OR p_tipo NOT IN ('cxc', 'cxp') THEN
+    RAISE EXCEPTION 'DATO_INVALIDO: el tipo es "cxc" (lo que le deben los clientes) o "cxp" (lo que se debe a proveedores).';
+  END IF;
+  IF p_tipo = 'cxc' THEN
+    PERFORM interno.exigir_lectura(p_empresa_id, CASE WHEN public.tiene_permiso('ventas.ver', p_empresa_id) THEN 'ventas.ver' ELSE 'cobros.ver_saldos' END);
+  ELSE
+    PERFORM interno.exigir_lectura(p_empresa_id, 'compras.ver');
+  END IF;
+  v_al := coalesce(p_al, public.hoy_local(p_empresa_id));
+  IF v_al > public.hoy_local(p_empresa_id) + 366 THEN
+    RAISE EXCEPTION 'DATO_INVALIDO: la fecha de corte no puede pasar de un año adelante.';
+  END IF;
+  v_restr := interno.usuario_restringido(p_empresa_id);
+
+  WITH d AS (
+    SELECT x.documento_id, x.origen, x.cliente_id AS tercero_id, x.numero_documento, x.fecha_documento,
+           coalesce(x.vence_el, x.fecha_documento) AS vence_el, x.monto_centavos, x.saldo_centavos
+      FROM interno.cxc_al(p_empresa_id, v_al) x
+     WHERE p_tipo = 'cxc' AND x.saldo_centavos <> 0 AND interno.documento_cxc_permitido(p_empresa_id, x.origen, x.documento_id)
+    UNION ALL
+    SELECT x.documento_id, x.origen, x.proveedor_id, x.numero_documento, x.fecha_documento,
+           coalesce(x.vence_el, x.fecha_documento), x.monto_centavos, x.saldo_centavos
+      FROM interno.cxp_al(p_empresa_id, v_al) x
+     WHERE p_tipo = 'cxp' AND x.saldo_centavos <> 0 AND interno.documento_cxp_permitido(p_empresa_id, x.origen, x.documento_id)),
+  b AS (
+    SELECT d.*, greatest(v_al - d.vence_el, 0) AS dias_vencido,
+           CASE WHEN v_al <= d.vence_el THEN 'corriente' WHEN v_al - d.vence_el <= 30 THEN 'de_1_a_30'
+                WHEN v_al - d.vence_el <= 60 THEN 'de_31_a_60' WHEN v_al - d.vence_el <= 90 THEN 'de_61_a_90' ELSE 'mas_de_90' END AS tramo
+      FROM d),
+  t AS (
+    SELECT b.tercero_id, te.nombre, te.codigo, te.telefono, count(*) AS documentos, sum(b.saldo_centavos)::bigint AS saldo,
+           coalesce(sum(b.saldo_centavos) FILTER (WHERE b.tramo = 'corriente'), 0)::bigint AS corriente,
+           coalesce(sum(b.saldo_centavos) FILTER (WHERE b.tramo = 'de_1_a_30'), 0)::bigint AS t30,
+           coalesce(sum(b.saldo_centavos) FILTER (WHERE b.tramo = 'de_31_a_60'), 0)::bigint AS t60,
+           coalesce(sum(b.saldo_centavos) FILTER (WHERE b.tramo = 'de_61_a_90'), 0)::bigint AS t90,
+           coalesce(sum(b.saldo_centavos) FILTER (WHERE b.tramo = 'mas_de_90'), 0)::bigint AS m90,
+           max(b.dias_vencido) AS dias_max
+      FROM b JOIN public.tercero te ON te.id = b.tercero_id
+     GROUP BY b.tercero_id, te.nombre, te.codigo, te.telefono)
+  SELECT coalesce((SELECT jsonb_agg(jsonb_build_object(
+             'tercero_id', t.tercero_id, 'nombre', t.nombre, 'codigo', t.codigo, 'telefono', t.telefono, 'documentos', t.documentos,
+             'saldo_centavos', t.saldo, 'corriente_centavos', t.corriente, 'de_1_a_30_centavos', t.t30, 'de_31_a_60_centavos', t.t60,
+             'de_61_a_90_centavos', t.t90, 'mas_de_90_centavos', t.m90, 'vencido_centavos', t.saldo - t.corriente,
+             'dias_vencido_max', t.dias_max) ORDER BY t.saldo DESC, t.nombre) FROM t), '[]'),
+         jsonb_build_object('saldo_centavos', coalesce((SELECT sum(saldo) FROM t), 0), 'corriente_centavos', coalesce((SELECT sum(corriente) FROM t), 0),
+           'de_1_a_30_centavos', coalesce((SELECT sum(t30) FROM t), 0), 'de_31_a_60_centavos', coalesce((SELECT sum(t60) FROM t), 0),
+           'de_61_a_90_centavos', coalesce((SELECT sum(t90) FROM t), 0), 'mas_de_90_centavos', coalesce((SELECT sum(m90) FROM t), 0),
+           'vencido_centavos', coalesce((SELECT sum(saldo - corriente) FROM t), 0), 'terceros', (SELECT count(*) FROM t),
+           'documentos', coalesce((SELECT sum(documentos) FROM t), 0)),
+         coalesce((SELECT jsonb_agg(jsonb_build_object('documento_id', b.documento_id, 'origen', b.origen, 'tercero_id', b.tercero_id,
+             'numero_documento', b.numero_documento, 'fecha_documento', to_char(b.fecha_documento, 'YYYY-MM-DD'),
+             'vence_el', to_char(b.vence_el, 'YYYY-MM-DD'), 'monto_centavos', b.monto_centavos, 'saldo_centavos', b.saldo_centavos,
+             'dias_vencido', b.dias_vencido, 'tramo', b.tramo) ORDER BY b.vence_el, b.numero_documento) FROM b), '[]')
+    INTO v_terc, v_tot, v_docs;
+
+  IF NOT v_restr THEN
+    v_cod := interno.cuenta_de(p_empresa_id, p_tipo);
+    v_libro := interno.saldo_libros_al(p_empresa_id, v_cod, v_al);
+  END IF;
+  RETURN jsonb_build_object('titulo', CASE p_tipo WHEN 'cxc' THEN 'Antigüedad de saldos de clientes' ELSE 'Antigüedad de saldos de proveedores' END,
+    'tipo', p_tipo, 'al', to_char(v_al, 'YYYY-MM-DD'), 'empresa', interno.encabezado_empresa(p_empresa_id),
+    'generado_en', public.iso(now()),
+    'tramos', jsonb_build_array(
+      jsonb_build_object('clave', 'corriente', 'titulo', 'Corriente (no vencido)'), jsonb_build_object('clave', 'de_1_a_30', 'titulo', '1 a 30 días'),
+      jsonb_build_object('clave', 'de_31_a_60', 'titulo', '31 a 60 días'), jsonb_build_object('clave', 'de_61_a_90', 'titulo', '61 a 90 días'),
+      jsonb_build_object('clave', 'mas_de_90', 'titulo', 'Más de 90 días')),
+    'terceros', v_terc, 'totales', v_tot, 'documentos', v_docs,
+    'cuenta_libros', v_cod, 'saldo_libros_centavos', v_libro,
+    'cuadra', CASE WHEN v_restr THEN NULL ELSE v_libro = (v_tot->>'saldo_centavos')::bigint END)
+    || CASE WHEN v_restr THEN jsonb_build_object('solo_mis_sucursales', true,
+         'nota_sucursal', 'Solo los documentos de sus sucursales (sin saldos iniciales, que son de toda la empresa).') ELSE '{}'::jsonb END;
+END $$;
+
+REVOKE EXECUTE ON FUNCTION public.antiguedad_saldos(uuid, date, text) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.antiguedad_saldos(uuid, date, text) TO authenticated, service_role;

@@ -1,5 +1,24 @@
 # Cambios de la app
 
+## app 0.12.0 (núcleo 0.18.0; también funciona con 0.17.0, sin lo nuevo) — Mayorista, garantías, cheques y antigüedad
+
+- **Precio mayorista:** en Productos (ficha y formulario: precio y "desde cuántas unidades"; aviso si queda bajo el
+  costo) y en Clientes ("Cliente mayorista"). En Vender, la línea muestra el chip "Mayorista" y el precio normal
+  tachado; el vendedor puede cambiar a precio normal o mayorista con un toque; al cambiar de cliente se recalcula. El
+  comprobante dice "Precio mayorista".
+- **Garantías:** "Días de garantía" en el producto; el comprobante dice "Garantía hasta dd/mm/aaaa". Vender >
+  Garantías: buscar por factura, cliente o producto, registrar el reclamo, pasarlo a revisión o rechazarlo y resolver (reparado, cambiado o
+  devuelto), con su comprobante.
+- **Cheques:** cobrar un abono con cheque (número, banco y fecha). Dinero > Depósitos: "Cheques por depositar" con
+  "Depositar" y "Rebotó" (con el cargo del banco opcional). Dónde está mi dinero y la proyección muestran los cheques.
+- **Antigüedad de saldos** (Reportes): por cliente o proveedor, corriente y vencido 1-30, 31-60, 61-90 y más de 90
+  días a la fecha que elija, con chips de color, orden, clic al estado de cuenta, Excel e Imprimir; dice si cuadra
+  con los libros.
+- **Núcleo 0.17.0:** lo nuevo no sale en el menú ni en las pantallas y todo sigue como antes (prueba
+  `probar_0120_nucleo_viejo.cjs`).
+- Arreglo: en Compras y Gastos, una respuesta vieja ya no tapa el aviso de fechas al revés.
+- Pruebas: `probar_0120.cjs` (11, también en celular) y `probar_0120_nucleo_viejo.cjs` (4). Cascarón `cascaron-0.12.0`.
+
 ## app 0.11.1 (núcleo 0.17.0) — Arreglos de la revisión de las fotos
 
 - Si al guardar la ruta de la foto se pierde la respuesta (internet que se cae a medio camino), la app ya NO borra lo

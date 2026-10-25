@@ -159,7 +159,32 @@ Queda la carpeta `dist/app-<cliente>/`. Si por error pega la llave secreta, la h
 
 ---
 
-## Actualizar de 0.16.0 a 0.17.0 (si YA lo tenía instalado) — fotos de productos
+## Actualizar de 0.17.0 a 0.18.0 (si YA lo tenía instalado) — precio mayorista, garantías, cheques y antigüedad
+
+Si su Supabase ya tiene la 0.17.0, **no** vuelva a pegar las partes. Solo se pega **un archivo** (unos 175 KB).
+Los datos de su negocio no se tocan.
+
+1. **Haga un respaldo primero** (vea "Respaldos" más abajo).
+2. En la carpeta `base-negocios`, en una terminal: `bash herramientas/armar_instalacion.sh`
+   En `dist/` aparece **`actualizar_supabase_0.18.0.sql`**.
+3. Supabase > **SQL Editor** > **New query** (arriba a la derecha: rol **postgres**).
+4. Abra el archivo con el Bloc de notas, **Ctrl+A**, **Ctrl+C**, péguelo en el editor (**Ctrl+V**) y toque **Run**.
+   Si pregunta por "operaciones destructivas", toque **Run this query** (es normal).
+5. Abajo debe salir: **ACTUALIZADO A 0.18.0**, **version = 0.18.0** y **migraciones = 54**.
+6. Suba la app nueva (0.12.0) a Netlify (pasos 10 y 11). La app vieja sigue funcionando mientras tanto.
+
+Si sale un error en rojo, **no se cambió nada**:
+
+| Lo que sale | Qué hacer |
+|---|---|
+| `FALTA_VERSION_ANTERIOR ... 053 (núcleo 0.17.0)` | Su base no tiene la 0.17.0. Pegue primero `actualizar_supabase_0.17.0.sql` y después este. |
+| `FALTA_NUCLEO` | Esa base no tiene el sistema. Haga la instalación completa (paso 5). |
+| `PAQUETE_VIEJO` o `MIGRACION_DISTINTA` | No siga. Avise a su proveedor. |
+| `ROL_EQUIVOCADO` | Elija el rol **postgres** arriba a la derecha y vuelva a correr. |
+
+Si lo pega dos veces no pasa nada: la segunda vez dice igual **ACTUALIZADO A 0.18.0**.
+
+## Actualizar de 0.16.0 a 0.17.0 (versión anterior) — fotos de productos
 
 Si su Supabase ya tiene la versión 0.16.0 (ya pegó `actualizar_supabase_0.16.0.sql` o instaló las 14 partes de
 0.16.0), **no** vuelva a pegar las partes. Solo hay que pegar **un archivo**. Tarda unos segundos y los datos de su

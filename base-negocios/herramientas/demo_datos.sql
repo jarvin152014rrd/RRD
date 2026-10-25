@@ -381,3 +381,16 @@ BEGIN
       'banco_emisor', 'Ficohsa', 'fecha_cheque', public.hoy_local(e) + 12))), gen_random_uuid());
   PERFORM demo.como(NULL);
 END $$;
+
+-- 13) (app 0.12.0) Para "Antigüedad de saldos": un saldo viejo de Pedro Castillo de antes de empezar (factura de
+--     hace unos 5 meses, vencida hace más de 90 días). Con un núcleo anterior también sirve (saldos iniciales: 0.9.0).
+DO $$
+DECLARE
+  e      uuid := demo.id('EMPRESA');
+  inicio date := (SELECT fecha_inicio FROM public.empresa WHERE id = demo.id('EMPRESA'));
+BEGIN
+  PERFORM demo.como('dueno@demo.hn');
+  PERFORM public.registrar_saldo_inicial_cxc(e, jsonb_build_object('cliente_id', demo.id('CLI3'), 'numero_documento', 'F-2025-88',
+    'fecha_documento', inicio - 150, 'fecha_vencimiento', inicio - 120, 'monto_centavos', 85000, 'fecha', public.hoy_local(e)), gen_random_uuid());  -- (el mes pasado ya está cerrado)
+  PERFORM demo.como(NULL);
+END $$;
