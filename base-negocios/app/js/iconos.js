@@ -68,6 +68,10 @@ export const ICONOS = {
   movimientos: ['M7 20V4', 'M3 8l4-4 4 4', 'M17 4v16', 'M21 16l-4 4-4-4'],
   traslado: ['M4 8h14', 'M14 4l4 4-4 4', 'M20 16H6', 'M10 12l-4 4 4 4'],
   devolucion: ['M9 14 4 9l5-5', 'M4 9h11a5 5 0 0 1 0 10h-3'],
+  // App 0.12.0: garantías (escudo con visto), cheque y antigüedad de saldos (reloj de arena).
+  garantia: ['M12 3 4 6v6c0 5 3.5 8 8 9 4.5-1 8-4 8-9V6z', 'M9 12l2 2 4-4'],
+  cheque: ['r:2,6,20,12,2', 'M6 10h7M6 14h4', 'M15 15c1-2 2-3 3-3s0 2 1 2'],
+  antiguedad: ['M6 2h12M6 22h12', 'M7 2c0 5 10 5 10 10S7 17 7 22', 'M17 2c0 5-10 5-10 10s10 5 10 10'],
   servicio: ['M14.7 6.3a4 4 0 0 0-5.4 5.4L3 18l3 3 6.3-6.3a4 4 0 0 0 5.4-5.4l-2.5 2.5-2.4-.6-.6-2.4z'],
   foto: ['r:3,3,18,18,2', 'c:9,9,2', 'M21 15l-5-5L5 21'],
 

@@ -185,6 +185,73 @@ async function venderCon(p, codigos) {
     sqlEscribir('dueno@demo.hn', `SELECT public.editar_tercero(demo.id('EMPRESA'), demo.id('CLI2'), '{"es_mayorista": false}', 'Prueba: volver')`);
   });
 
+  // ===================== 2) Garantías =====================
+  await prueba('garantías: el comprobante de la venta dice "Garantía hasta"; buscar, registrar el reclamo y su comprobante sin emojis', async () => {
+    const p = usar(dueno.p);
+    await venderCon(p, ['TAL-500']);
+    await p.click('[data-forma=efectivo]');
+    await p.click('#cobrar');
+    await p.waitForSelector('.comprobante', { timeout: 15000 });
+    const hasta = sql('dueno@demo.hn', `to_char(public.hoy_local(demo.id('EMPRESA')) + 180, 'DD/MM/YYYY')`);
+    afirmar((await textoDe(p, '[data-dato=garantia]')).trim() === 'Garantía hasta ' + hasta, 'comprobante: ' + await textoDe(p, '.comprobante'));
+    paso = 'menú';
+    await p.goto(URL_APP + '/#/vender/garantias');
+    await p.waitForSelector('#t-garantias');
+    afirmar(await p.locator('a.subpestana[href="#/vender/garantias"] svg').count() === 1, 'subpestaña sin ícono');
+    paso = 'buscar';
+    await p.fill('#garantia-buscar', 'Pedro Castillo');
+    await p.press('#garantia-buscar', 'Enter');
+    await p.waitForSelector('#garantia-resultados [data-estado=vigente]');
+    afirmar((await textoDe(p, '#garantia-resultados')).includes('Taladro eléctrico 500 W'), 'no encontró el taladro');
+    await p.click('#garantia-resultados [data-accion=registrar-reclamo]');
+    await p.fill('#reclamo-motivo', 'El cable viene pelado');
+    await p.click('form.formulario button[type=submit]');
+    await p.waitForSelector('[data-dato=reclamo-numero]', { timeout: 15000 });
+    const comp = await textoDe(p, '.comprobante');
+    afirmar(comp.includes('RECLAMO DE GARANTÍA') && comp.includes('El cable viene pelado') && comp.includes('Pedro Castillo'), 'comprobante: ' + comp);
+    afirmar(!emojis.test(comp) && await p.locator('.comprobante svg').count() === 0, 'emojis o íconos en el comprobante del reclamo');
+    afirmar(sql('dueno@demo.hn', `(SELECT count(*) FROM public.garantia_reclamo WHERE motivo = 'El cable viene pelado')`) === '1', 'no se guardó una sola vez');
+    await p.screenshot({ path: path.join(CAPTURAS, 'v12_garantia_comprobante.png'), fullPage: true });
+  });
+
+  await prueba('garantías: reclamos abiertos, pasar a revisión y resolver "reparado" con el costo como gasto', async () => {
+    const p = usar(dueno.p);
+    await p.goto(URL_APP + '/#/vender/nueva');
+    await p.waitForSelector('#buscar-producto');
+    await p.goto(URL_APP + '/#/vender/garantias');
+    await p.waitForSelector('#reclamos-abiertos [data-reclamo]');
+    const fila = p.locator('#reclamos-abiertos [data-reclamo]', { hasText: 'Se calienta y se apaga' });
+    await fila.locator('[data-accion=en-revision]').click();
+    await p.waitForSelector('#reclamos-abiertos [data-estado=en_revision]');
+    await p.screenshot({ path: path.join(CAPTURAS, 'v12_garantias.png'), fullPage: true });
+    await p.locator('#reclamos-abiertos [data-reclamo]', { hasText: 'Se calienta y se apaga' }).locator('[data-accion=resolver]').click();
+    await p.waitForSelector('#t-resolver');
+    await p.fill('#resolver-costo', '150');
+    await p.selectOption('#resolver-costo-cuenta', id('BAC'));
+    await p.fill('#resolver-nota', 'Se cambió el interruptor');
+    await p.click('form.formulario button[type=submit]');
+    await p.waitForSelector('[data-dato=reclamo-numero]', { timeout: 15000 });
+    afirmar((await textoDe(p, '.comprobante')).includes('Reparado'), 'el comprobante no dice la resolución');
+    const g = JSON.parse(sql('dueno@demo.hn', `(SELECT row_to_json(x) FROM (SELECT r.estado, r.resolucion, g.monto_centavos, g.estado AS gasto
+      FROM public.garantia_reclamo r JOIN public.gasto g ON g.id = r.gasto_id WHERE r.motivo = 'Se calienta y se apaga') x)`));
+    afirmar(g.estado === 'resuelto' && g.resolucion === 'reparado' && g.monto_centavos === 15000 && g.gasto === 'aplicado', 'base: ' + JSON.stringify(g));
+  });
+
+  await prueba('garantías en el celular (vendedor): registra pero no resuelve; sin salirse de la pantalla', async () => {
+    const { ctx, p } = await nueva(celular);
+    usar(p);
+    await entrar(p, 'vendedor@demo.hn');
+    await p.goto(URL_APP + '/#/vender/garantias');
+    await p.waitForSelector('#reclamos-abiertos');
+    afirmar(await p.locator('[data-accion=resolver], [data-accion=rechazar]').count() === 0, 'el vendedor ve Resolver o Rechazar');
+    await p.fill('#garantia-buscar', 'Taladro');
+    await p.press('#garantia-buscar', 'Enter');
+    await p.waitForSelector('#garantia-resultados [data-accion=registrar-reclamo]');
+    afirmar(await anchoPagina(p) <= 390, 'se sale a lo ancho');
+    await p.screenshot({ path: path.join(CAPTURAS, 'v12_garantias_celular.png'), fullPage: true });
+    await ctx.close();
+  });
+
   // [PARTES SIGUIENTES]
 
   afirmar(true, '');

@@ -239,6 +239,8 @@ async function formulario(vista, ctx, p) {
   const nuevo = !p;
   const mayorista = h('input', { id: 'prod-mayorista', type: 'text', inputmode: 'decimal', placeholder: 'Opcional' });
   const mayoristaDesde = h('input', { id: 'prod-mayorista-desde', type: 'text', inputmode: 'decimal', placeholder: 'Opcional' });
+  const garantia = h('input', { id: 'prod-garantia', type: 'number', min: '1', max: '3650', step: '1', inputmode: 'numeric',
+    value: p && p.dias_garantia ? String(p.dias_garantia) : '', placeholder: 'Sin garantía' });
   const v = (k, d = '') => (p && p[k] !== null && p[k] !== undefined ? p[k] : d);
   const codigo = h('input', { id: 'prod-codigo', type: 'text', maxlength: 30, value: v('codigo'), autocapitalize: 'characters' });
   const barras = h('input', { id: 'prod-barras', type: 'text', maxlength: 40, inputmode: 'numeric', value: v('codigo_barras') });
@@ -277,6 +279,7 @@ async function formulario(vista, ctx, p) {
     nuevo && n018 ? h('div', { class: 'dos-columnas' }, campo('Precio mayorista (L)', mayorista, 'Igual que el precio de venta (con o sin ISV).'),
       campo('Mayorista desde (unidades)', mayoristaDesde, 'Vacío = solo clientes mayoristas.')) : null,
     h('label', { class: 'opcion-check' }, incluye, ' El precio ya incluye el ISV'),
+    n018 ? campo('Garantía (días)', garantia, 'Vacío = sin garantía. Cada venta guarda hasta qué fecha vale.') : null,
     h('div', { class: 'dos-columnas' }, campo('Mínimo en existencia (alerta)', minimo), h('label', { class: 'opcion-check' }, fracciones, ' Se vende con decimales (por libra, por metro…)')),
     extras.length ? h('fieldset', { class: 'grupo-campos' }, h('legend', {}, 'Campos extra'), extras.map(({ x, ctl }) => campo(x.etiqueta + (x.obligatorio ? ' (obligatorio)' : ''), ctl))) : null,
     zonaError, boton,
@@ -291,6 +294,11 @@ async function formulario(vista, ctx, p) {
     const min = minimo.value.trim() ? aNumero(minimo.value) : 0;
     if (min === null) { zonaError.append(errorSimple(comaInvalida(minimo.value) ? MENSAJE_COMA : 'El mínimo debe ser un número de 0 o más.')); return; }
     datos.stock_minimo = min;
+    if (n018) {
+      const g = garantia.value.trim() === '' ? null : Number(garantia.value);
+      if (g !== null && (!Number.isInteger(g) || g < 1 || g > 3650)) { zonaError.append(errorSimple('La garantía va de 1 a 3650 días (o vacía).')); return; }
+      if (nuevo ? g !== null : g !== (p.dias_garantia || null)) datos.dias_garantia = g;
+    }
     const ce = {};
     for (const { x, ctl } of extras) {
       const t = ctl.value.trim();

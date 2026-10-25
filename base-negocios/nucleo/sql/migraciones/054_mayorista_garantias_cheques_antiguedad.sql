@@ -1338,3 +1338,635 @@ GRANT EXECUTE ON FUNCTION
   public.exportar_plantilla(uuid, text)
 TO authenticated;
 GRANT EXECUTE ON FUNCTION public.documento_venta(uuid) TO authenticated, service_role;
+
+-- =====================================================================
+-- 2) GARANTÍAS (nucleo/docs/garantias.md)
+--    producto.dias_garantia; cada línea vendida guarda sus días y, al emitirse la venta, su
+--    fecha de vencimiento (fecha de la venta + días). Reclamos sobre una línea vigente con
+--    estado (recibido -> en_revision -> resuelto | rechazado), historial y bitácora. Se
+--    resuelven: reparado (sin dinero; costo de reparación opcional como gasto), cambiado o
+--    devuelto (con la devolución / cambio de siempre, ligada al reclamo).
+-- =====================================================================
+INSERT INTO public.error_catalogo (codigo, mensaje_usuario, que_hacer) VALUES
+  ('GARANTIA_VENCIDA', 'La garantía de ese producto ya venció.',
+   'Un reclamo fuera de plazo solo entra si alguien con permiso de resolver garantías lo autoriza con motivo.'),
+  ('GARANTIA_INVALIDA', 'Ese reclamo de garantía no se puede registrar o resolver así.',
+   'Revise que la línea tenga garantía, la cantidad y el estado del reclamo.');
+
+INSERT INTO public.permiso (codigo, descripcion, es_movimiento, es_financiero) VALUES
+  ('garantias.registrar', 'Buscar garantías y registrar reclamos de garantía', true, false),
+  ('garantias.resolver', 'Resolver o rechazar reclamos de garantía y autorizar los que están fuera de plazo', true, false);
+INSERT INTO interno.plantilla_rol_permiso (rol, permiso) VALUES
+  ('dueno', 'garantias.registrar'), ('admin', 'garantias.registrar'), ('cajero', 'garantias.registrar'), ('vendedor', 'garantias.registrar'),
+  ('dueno', 'garantias.resolver'), ('admin', 'garantias.resolver');
+SELECT interno.repartir_permisos(ARRAY['garantias.registrar', 'garantias.resolver'], 'Núcleo 0.18.0: garantías');
+
+ALTER TABLE public.producto ADD COLUMN dias_garantia integer CHECK (dias_garantia BETWEEN 1 AND 3650);
+ALTER TABLE public.venta_linea
+  ADD COLUMN garantia_dias  integer CHECK (garantia_dias BETWEEN 1 AND 3650),
+  ADD COLUMN garantia_hasta date;
+
+-- Las claves nuevas del producto ahora incluyen "dias_garantia" (productos.editar; null la quita).
+CREATE OR REPLACE FUNCTION interno.claves_producto_054() RETURNS text[]
+LANGUAGE sql IMMUTABLE SET search_path = '' AS $$
+  SELECT ARRAY['precio_mayorista_centavos', 'cantidad_mayorista', 'dias_garantia']
+$$;
+
+CREATE OR REPLACE FUNCTION interno.aplicar_producto_054(p_empresa_id uuid, p_producto_id uuid, p_datos jsonb, p_motivo text,
+                                                        p_nuevo boolean) RETURNS void
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = '' AS $$
+DECLARE
+  p   public.producto;
+  m   record;
+  v_p bigint;
+  v_c numeric;
+  v_g integer;
+BEGIN
+  IF NOT (p_datos ?| interno.claves_producto_054()) THEN
+    RETURN;
+  END IF;
+  SELECT * INTO p FROM public.producto WHERE id = p_producto_id AND empresa_id = p_empresa_id FOR UPDATE;
+  SELECT * INTO m FROM interno.datos_mayorista(p_datos);
+  v_p := CASE WHEN m.o_hay THEN m.o_precio ELSE p.precio_mayorista_centavos END;
+  v_c := CASE WHEN m.o_hay_cantidad THEN m.o_cantidad WHEN m.o_hay AND m.o_precio IS NULL THEN NULL ELSE p.cantidad_mayorista END;
+  v_g := p.dias_garantia;
+  IF p_datos ? 'dias_garantia' THEN
+    IF p_datos->'dias_garantia' = 'null'::jsonb THEN
+      v_g := NULL;
+    ELSIF jsonb_typeof(p_datos->'dias_garantia') <> 'number' OR (p_datos->>'dias_garantia') !~ '^[0-9]{1,4}$'
+          OR (p_datos->>'dias_garantia')::integer NOT BETWEEN 1 AND 3650 THEN
+      RAISE EXCEPTION 'DATO_INVALIDO: los días de garantía son un número entero de 1 a 3650 (o null para quitarla).';
+    ELSE
+      v_g := (p_datos->>'dias_garantia')::integer;
+    END IF;
+  END IF;
+  IF (v_p, v_c) IS DISTINCT FROM (p.precio_mayorista_centavos, p.cantidad_mayorista) AND NOT p_nuevo THEN
+    IF NOT public.tiene_permiso('productos.precios', p_empresa_id) THEN
+      RAISE EXCEPTION 'SIN_PERMISO: cambiar el precio mayorista pide el permiso "productos.precios".';
+    END IF;
+    IF length(trim(coalesce(p_motivo, ''))) < 5 THEN
+      RAISE EXCEPTION 'FALTA_MOTIVO: escriba por qué cambia el precio mayorista (mínimo 5 letras); queda en la bitácora.';
+    END IF;
+  END IF;
+  IF (v_p, v_c, v_g) IS NOT DISTINCT FROM (p.precio_mayorista_centavos, p.cantidad_mayorista, p.dias_garantia) THEN
+    RETURN;
+  END IF;
+  PERFORM set_config('app.motivo', coalesce(nullif(trim(p_motivo), ''), CASE WHEN p_nuevo THEN 'Producto nuevo' END, ''), true);
+  UPDATE public.producto SET precio_mayorista_centavos = v_p, cantidad_mayorista = v_c, dias_garantia = v_g WHERE id = p.id;
+  PERFORM set_config('app.motivo', '', true);
+END $$;
+
+-- Al guardar una línea vendida: los días de garantía del producto en ese momento.
+CREATE FUNCTION interno.garantia_de_linea() RETURNS trigger
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = '' AS $$
+BEGIN
+  IF NEW.garantia_dias IS NULL THEN
+    SELECT p.dias_garantia INTO NEW.garantia_dias FROM public.producto p WHERE p.id = NEW.producto_id;
+  END IF;
+  NEW.garantia_hasta := NULL;   -- se fija al emitir (la fecha de la venta puede cambiar si espera aprobación)
+  RETURN NEW;
+END $$;
+CREATE TRIGGER garantia BEFORE INSERT ON public.venta_linea FOR EACH ROW EXECUTE FUNCTION interno.garantia_de_linea();
+
+-- Al emitirse la venta: garantía hasta = fecha de la venta + días.
+CREATE FUNCTION interno.fijar_garantia_venta() RETURNS trigger
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = '' AS $$
+BEGIN
+  UPDATE public.venta_linea SET garantia_hasta = NEW.fecha_contable + garantia_dias
+   WHERE venta_id = NEW.id AND garantia_dias IS NOT NULL AND garantia_hasta IS NULL;
+  RETURN NEW;
+END $$;
+CREATE TRIGGER garantia AFTER UPDATE OF estado ON public.venta FOR EACH ROW
+  WHEN (NEW.estado = 'emitida' AND OLD.estado IS DISTINCT FROM 'emitida')
+  EXECUTE FUNCTION interno.fijar_garantia_venta();
+
+-- Las líneas no se editan (reemplaza la de 028): además del costo al emitir, se deja poner UNA vez
+-- la fecha de la garantía (nada más cambia).
+CREATE OR REPLACE FUNCTION interno.proteger_venta_linea() RETURNS trigger
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = '' AS $$
+BEGIN
+  IF OLD.costo_centavos IS NULL AND NEW.costo_centavos IS NOT NULL
+     AND (to_jsonb(NEW) - 'costo_centavos' - 'movimiento_id') = (to_jsonb(OLD) - 'costo_centavos' - 'movimiento_id') THEN
+    RETURN NEW;
+  END IF;
+  IF OLD.garantia_hasta IS NULL AND NEW.garantia_hasta IS NOT NULL AND NEW.garantia_dias IS NOT NULL
+     AND (to_jsonb(NEW) - 'garantia_hasta') = (to_jsonb(OLD) - 'garantia_hasta') THEN
+    RETURN NEW;
+  END IF;
+  RAISE EXCEPTION 'PROHIBIDO: las líneas de una venta no se editan.';
+END $$;
+
+-- Comprobante: además "garantia_hasta" (dd/mm/aaaa) en las líneas con garantía.
+CREATE OR REPLACE FUNCTION public.documento_venta(p_venta_id uuid) RETURNS jsonb
+LANGUAGE plpgsql STABLE SECURITY DEFINER SET search_path = '' AS $$
+DECLARE r jsonb := interno.documento_venta_029(p_venta_id);
+BEGIN
+  RETURN r || jsonb_build_object('lineas', (SELECT coalesce(jsonb_agg(x.l || jsonb_strip_nulls(jsonb_build_object(
+        'precio_tipo', vl.precio_tipo,
+        'precio_normal_centavos', vl.precio_normal_centavos,
+        'precio_texto', CASE WHEN vl.precio_tipo = 'mayorista' THEN 'Precio mayorista' END,
+        'garantia_hasta', to_char(vl.garantia_hasta, 'DD/MM/YYYY'),
+        'garantia_texto', CASE WHEN vl.garantia_hasta IS NOT NULL THEN 'Garantía hasta ' || to_char(vl.garantia_hasta, 'DD/MM/YYYY') END))
+        ORDER BY x.n), '[]')
+      FROM jsonb_array_elements(r->'lineas') WITH ORDINALITY AS x(l, n)
+      LEFT JOIN public.venta_linea vl ON vl.venta_id = p_venta_id AND vl.linea = (x.l->>'linea')::smallint));
+END $$;
+
+-- v_producto: además los días de garantía al final.
+CREATE OR REPLACE VIEW public.v_producto WITH (security_invoker = true) AS
+  SELECT p.empresa_id, p.id AS producto_id, p.codigo, p.codigo_barras, p.nombre,
+         p.categoria_id, c.nombre AS categoria, p.unidad_id, u.codigo AS unidad,
+         p.tipo_impuesto, p.precio_venta_centavos, p.precio_incluye_isv,
+         x.sin_isv_centavos AS precio_sin_isv_centavos, x.isv_centavos, x.con_isv_centavos AS precio_con_isv_centavos,
+         p.stock_minimo, p.permite_fracciones, p.activo, p.campos_extra, p.actualizado_en,
+         p.tipo, i.nombre AS impuesto, i.porcentaje AS impuesto_porcentaje, i.clase AS impuesto_clase,
+         sc.costo_estimado_centavos,
+         p.foto_ruta, p.foto_miniatura_ruta,
+         p.precio_mayorista_centavos, p.cantidad_mayorista,
+         CASE WHEN p.precio_mayorista_centavos IS NOT NULL
+              THEN (public.precio_con_tasa(p.precio_mayorista_centavos, p.precio_incluye_isv, i.porcentaje)).con_isv_centavos END
+           AS precio_mayorista_con_isv_centavos,
+         p.dias_garantia
+  FROM public.producto p
+  JOIN public.unidad u ON u.id = p.unidad_id
+  JOIN public.impuesto i ON i.empresa_id = p.empresa_id AND i.codigo = p.tipo_impuesto
+  LEFT JOIN public.categoria_producto c ON c.id = p.categoria_id
+  LEFT JOIN public.servicio_costo sc ON sc.producto_id = p.id      -- sin inventario.costos: vacío (RLS)
+  CROSS JOIN LATERAL public.precio_con_tasa(p.precio_venta_centavos, p.precio_incluye_isv, i.porcentaje) x;
+
+-- Reclamos de garantía.
+CREATE TABLE public.garantia_reclamo (
+  id                        uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  empresa_id                uuid NOT NULL REFERENCES public.empresa(id),
+  numero                    bigint NOT NULL,
+  venta_id                  uuid NOT NULL,
+  venta_linea_id            bigint NOT NULL REFERENCES public.venta_linea(id),
+  numero_documento          text,
+  fecha_venta               date NOT NULL,
+  linea                     smallint NOT NULL,
+  producto_id               uuid NOT NULL,
+  descripcion_producto      text NOT NULL,
+  cliente_id                uuid,
+  cliente_nombre            text NOT NULL,
+  sucursal_id               uuid NOT NULL,
+  cantidad                  numeric(18,4) NOT NULL CHECK (cantidad > 0),
+  garantia_hasta            date NOT NULL,
+  fecha                     date NOT NULL,
+  motivo                    text NOT NULL CHECK (length(trim(motivo)) BETWEEN 3 AND 200),
+  descripcion               text CHECK (length(descripcion) <= 1000),
+  estado                    text NOT NULL DEFAULT 'recibido' CHECK (estado IN ('recibido', 'en_revision', 'resuelto', 'rechazado')),
+  fuera_de_plazo            boolean NOT NULL DEFAULT false,
+  autorizado_por            uuid,
+  autorizacion_motivo       text,
+  resolucion                text CHECK (resolucion IN ('reparado', 'cambiado', 'devuelto')),
+  resolucion_nota           text,
+  devolucion_id             uuid,
+  gasto_id                  uuid,
+  costo_reparacion_centavos bigint CHECK (costo_reparacion_centavos BETWEEN 1 AND 9007199254740991),
+  rechazo_motivo            text,
+  resuelto_por              uuid,
+  resuelto_en               timestamptz,
+  resolucion_id_operacion   uuid,
+  id_operacion              uuid NOT NULL,
+  creado_por                uuid,
+  creado_en                 timestamptz NOT NULL DEFAULT now(),
+  actualizado_en            timestamptz NOT NULL DEFAULT now(),
+  UNIQUE (empresa_id, id),
+  UNIQUE (empresa_id, numero),
+  UNIQUE (empresa_id, id_operacion),
+  UNIQUE (empresa_id, resolucion_id_operacion),
+  FOREIGN KEY (empresa_id, venta_id) REFERENCES public.venta(empresa_id, id),
+  FOREIGN KEY (empresa_id, producto_id) REFERENCES public.producto(empresa_id, id),
+  FOREIGN KEY (empresa_id, sucursal_id) REFERENCES public.sucursal(empresa_id, id),
+  CHECK (NOT fuera_de_plazo OR (autorizado_por IS NOT NULL AND length(trim(autorizacion_motivo)) >= 5)),
+  CHECK ((estado = 'resuelto') = (resolucion IS NOT NULL)),
+  CHECK (estado <> 'rechazado' OR length(trim(rechazo_motivo)) >= 5),
+  CHECK (resolucion IS DISTINCT FROM 'reparado' OR devolucion_id IS NULL),
+  CHECK (resolucion NOT IN ('cambiado', 'devuelto') OR devolucion_id IS NOT NULL)
+);
+CREATE INDEX garantia_reclamo_venta ON public.garantia_reclamo (venta_id);
+CREATE INDEX garantia_reclamo_estado ON public.garantia_reclamo (empresa_id, estado);
+
+-- Historial: cada cambio de estado (solo agregar).
+CREATE TABLE public.garantia_reclamo_evento (
+  id               bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  empresa_id       uuid NOT NULL,
+  reclamo_id       uuid NOT NULL,
+  estado_anterior  text,
+  estado_nuevo     text NOT NULL,
+  nota             text,
+  id_operacion     uuid,
+  creado_por       uuid,
+  creado_en        timestamptz NOT NULL DEFAULT now(),
+  FOREIGN KEY (empresa_id, reclamo_id) REFERENCES public.garantia_reclamo(empresa_id, id)
+);
+CREATE INDEX garantia_reclamo_evento_reclamo ON public.garantia_reclamo_evento (reclamo_id, id);
+
+-- El reclamo solo cambia de estado hacia adelante y no cambia lo que se reclamó.
+CREATE FUNCTION interno.proteger_garantia_reclamo() RETURNS trigger
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = '' AS $$
+BEGIN
+  IF (NEW.id, NEW.empresa_id, NEW.numero, NEW.venta_id, NEW.venta_linea_id, NEW.producto_id, NEW.cantidad, NEW.motivo,
+      NEW.garantia_hasta, NEW.fecha, NEW.fuera_de_plazo, NEW.id_operacion, NEW.creado_por, NEW.creado_en)
+     IS DISTINCT FROM (OLD.id, OLD.empresa_id, OLD.numero, OLD.venta_id, OLD.venta_linea_id, OLD.producto_id, OLD.cantidad, OLD.motivo,
+      OLD.garantia_hasta, OLD.fecha, OLD.fuera_de_plazo, OLD.id_operacion, OLD.creado_por, OLD.creado_en) THEN
+    RAISE EXCEPTION 'PROHIBIDO: lo que se reclamó no se edita (registre otro reclamo).';
+  END IF;
+  IF OLD.estado IN ('resuelto', 'rechazado') THEN
+    RAISE EXCEPTION 'PROHIBIDO: el reclamo #% ya está %.', OLD.numero, OLD.estado;
+  END IF;
+  NEW.actualizado_en := now();
+  RETURN NEW;
+END $$;
+CREATE TRIGGER proteger BEFORE UPDATE ON public.garantia_reclamo
+  FOR EACH ROW EXECUTE FUNCTION interno.proteger_garantia_reclamo();
+CREATE TRIGGER auditar AFTER INSERT OR UPDATE OR DELETE ON public.garantia_reclamo
+  FOR EACH ROW EXECUTE FUNCTION interno.auditar();
+CREATE TRIGGER no_borrar BEFORE DELETE ON public.garantia_reclamo
+  FOR EACH ROW EXECUTE FUNCTION interno.prohibir_cambios('Los reclamos de garantía no se borran (se rechazan con motivo).');
+CREATE TRIGGER no_vaciar BEFORE TRUNCATE ON public.garantia_reclamo
+  FOR EACH STATEMENT EXECUTE FUNCTION interno.prohibir_cambios('No se permite vaciar tablas.');
+CREATE TRIGGER proteger BEFORE UPDATE ON public.garantia_reclamo_evento
+  FOR EACH ROW EXECUTE FUNCTION interno.prohibir_cambios('El historial de un reclamo no se edita.');
+CREATE TRIGGER auditar AFTER INSERT OR UPDATE OR DELETE ON public.garantia_reclamo_evento
+  FOR EACH ROW EXECUTE FUNCTION interno.auditar();
+CREATE TRIGGER no_borrar BEFORE DELETE ON public.garantia_reclamo_evento
+  FOR EACH ROW EXECUTE FUNCTION interno.prohibir_cambios('El historial de un reclamo no se borra.');
+CREATE TRIGGER no_vaciar BEFORE TRUNCATE ON public.garantia_reclamo_evento
+  FOR EACH STATEMENT EXECUTE FUNCTION interno.prohibir_cambios('No se permite vaciar tablas.');
+
+ALTER TABLE public.garantia_reclamo ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.garantia_reclamo_evento ENABLE ROW LEVEL SECURITY;
+REVOKE ALL ON public.garantia_reclamo, public.garantia_reclamo_evento FROM PUBLIC, anon, authenticated;
+GRANT SELECT ON public.garantia_reclamo, public.garantia_reclamo_evento TO authenticated, service_role;
+CREATE POLICY leer ON public.garantia_reclamo FOR SELECT TO authenticated
+  USING (empresa_id = ANY (ARRAY(SELECT public.empresas_con_permiso('garantias.registrar')))
+         OR empresa_id = ANY (ARRAY(SELECT public.empresas_con_permiso('garantias.resolver')))
+         OR empresa_id = ANY (ARRAY(SELECT public.empresas_con_permiso('ventas.ver'))));
+CREATE POLICY por_sucursal ON public.garantia_reclamo AS RESTRICTIVE FOR SELECT TO authenticated
+  USING (empresa_id = ANY (ARRAY(SELECT public.empresas_sin_restriccion()))
+         OR sucursal_id = ANY (ARRAY(SELECT public.sucursales_permitidas())));
+CREATE POLICY leer ON public.garantia_reclamo_evento FOR SELECT TO authenticated
+  USING (reclamo_id IN (SELECT r.id FROM public.garantia_reclamo r));
+
+INSERT INTO interno.id_operacion_uso (tabla, columna, tipo, orden) VALUES
+  ('garantia_reclamo', 'id_operacion', 'reclamo_garantia', 95),
+  ('garantia_reclamo', 'resolucion_id_operacion', 'resolucion_garantia', 96);
+
+-- Vista para la app: reclamos con su venta y su producto (respeta RLS).
+CREATE VIEW public.v_garantia_reclamo WITH (security_invoker = true) AS
+  SELECT r.empresa_id, r.id AS reclamo_id, r.numero, r.estado, r.fecha, r.venta_id, r.numero_documento, r.fecha_venta,
+         r.linea, r.producto_id, r.descripcion_producto, r.cantidad, r.cliente_id, r.cliente_nombre, r.sucursal_id,
+         r.garantia_hasta, r.motivo, r.descripcion, r.fuera_de_plazo, r.autorizacion_motivo,
+         r.resolucion, r.resolucion_nota, r.devolucion_id, r.gasto_id, r.costo_reparacion_centavos, r.rechazo_motivo,
+         r.resuelto_en, public.nombre_usuario(r.empresa_id, r.creado_por) AS registrado_por, r.creado_en, r.actualizado_en
+    FROM public.garantia_reclamo r;
+REVOKE ALL ON public.v_garantia_reclamo FROM PUBLIC, anon, authenticated;
+GRANT SELECT ON public.v_garantia_reclamo TO authenticated, service_role;
+
+CREATE FUNCTION interno.reclamo_respuesta(r public.garantia_reclamo, p_duplicado boolean) RETURNS jsonb
+LANGUAGE sql STABLE SECURITY DEFINER SET search_path = '' AS $$
+  SELECT jsonb_build_object('reclamo_id', r.id, 'numero', r.numero, 'estado', r.estado, 'venta_id', r.venta_id, 'linea', r.linea,
+    'producto', r.descripcion_producto, 'cantidad', r.cantidad, 'cliente', r.cliente_nombre,
+    'garantia_hasta', to_char(r.garantia_hasta, 'YYYY-MM-DD'), 'fuera_de_plazo', r.fuera_de_plazo,
+    'resolucion', r.resolucion, 'devolucion_id', r.devolucion_id, 'gasto_id', r.gasto_id, 'duplicado', p_duplicado)
+$$;
+
+-- Cantidad de una línea ya devuelta (las devoluciones pendientes también cuentan).
+CREATE FUNCTION interno.cantidad_devuelta_linea(p_venta_linea_id bigint) RETURNS numeric
+LANGUAGE sql STABLE SECURITY DEFINER SET search_path = '' AS $$
+  SELECT coalesce(sum(dl.cantidad), 0) FROM public.devolucion_linea dl JOIN public.devolucion d ON d.id = dl.devolucion_id
+   WHERE dl.venta_linea_id = p_venta_linea_id AND d.estado IN ('por_aplicar', 'pendiente_aprobacion', 'aplicada')
+$$;
+
+-- Permiso para leer garantías: registrar, resolver o ventas.ver.
+CREATE FUNCTION interno.exigir_lectura_garantias(p_empresa_id uuid) RETURNS void
+LANGUAGE plpgsql STABLE SECURITY DEFINER SET search_path = '' AS $$
+BEGIN
+  PERFORM interno.exigir_lectura(p_empresa_id, CASE WHEN public.tiene_permiso('garantias.resolver', p_empresa_id) THEN 'garantias.resolver'
+                                                    WHEN public.tiene_permiso('garantias.registrar', p_empresa_id) THEN 'garantias.registrar'
+                                                    ELSE 'ventas.ver' END);
+END $$;
+
+-- buscar_garantia(empresa, texto, solo_vigentes?)   garantias.registrar / garantias.resolver / ventas.ver
+-- Líneas vendidas CON garantía cuyo número de factura, cliente o producto (nombre o código) contiene el texto.
+CREATE FUNCTION public.buscar_garantia(p_empresa_id uuid, p_texto text, p_solo_vigentes boolean DEFAULT false) RETURNS jsonb
+LANGUAGE plpgsql STABLE SECURITY DEFINER SET search_path = '' AS $$
+DECLARE
+  v_hoy   date;
+  v_restr boolean;
+  v_q     text := '%' || lower(trim(coalesce(p_texto, ''))) || '%';
+BEGIN
+  PERFORM interno.exigir_lectura_garantias(p_empresa_id);
+  IF length(trim(coalesce(p_texto, ''))) < 2 THEN
+    RAISE EXCEPTION 'DATO_INVALIDO: escriba al menos 2 letras o números para buscar (factura, cliente o producto).';
+  END IF;
+  v_hoy := public.hoy_local(p_empresa_id);
+  v_restr := interno.usuario_restringido(p_empresa_id);
+  RETURN jsonb_build_object('hoy', to_char(v_hoy, 'YYYY-MM-DD'), 'lineas', coalesce((SELECT jsonb_agg(x.j ORDER BY x.f DESC, x.n, x.l) FROM (
+    SELECT v.fecha_contable AS f, v.numero AS n, vl.linea AS l, jsonb_build_object(
+      'venta_id', v.id, 'numero_documento', v.numero_documento, 'fecha_venta', to_char(v.fecha_contable, 'YYYY-MM-DD'),
+      'cliente_id', v.cliente_id, 'cliente', v.cliente_nombre, 'linea', vl.linea, 'producto_id', vl.producto_id,
+      'codigo', p.codigo, 'producto', vl.descripcion, 'cantidad', vl.cantidad,
+      'devuelta', interno.cantidad_devuelta_linea(vl.id),
+      'garantia_dias', vl.garantia_dias, 'garantia_hasta', to_char(vl.garantia_hasta, 'YYYY-MM-DD'),
+      'vigente', vl.garantia_hasta >= v_hoy, 'dias_restantes', vl.garantia_hasta - v_hoy,
+      'reclamos_abiertos', (SELECT count(*) FROM public.garantia_reclamo r WHERE r.venta_linea_id = vl.id AND r.estado IN ('recibido', 'en_revision')),
+      'reclamos', (SELECT count(*) FROM public.garantia_reclamo r WHERE r.venta_linea_id = vl.id)) AS j
+      FROM public.venta_linea vl
+      JOIN public.venta v ON v.id = vl.venta_id
+      JOIN public.producto p ON p.id = vl.producto_id
+     WHERE v.empresa_id = p_empresa_id AND v.estado = 'emitida' AND vl.garantia_hasta IS NOT NULL
+       AND (NOT p_solo_vigentes OR vl.garantia_hasta >= v_hoy)
+       AND (NOT v_restr OR interno.sucursal_permitida(p_empresa_id, v.sucursal_id))
+       AND (lower(coalesce(v.numero_documento, '')) LIKE v_q OR lower(v.cliente_nombre) LIKE v_q
+            OR lower(vl.descripcion) LIKE v_q OR lower(p.codigo) LIKE v_q OR lower(coalesce(p.codigo_barras, '')) LIKE v_q)
+     ORDER BY v.fecha_contable DESC, v.numero DESC, vl.linea LIMIT 50) x), '[]'));
+END $$;
+
+-- registrar_reclamo_garantia(empresa, datos, id_operacion)   garantias.registrar
+-- datos = {"venta_id", "linea", "cantidad"? (1), "motivo", "descripcion"?, "fecha"? (hoy),
+--          "autorizar_fuera_de_plazo"?: "motivo de la autorización" (pide garantias.resolver)}
+CREATE FUNCTION public.registrar_reclamo_garantia(p_empresa_id uuid, p_datos jsonb, p_id_operacion uuid) RETURNS jsonb
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = '' AS $$
+DECLARE
+  r       public.garantia_reclamo;
+  v       public.venta;
+  vl      public.venta_linea;
+  v_q     numeric;
+  v_fecha date;
+  v_aut   text;
+  v_mot   text;
+  v_fuera boolean;
+BEGIN
+  PERFORM interno.exigir_escritura(p_empresa_id, 'garantias.registrar', 'ventas');
+  IF p_id_operacion IS NULL THEN
+    RAISE EXCEPTION 'FALTA_ID_OPERACION: cada operación necesita un id_operacion (uuid) único.';
+  END IF;
+  PERFORM interno.exigir_tipo_operacion(p_empresa_id, p_id_operacion, 'reclamo_garantia');
+  SELECT * INTO r FROM public.garantia_reclamo x WHERE x.empresa_id = p_empresa_id AND x.id_operacion = p_id_operacion;
+  IF r.id IS NOT NULL THEN
+    RETURN interno.reclamo_respuesta(r, true);
+  END IF;
+  IF jsonb_typeof(p_datos) IS DISTINCT FROM 'object' THEN
+    RAISE EXCEPTION 'DATO_INVALIDO: los datos deben ser un objeto JSON.';
+  END IF;
+  PERFORM interno.exigir_claves(p_datos, ARRAY['venta_id', 'linea', 'cantidad', 'motivo', 'descripcion', 'fecha', 'autorizar_fuera_de_plazo']);
+  SELECT * INTO v FROM public.venta x WHERE x.id = interno.json_uuid(p_datos->'venta_id', 'venta_id') AND x.empresa_id = p_empresa_id;
+  IF v.id IS NULL OR v.estado <> 'emitida' THEN
+    RAISE EXCEPTION 'GARANTIA_INVALIDA: la venta no existe en esta empresa o no está emitida (una venta anulada no tiene garantía).';
+  END IF;
+  PERFORM interno.exigir_sucursal(p_empresa_id, v.sucursal_id);
+  IF jsonb_typeof(p_datos->'linea') IS DISTINCT FROM 'number' THEN
+    RAISE EXCEPTION 'DATO_INVALIDO: indique la línea de la venta ("linea": 1, 2...).';
+  END IF;
+  SELECT * INTO vl FROM public.venta_linea x WHERE x.venta_id = v.id AND x.linea = (p_datos->>'linea')::numeric;
+  IF vl.id IS NULL THEN
+    RAISE EXCEPTION 'GARANTIA_INVALIDA: la venta no tiene la línea %.', p_datos->>'linea';
+  END IF;
+  IF vl.garantia_hasta IS NULL THEN
+    RAISE EXCEPTION 'GARANTIA_INVALIDA: "%" se vendió sin garantía.', vl.descripcion;
+  END IF;
+  v_q := CASE WHEN coalesce(p_datos->'cantidad', 'null'::jsonb) = 'null'::jsonb THEN 1 ELSE interno.json_numero(p_datos->'cantidad', 'cantidad', 1) END;
+  IF v_q <= 0 OR v_q > vl.cantidad - interno.cantidad_devuelta_linea(vl.id) THEN
+    RAISE EXCEPTION 'GARANTIA_INVALIDA: la cantidad reclamada (%) pasa lo vendido que queda sin devolver (%).',
+      trim_scale(v_q), trim_scale(vl.cantidad - interno.cantidad_devuelta_linea(vl.id));
+  END IF;
+  v_mot := interno.json_texto(p_datos->'motivo', 'motivo', 200);
+  IF length(coalesce(v_mot, '')) < 3 THEN
+    RAISE EXCEPTION 'FALTA_MOTIVO: escriba el motivo del reclamo (qué falla).';
+  END IF;
+  v_fecha := coalesce(interno.json_fecha(p_datos->'fecha', 'fecha'), public.hoy_local(p_empresa_id));
+  IF v_fecha > public.hoy_local(p_empresa_id) OR v_fecha < v.fecha_contable THEN
+    RAISE EXCEPTION 'FECHA_INVALIDA: el reclamo va desde la fecha de la venta hasta hoy.';
+  END IF;
+  v_fuera := v_fecha > vl.garantia_hasta;
+  v_aut := interno.json_texto(p_datos->'autorizar_fuera_de_plazo', 'autorizar_fuera_de_plazo', 300);
+  IF v_fuera THEN
+    IF v_aut IS NULL THEN
+      RAISE EXCEPTION 'GARANTIA_VENCIDA: la garantía de "%" venció el % (hace % días).', vl.descripcion,
+        to_char(vl.garantia_hasta, 'DD/MM/YYYY'), v_fecha - vl.garantia_hasta;
+    END IF;
+    IF NOT public.tiene_permiso('garantias.resolver', p_empresa_id) THEN
+      RAISE EXCEPTION 'SIN_PERMISO: autorizar un reclamo fuera de plazo pide el permiso "garantias.resolver".';
+    END IF;
+    IF length(v_aut) < 5 THEN
+      RAISE EXCEPTION 'FALTA_MOTIVO: escriba por qué se autoriza fuera de plazo (mínimo 5 letras).';
+    END IF;
+  ELSIF v_aut IS NOT NULL THEN
+    v_aut := NULL;   -- vigente: no hace falta autorizar
+  END IF;
+
+  PERFORM interno.reservar_operacion(p_empresa_id, p_id_operacion, 'reclamo_garantia');
+  SELECT * INTO r FROM public.garantia_reclamo x WHERE x.empresa_id = p_empresa_id AND x.id_operacion = p_id_operacion;
+  IF r.id IS NOT NULL THEN
+    RETURN interno.reclamo_respuesta(r, true);
+  END IF;
+  PERFORM set_config('app.motivo', coalesce(v_aut, 'Reclamo de garantía: ' || v_mot), true);
+  INSERT INTO public.garantia_reclamo (empresa_id, numero, venta_id, venta_linea_id, numero_documento, fecha_venta, linea, producto_id, descripcion_producto,
+    cliente_id, cliente_nombre, sucursal_id, cantidad, garantia_hasta, fecha, motivo, descripcion, fuera_de_plazo,
+    autorizado_por, autorizacion_motivo, id_operacion, creado_por)
+  VALUES (p_empresa_id, interno.siguiente_numero(p_empresa_id, 'garantia_reclamo'), v.id, vl.id, v.numero_documento, v.fecha_contable, vl.linea, vl.producto_id, vl.descripcion,
+    v.cliente_id, v.cliente_nombre, v.sucursal_id, v_q, vl.garantia_hasta, v_fecha, v_mot,
+    interno.json_texto(p_datos->'descripcion', 'descripcion', 1000), v_fuera,
+    CASE WHEN v_fuera THEN auth.uid() END, v_aut, p_id_operacion, auth.uid())
+  RETURNING * INTO r;
+  INSERT INTO public.garantia_reclamo_evento (empresa_id, reclamo_id, estado_anterior, estado_nuevo, nota, id_operacion, creado_por)
+  VALUES (p_empresa_id, r.id, NULL, 'recibido', coalesce('Fuera de plazo, autorizado: ' || v_aut, v_mot), p_id_operacion, auth.uid());
+  PERFORM set_config('app.motivo', '', true);
+  RETURN interno.reclamo_respuesta(r, false);
+END $$;
+
+-- Cambio de estado con historial y bitácora (lo usan las dos funciones de abajo).
+CREATE FUNCTION interno.reclamo_a_estado(p_reclamo public.garantia_reclamo, p_estado text, p_nota text, p_id_operacion uuid)
+RETURNS public.garantia_reclamo
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = '' AS $$
+DECLARE r public.garantia_reclamo;
+BEGIN
+  PERFORM set_config('app.motivo', coalesce(p_nota, ''), true);
+  UPDATE public.garantia_reclamo SET estado = p_estado WHERE id = p_reclamo.id RETURNING * INTO r;
+  INSERT INTO public.garantia_reclamo_evento (empresa_id, reclamo_id, estado_anterior, estado_nuevo, nota, id_operacion, creado_por)
+  VALUES (r.empresa_id, r.id, p_reclamo.estado, p_estado, p_nota, p_id_operacion, auth.uid());
+  PERFORM set_config('app.motivo', '', true);
+  RETURN r;
+END $$;
+
+-- cambiar_estado_reclamo(reclamo, estado, nota, id_operacion)
+--   "en_revision": garantias.registrar o garantias.resolver.   "rechazado": garantias.resolver y motivo.
+--   Reintento: si el reclamo ya está en ese estado por esta misma operación, devuelve lo mismo.
+CREATE FUNCTION public.cambiar_estado_reclamo(p_reclamo_id uuid, p_estado text, p_nota text, p_id_operacion uuid) RETURNS jsonb
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = '' AS $$
+DECLARE r public.garantia_reclamo;
+BEGIN
+  SELECT * INTO r FROM public.garantia_reclamo WHERE id = p_reclamo_id;
+  IF r.id IS NULL THEN
+    RAISE EXCEPTION 'NO_EXISTE: el reclamo de garantía no existe.';
+  END IF;
+  IF p_estado NOT IN ('en_revision', 'rechazado') OR p_estado IS NULL THEN
+    RAISE EXCEPTION 'DATO_INVALIDO: el estado es "en_revision" o "rechazado" (para resolver use resolver_reclamo_garantia).';
+  END IF;
+  IF p_estado = 'rechazado' OR NOT public.tiene_permiso('garantias.registrar', r.empresa_id) THEN
+    PERFORM interno.exigir_escritura(r.empresa_id, 'garantias.resolver', 'ventas');
+  ELSE
+    PERFORM interno.exigir_escritura(r.empresa_id, 'garantias.registrar', 'ventas');
+  END IF;
+  PERFORM interno.exigir_sucursal(r.empresa_id, r.sucursal_id);
+  IF p_id_operacion IS NULL THEN
+    RAISE EXCEPTION 'FALTA_ID_OPERACION: cada operación necesita un id_operacion (uuid) único.';
+  END IF;
+  IF EXISTS (SELECT 1 FROM public.garantia_reclamo_evento e WHERE e.reclamo_id = r.id AND e.id_operacion = p_id_operacion AND e.estado_nuevo = p_estado) THEN
+    RETURN interno.reclamo_respuesta(r, true);
+  END IF;
+  IF p_estado = 'rechazado' AND length(trim(coalesce(p_nota, ''))) < 5 THEN
+    RAISE EXCEPTION 'FALTA_MOTIVO: escriba por qué se rechaza el reclamo (mínimo 5 letras).';
+  END IF;
+  PERFORM interno.bloquear_libros(r.empresa_id);
+  SELECT * INTO r FROM public.garantia_reclamo WHERE id = p_reclamo_id FOR UPDATE;
+  IF EXISTS (SELECT 1 FROM public.garantia_reclamo_evento e WHERE e.reclamo_id = r.id AND e.id_operacion = p_id_operacion AND e.estado_nuevo = p_estado) THEN
+    RETURN interno.reclamo_respuesta(r, true);
+  END IF;
+  IF r.estado NOT IN ('recibido', 'en_revision') OR (p_estado = 'en_revision' AND r.estado = 'en_revision') THEN
+    RAISE EXCEPTION 'GARANTIA_INVALIDA: el reclamo #% está "%"; no pasa a "%".', r.numero, r.estado, p_estado;
+  END IF;
+  IF p_estado = 'rechazado' THEN
+    UPDATE public.garantia_reclamo SET rechazo_motivo = trim(p_nota), resuelto_por = auth.uid(), resuelto_en = now(),
+           resolucion_id_operacion = p_id_operacion
+     WHERE id = r.id;
+  END IF;
+  r := interno.reclamo_a_estado(r, p_estado, nullif(trim(coalesce(p_nota, '')), ''), p_id_operacion);
+  RETURN interno.reclamo_respuesta(r, false);
+END $$;
+
+-- resolver_reclamo_garantia(reclamo, datos, id_operacion)   garantias.resolver
+-- datos = {"resolucion": "reparado" | "cambiado" | "devuelto", "nota"?,
+--   reparado:  "costo_reparacion"?: {"cuenta_dinero_id", "categoria_id", "monto_centavos"} -> registrar_gasto
+--   cambiado:  "cambio"?: lo mismo que registrar_devolucion (por defecto: el mismo producto y cantidad);
+--              "cuenta_dinero_id"?, "caja_id"?
+--   devuelto:  "destino": "dinero" | "saldo_favor", "cuenta_dinero_id"? , "caja_id"?}
+-- El cambio y la devolución usan registrar_devolucion (pide además ventas.devolver); el gasto, registrar_gasto
+-- (pide gastos.registrar). Todo junto o nada; reintento con el mismo id_operacion = la misma respuesta.
+CREATE FUNCTION public.resolver_reclamo_garantia(p_reclamo_id uuid, p_datos jsonb, p_id_operacion uuid) RETURNS jsonb
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = '' AS $$
+DECLARE
+  r      public.garantia_reclamo;
+  v_res  text;
+  v_dev  jsonb;
+  v_gas  jsonb;
+  v_c    jsonb;
+  d      jsonb;
+  v_nota text;
+BEGIN
+  SELECT * INTO r FROM public.garantia_reclamo WHERE id = p_reclamo_id;
+  IF r.id IS NULL THEN
+    RAISE EXCEPTION 'NO_EXISTE: el reclamo de garantía no existe.';
+  END IF;
+  PERFORM interno.exigir_escritura(r.empresa_id, 'garantias.resolver', 'ventas');
+  PERFORM interno.exigir_sucursal(r.empresa_id, r.sucursal_id);
+  IF p_id_operacion IS NULL THEN
+    RAISE EXCEPTION 'FALTA_ID_OPERACION: cada operación necesita un id_operacion (uuid) único.';
+  END IF;
+  PERFORM interno.exigir_tipo_operacion(r.empresa_id, p_id_operacion, 'resolucion_garantia');
+  IF r.resolucion_id_operacion = p_id_operacion THEN
+    RETURN interno.reclamo_respuesta(r, true);
+  END IF;
+  IF jsonb_typeof(p_datos) IS DISTINCT FROM 'object' THEN
+    RAISE EXCEPTION 'DATO_INVALIDO: los datos deben ser un objeto JSON.';
+  END IF;
+  PERFORM interno.exigir_claves(p_datos, ARRAY['resolucion', 'nota', 'costo_reparacion', 'cambio', 'destino', 'cuenta_dinero_id', 'caja_id']);
+  v_res := interno.json_texto(p_datos->'resolucion', 'resolucion', 20);
+  IF v_res IS NULL OR v_res NOT IN ('reparado', 'cambiado', 'devuelto') THEN
+    RAISE EXCEPTION 'DATO_INVALIDO: la resolución es "reparado", "cambiado" o "devuelto".';
+  END IF;
+  IF v_res <> 'reparado' AND p_datos ? 'costo_reparacion' THEN
+    RAISE EXCEPTION 'DATO_INVALIDO: el costo de reparación solo va con "reparado".';
+  END IF;
+  IF v_res <> 'cambiado' AND p_datos ? 'cambio' THEN
+    RAISE EXCEPTION 'DATO_INVALIDO: "cambio" solo va con "cambiado".';
+  END IF;
+  v_nota := interno.json_texto(p_datos->'nota', 'nota', 500);
+
+  PERFORM interno.reservar_operacion(r.empresa_id, p_id_operacion, 'resolucion_garantia');
+  SELECT * INTO r FROM public.garantia_reclamo WHERE id = p_reclamo_id FOR UPDATE;
+  IF r.resolucion_id_operacion = p_id_operacion THEN
+    RETURN interno.reclamo_respuesta(r, true);
+  END IF;
+  IF r.estado NOT IN ('recibido', 'en_revision') THEN
+    RAISE EXCEPTION 'GARANTIA_INVALIDA: el reclamo #% ya está "%".', r.numero, r.estado;
+  END IF;
+
+  IF v_res = 'reparado' AND coalesce(p_datos->'costo_reparacion', 'null'::jsonb) <> 'null'::jsonb THEN
+    v_c := p_datos->'costo_reparacion';
+    PERFORM interno.exigir_claves(v_c, ARRAY['cuenta_dinero_id', 'categoria_id', 'monto_centavos']);
+    v_gas := public.registrar_gasto(r.empresa_id, jsonb_build_object('cuenta_dinero_id', v_c->'cuenta_dinero_id',
+               'categoria_id', v_c->'categoria_id', 'monto_centavos', v_c->'monto_centavos',
+               'descripcion', 'Reparación por garantía, reclamo #' || r.numero || ' (' || r.descripcion_producto || ')'),
+               md5(p_id_operacion::text || ':gasto_garantia')::uuid);
+  ELSIF v_res IN ('cambiado', 'devuelto') THEN
+    d := jsonb_build_object('lineas', jsonb_build_array(jsonb_build_object('linea', r.linea, 'cantidad', r.cantidad)),
+           'motivo', 'Garantía, reclamo #' || r.numero || ': ' || r.motivo,
+           'destino', CASE v_res WHEN 'cambiado' THEN 'cambio' ELSE coalesce(p_datos->>'destino', 'dinero') END)
+         || CASE WHEN p_datos ? 'cuenta_dinero_id' THEN jsonb_build_object('cuenta_dinero_id', p_datos->'cuenta_dinero_id') ELSE '{}' END
+         || CASE WHEN p_datos ? 'caja_id' THEN jsonb_build_object('caja_id', p_datos->'caja_id') ELSE '{}' END;
+    IF v_res = 'cambiado' THEN
+      d := d || jsonb_build_object('cambio', coalesce(p_datos->'cambio',
+             jsonb_build_object('lineas', jsonb_build_array(jsonb_build_object('producto_id', r.producto_id, 'cantidad', r.cantidad)))));
+    END IF;
+    v_dev := public.registrar_devolucion(r.venta_id, d, md5(p_id_operacion::text || ':devolucion_garantia')::uuid);
+  END IF;
+
+  PERFORM set_config('app.motivo', coalesce(v_nota, initcap(v_res)), true);
+  UPDATE public.garantia_reclamo SET estado = 'resuelto', resolucion = v_res, resolucion_nota = v_nota,
+         devolucion_id = (v_dev->>'devolucion_id')::uuid, gasto_id = (v_gas->>'gasto_id')::uuid,
+         costo_reparacion_centavos = CASE WHEN v_gas IS NOT NULL THEN (v_c->>'monto_centavos')::bigint END,
+         resuelto_por = auth.uid(), resuelto_en = now(), resolucion_id_operacion = p_id_operacion
+   WHERE id = r.id;
+  INSERT INTO public.garantia_reclamo_evento (empresa_id, reclamo_id, estado_anterior, estado_nuevo, nota, id_operacion, creado_por)
+  VALUES (r.empresa_id, r.id, r.estado, 'resuelto', coalesce(v_nota, initcap(v_res)), p_id_operacion, auth.uid());
+  PERFORM set_config('app.motivo', '', true);
+  SELECT * INTO r FROM public.garantia_reclamo WHERE id = r.id;
+  RETURN interno.reclamo_respuesta(r, false) || jsonb_strip_nulls(jsonb_build_object('devolucion', v_dev, 'gasto', v_gas));
+END $$;
+
+-- Comprobante del reclamo (lo que se imprime; la app lo arma sin íconos ni emojis).
+CREATE FUNCTION public.documento_reclamo_garantia(p_reclamo_id uuid) RETURNS jsonb
+LANGUAGE plpgsql STABLE SECURITY DEFINER SET search_path = '' AS $$
+DECLARE
+  r public.garantia_reclamo;
+  v public.venta;
+BEGIN
+  SELECT * INTO r FROM public.garantia_reclamo WHERE id = p_reclamo_id;
+  IF r.id IS NULL THEN
+    RAISE EXCEPTION 'NO_EXISTE: el reclamo de garantía no existe.';
+  END IF;
+  PERFORM interno.exigir_lectura_garantias(r.empresa_id);
+  PERFORM interno.exigir_sucursal(r.empresa_id, r.sucursal_id);
+  SELECT * INTO v FROM public.venta WHERE id = r.venta_id;
+  RETURN jsonb_build_object('titulo', 'RECLAMO DE GARANTÍA', 'numero', r.numero, 'estado', r.estado,
+    'emisor', jsonb_build_object('nombre', v.emisor_nombre, 'rtn', v.emisor_rtn,
+                                 'sucursal', (SELECT s.codigo || ' ' || s.nombre FROM public.sucursal s WHERE s.id = r.sucursal_id)),
+    'fecha', to_char(r.fecha, 'DD/MM/YYYY'), 'cliente', r.cliente_nombre,
+    'factura', v.numero_documento, 'fecha_venta', to_char(v.fecha_contable, 'DD/MM/YYYY'),
+    'producto', r.descripcion_producto, 'cantidad', r.cantidad, 'garantia_hasta', to_char(r.garantia_hasta, 'DD/MM/YYYY'),
+    'fuera_de_plazo', r.fuera_de_plazo, 'autorizacion', r.autorizacion_motivo,
+    'motivo', r.motivo, 'descripcion', r.descripcion, 'resolucion', r.resolucion, 'resolucion_nota', r.resolucion_nota,
+    'rechazo_motivo', r.rechazo_motivo, 'registrado_por', public.nombre_usuario(r.empresa_id, r.creado_por),
+    'historial', (SELECT coalesce(jsonb_agg(jsonb_build_object('estado', e.estado_nuevo, 'nota', e.nota,
+        'cuando', public.iso(e.creado_en), 'quien', public.nombre_usuario(r.empresa_id, e.creado_por)) ORDER BY e.id), '[]')
+      FROM public.garantia_reclamo_evento e WHERE e.reclamo_id = r.id));
+END $$;
+
+REVOKE EXECUTE ON FUNCTION
+  interno.garantia_de_linea(), interno.fijar_garantia_venta(), interno.proteger_garantia_reclamo(),
+  interno.reclamo_respuesta(public.garantia_reclamo, boolean), interno.cantidad_devuelta_linea(bigint),
+  interno.exigir_lectura_garantias(uuid), interno.reclamo_a_estado(public.garantia_reclamo, text, text, uuid)
+FROM PUBLIC, anon, authenticated, service_role;
+REVOKE EXECUTE ON FUNCTION
+  public.buscar_garantia(uuid, text, boolean), public.registrar_reclamo_garantia(uuid, jsonb, uuid),
+  public.cambiar_estado_reclamo(uuid, text, text, uuid), public.resolver_reclamo_garantia(uuid, jsonb, uuid),
+  public.documento_reclamo_garantia(uuid)
+FROM PUBLIC, anon, service_role;
+GRANT EXECUTE ON FUNCTION
+  public.buscar_garantia(uuid, text, boolean), public.registrar_reclamo_garantia(uuid, jsonb, uuid),
+  public.cambiar_estado_reclamo(uuid, text, text, uuid), public.resolver_reclamo_garantia(uuid, jsonb, uuid),
+  public.documento_reclamo_garantia(uuid)
+TO authenticated;

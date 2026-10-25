@@ -339,3 +339,27 @@ BEGIN
     'lineas', jsonb_build_array(demo.l('VAR', 6)), 'pagos', '[{"forma":"efectivo"}]'::jsonb), gen_random_uuid());
   PERFORM demo.como(NULL);
 END $$;
+
+-- 11) (app 0.12.0, núcleo 0.18.0) Garantías: taladro con 180 días y pintura con 30. Llegan 5 taladros más, se
+--     vende uno hoy a Pedro Castillo y él ya dejó un reclamo (abierto). Con un núcleo anterior se salta.
+DO $$
+DECLARE
+  e uuid := demo.id('EMPRESA');
+  v jsonb;
+BEGIN
+  IF to_regprocedure('public.registrar_reclamo_garantia(uuid, jsonb, uuid)') IS NULL THEN
+    RETURN;
+  END IF;
+  PERFORM demo.como('dueno@demo.hn');
+  PERFORM public.editar_producto(e, demo.id('TAL'), '{"dias_garantia": 180}');
+  PERFORM public.editar_producto(e, demo.id('PIN'), '{"dias_garantia": 30}');
+  PERFORM public.registrar_compra(e, jsonb_build_object('proveedor_id', demo.id('PROV1'), 'bodega_id', demo.id('B1'),
+    'numero_documento', 'FL-1102', 'fecha', public.hoy_local(e), 'condicion', 'contado', 'cuenta_dinero_id', demo.id('BAC'),
+    'lineas', jsonb_build_array(jsonb_build_object('producto_id', demo.id('TAL'), 'cantidad', 5, 'costo_unitario', 100000))), gen_random_uuid());
+  v := public.registrar_venta(e, jsonb_build_object('cliente_id', demo.id('CLI3'),
+    'lineas', jsonb_build_array(demo.l('TAL', 1)), 'pagos', '[{"forma":"efectivo"}]'::jsonb), gen_random_uuid());
+  PERFORM demo.g('V_TAL', (v->>'venta_id')::uuid);
+  PERFORM public.registrar_reclamo_garantia(e, jsonb_build_object('venta_id', v->'venta_id', 'linea', 1,
+    'motivo', 'Se calienta y se apaga', 'descripcion', 'Lo trajo en su caja, sin golpes.'), gen_random_uuid());
+  PERFORM demo.como(NULL);
+END $$;

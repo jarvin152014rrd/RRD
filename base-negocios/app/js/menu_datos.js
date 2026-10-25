@@ -7,6 +7,7 @@
 //   "barra/<boton>" = botón de la barra del celular (inicio, vender, caja, productos).
 //   icono: nombre de un ícono de js/iconos.js (todas las pestañas y subpestañas llevan uno).
 //   contador: "pendientes" = la subpestaña muestra el número de pendientes.
+//   nucleo: versión mínima del núcleo (app 0.12.0): con un núcleo anterior la subpestaña no sale.
 
 export const MENU = [
   // Cada pestaña responde UNA pregunta. icono: nombre de js/iconos.js (lo revisa la prueba de la app).
@@ -22,6 +23,8 @@ export const MENU = [
     { id: 'cotizaciones', titulo: 'Cotizaciones', icono: 'documento', modulos: ['ventas'], permisos: ['ventas.cotizar'], pantalla: 'cotizaciones' },
     { id: 'apartados', titulo: 'Apartados', icono: 'bolsa', modulos: ['apartados'], permisos: ['apartados.registrar'] },
     { id: 'devoluciones', titulo: 'Devoluciones', icono: 'devolucion', modulos: ['ventas'], permisos: ['ventas.devolver'], pantalla: 'devoluciones' },
+    // App 0.12.0 (núcleo 0.18.0): reclamos de garantía. nucleo = versión mínima del núcleo (con una anterior no sale).
+    { id: 'garantias', titulo: 'Garantías', icono: 'garantia', modulos: ['ventas'], permisos: ['garantias.registrar', 'garantias.resolver'], nucleo: '0.18.0', pantalla: 'garantias' },
   ] },
   // Caja: mi turno (para el cajero).
   { id: 'caja', titulo: 'Caja', icono: 'caja', subs: [
@@ -124,6 +127,14 @@ export function conPalabras(menu, palabras) {
 const BARRA_VIEJA = { inicio: 'resumen', productos: 'buscar' };
 export function tituloBarra(palabras, id, normal) {
   return palabra(palabras, `barra/${id}`) || (BARRA_VIEJA[id] && palabra(palabras, `barra/${BARRA_VIEJA[id]}`)) || normal;
+}
+
+// ¿La versión v del núcleo es esta o más nueva? ("0.18.0" >= "0.17.0"). Sin versión (Armador): sí.
+export function nucleoAlcanza(v, minima) {
+  if (!minima || !v) return true;
+  const a = String(v).split('.').map(Number), b = String(minima).split('.').map(Number);
+  for (let i = 0; i < 3; i++) { if ((a[i] || 0) !== (b[i] || 0)) return (a[i] || 0) > (b[i] || 0); }
+  return true;
 }
 
 // ¿Se ve este elemento con estos módulos y permisos? (Sets de texto)

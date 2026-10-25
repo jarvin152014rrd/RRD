@@ -262,6 +262,9 @@ const ESTADOS = {
   por_vencer: ['Por vencer', 'dorado'], por_pagar: ['Por pagar', 'dorado'], en_transito: ['En tránsito', 'dorado'], proximo: ['Próximo', 'dorado'],
   abierta: ['Abierta', 'dorado'],
   vencido: ['Vencido', 'rojo'], anulado: ['Anulado', 'rojo'], rechazado: ['Rechazado', 'rojo'],
+  // app 0.12.0 (garantías y cheques)
+  recibido: ['Recibido', 'dorado'], en_revision: ['En revisión', 'azul'], resuelto: ['Resuelto', 'verde'],
+  por_depositar: ['Por depositar', 'dorado'], depositado: ['Depositado', 'azul'],
 };
 export function chipEstado(estado, texto = null) {
   const [t, c] = ESTADOS[estado] || [String(estado || ''), 'neutro'];

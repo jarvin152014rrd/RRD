@@ -1,7 +1,7 @@
 // Perfil del usuario (mi_perfil) en MEMORIA: permisos, módulos, empresa y rol.
 // No se guarda en el navegador; se vuelve a pedir al servidor cada vez que se entra.
 // El servidor siempre vuelve a revisar los permisos: esto solo arma el menú.
-import { rpc, config } from './api.js';
+import { rpc, leer, config } from './api.js';
 import { configurarFormato } from './formato.js';
 
 let perfil = null;
@@ -26,7 +26,11 @@ export async function cargarPerfil() {
   let elegida = null;
   try { elegida = localStorage.getItem(LLAVE_EMPRESA); } catch { /* nada */ }
   const id = (empresas.find((x) => x.id === elegida) || empresas[0]).id;
-  perfil = await rpc('mi_perfil', { p_empresa_id: id });
+  const [p, version] = await Promise.all([rpc('mi_perfil', { p_empresa_id: id }),
+    // Versión del núcleo (app 0.12.0): lo nuevo del menú se oculta con un núcleo anterior.
+    leer('version_esquema', {}, { limite: 1 }).then((x) => String((x && x[0] && x[0].version_nucleo) || '')).catch(() => '')]);
+  perfil = p;
+  perfil.version_nucleo = version;
   permisos = new Set(perfil.permisos || []);
   modulos = new Set(perfil.modulos || []);
   configurarFormato(perfil.empresa || {});

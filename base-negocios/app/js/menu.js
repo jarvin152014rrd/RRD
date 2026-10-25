@@ -2,16 +2,18 @@
 // módulos activos + permisos de mi_perfil. Nada gris ni bloqueado: lo que no puede, no sale.
 // La lista vive en js/menu_datos.js (datos puros que también usa el Armador del proveedor).
 // Los títulos usan las palabras del rubro del cliente (config.palabras), si las hay.
-import { puede, tieneModulo } from './sesion.js';
+import { puede, tieneModulo, perfilActual } from './sesion.js';
 import { config } from './api.js';
-import { MENU, RUTAS_VIEJAS, conPalabras, tituloBarra } from './menu_datos.js';
+import { MENU, RUTAS_VIEJAS, conPalabras, tituloBarra, nucleoAlcanza } from './menu_datos.js';
 
 export { MENU, RUTAS_VIEJAS };
 const PALABRAS = (config && typeof config.palabras === 'object' && config.palabras) || {};
 
 function visible(item) {
   return (!item.modulos || tieneModulo(...item.modulos)) && (!item.permisos || puede(...item.permisos))
-    && (!item.todos || item.todos.every((p) => puede(p)));
+    && (!item.todos || item.todos.every((p) => puede(p)))
+    // Con un núcleo anterior lo nuevo no sale (si no se pudo leer la versión, se supone la de antes).
+    && (!item.nucleo || nucleoAlcanza((perfilActual() || {}).version_nucleo || '0.0.0', item.nucleo));
 }
 
 // Menú del usuario actual: solo pestañas con al menos una subpestaña permitida.
