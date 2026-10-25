@@ -103,7 +103,11 @@ Fotos livianas, con interruptor por empresa. **Apagado por defecto**: hasta que 
 - `crear_producto` acepta las dos claves (con `productos.editar`). `editar_producto` también, pero cambiarlas pide
   `productos.precios` y motivo (como un cambio de precio; queda en la bitácora). `null` quita el mayorista.
 - Reglas (trigger, por cualquier camino): el mayorista **nunca pasa el precio normal** (tampoco al bajar el normal con
-  `cambiar_precio_producto`) y "desde cantidad" necesita el precio mayorista: `PRECIO_MAYORISTA_INVALIDO`.
+  `cambiar_precio_producto`) y "desde cantidad" necesita el precio mayorista: `PRECIO_MAYORISTA_INVALIDO`. Es un
+  "constraint trigger" que mira la fila como queda: en el Excel una misma fila puede bajar el precio y el mayorista
+  a la vez (la regla se revisa al final de la fila). En la app, al bajar el precio por debajo del mayorista se pide el
+  mayorista nuevo (se baja primero el mayorista y después el precio).
+- El Excel de productos devuelve `"avisos"` por fila (precio normal o mayorista bajo el costo), como la ficha.
 - `crear_producto`, `editar_producto` y `cambiar_precio_producto` responden `"avisos"`: precio normal o mayorista (sin
   ISV) por debajo del costo promedio. Solo a quien ve costos; no impide guardar.
 - Cliente mayorista: `crear_tercero` / `editar_tercero` con `"es_mayorista": true|false`; pide `productos.precios`

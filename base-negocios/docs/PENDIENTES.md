@@ -1,4 +1,4 @@
-# Pendientes (núcleo 0.18.0, 145 pruebas OK; también con probar.sh --paquete)
+# Pendientes (núcleo 0.18.0, 146 pruebas OK; también con probar.sh --paquete)
 
 Estado: etapa 2 terminada. Las correcciones de la revisión de la etapa 2 están
 HECHAS en la migración 038 (núcleo 0.9.1) y las de la revisión de 0.9.1 en la
@@ -21,7 +21,11 @@ etapa 3.
   precio mayorista (se quita en la ficha).
 - NOTA: si el cheque rebota después de confirmar el depósito, el sistema hace solo un traslado del banco a "Cheques
   por depositar" y luego anula el cobro (la deuda vuelve).
-- FALTA: que el revisor revise 0.18.0.
+- HECHO: el revisor revisó 0.18.0 (nada grave); sus puntos medios y menores quedaron dentro de la misma 054 (prueba 146).
+- A DECIDIR (dueño) [DINERO]: ¿la devolución parcial de una venta con precio mayorista por cantidad debe recalcular el
+  precio? Hoy NO: si compró 12 a precio mayorista y devuelve 6, se le devuelve a precio mayorista (lo que pagó).
+- FALTA (menor): con la app vieja (0.11.x) y el núcleo 0.18.0, cobrar a un cliente mayorista falla (la previa no
+  manda el cliente). Por eso se sube la app 0.12.1 enseguida (dicho en docs/SUPABASE.md).
 
 ## Fotos de productos (HECHO en 0.17.0, migración 053, pruebas 139-140; app 0.11.0)
 

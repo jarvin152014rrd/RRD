@@ -117,9 +117,12 @@ export async function armarCarrito(vista, ctx, { modo, alTerminar = null }) {
 
   // ---------------- Carrito ----------------
   const carrito = h('div', { class: 'carrito' });
+  // Al cambiar la cantidad o el cliente, el servidor vuelve a decidir el precio (normal o mayorista); una
+  // línea con descuento manual se queda con el precio normal (nunca descuento sobre el mayorista).
+  const tipoLibre = (l) => { l.precioTipo = Number(l.descPct) > 0 ? 'normal' : null; };
   function agregar(p) {
     const ya = estado.lineas.find((l) => l.producto.producto_id === p.producto_id);
-    if (ya) ya.cantidad = String(Number(ya.cantidad || 0) + 1);
+    if (ya) { ya.cantidad = String(Number(ya.cantidad || 0) + 1); tipoLibre(ya); }
     else estado.lineas.push({ producto: p, cantidad: '1', descPct: '', promocionId: null, elegida: false, precioTipo: null });
     buscar.value = '';
     resultados.replaceChildren();
@@ -148,7 +151,7 @@ export async function armarCarrito(vista, ctx, { modo, alTerminar = null }) {
       const cant = h('input', { name: 'cantidad', type: 'number', min: p.permite_fracciones ? '0.001' : '1',
         step: p.permite_fracciones ? '0.001' : '1', inputmode: p.permite_fracciones ? 'decimal' : 'numeric', value: l.cantidad,
         'aria-label': `Cantidad de ${p.nombre}` });
-      cant.addEventListener('change', () => { l.cantidad = cant.value; if (!l.elegida) l.promocionId = null; cambio(); });
+      cant.addEventListener('change', () => { l.cantidad = cant.value; tipoLibre(l); if (!l.elegida) l.promocionId = null; cambio(); });
       const nombreLinea = h('div', { class: 'linea-nombre' }, h('strong', {}, p.nombre),
           h('span', { class: 'detalle' }, [p.tipo === 'servicio' ? 'Servicio · no mueve inventario' : p.codigo,
             p.impuesto_clase === 'gravado' ? `${p.impuesto || p.tipo_impuesto} ${p.precio_incluye_isv ? 'incluido' : 'aparte'}` : 'Exento',
@@ -204,7 +207,7 @@ export async function armarCarrito(vista, ctx, { modo, alTerminar = null }) {
   // Con núcleo 0.18.0 el cliente puede cambiar el precio (mayorista): se recalcula.
   selCliente.addEventListener('change', () => {
     estado.clienteId = selCliente.value;
-    if (n018) { for (const l of estado.lineas) l.precioTipo = null; cambio(); } else cambio(false);
+    if (n018) { for (const l of estado.lineas) tipoLibre(l); cambio(); } else cambio(false);
   });
   const descFactura = h('input', { id: 'descuento-factura', type: 'number', min: '0', max: '100', step: '0.01', inputmode: 'decimal', placeholder: '0' });
   descFactura.addEventListener('change', () => { estado.descFactura = descFactura.value; cambio(); });

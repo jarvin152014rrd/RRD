@@ -7,7 +7,7 @@
 import { rpc, leer, escribir } from '../api.js';
 import { empresaId, puede, tieneModulo } from '../sesion.js';
 import { dinero, fechaHora, aCentavos, paraCampo, cantidad, aNumero, comaInvalida, MENSAJE_COMA } from '../formato.js';
-import { h, icono, aviso, errorSimple, campo, conBoton, pedirMotivo, confirmar, titulo, filaIcono, chipEstado, monto, estadoVacio } from '../ui.js';
+import { h, icono, aviso, errorSimple, campo, conBoton, pedirMotivo, confirmar, titulo, filaIcono, chipEstado, monto, estadoVacio, mensaje } from '../ui.js';
 import { hayEnMenu } from '../menu.js';
 import { filtrar, olvidarDatos, nucleoAlMenos } from '../datos.js';
 import { fotosActivas, miniatura, fotoGrande, subirFotoProducto, quitarFotoProducto, revisarArchivo } from '../fotos.js';
@@ -162,9 +162,17 @@ async function cambiarPrecio(vista, ctx, p) {
   const nuevo = h('input', { id: 'precio-nuevo', type: 'text', inputmode: 'decimal', value: paraCampo(p.precio_venta_centavos) });
   const zonaError = h('div', { 'aria-live': 'assertive' });
   const sigue = h('button', { type: 'submit', class: 'boton boton-principal boton-ancho' }, 'Siguiente');
+  // Núcleo 0.18.0: si el precio nuevo queda por debajo del precio mayorista, se bajan los dos juntos.
+  const may = Number(p.precio_mayorista_centavos) || 0;
+  const nuevoMay = h('input', { id: 'precio-nuevo-mayorista', type: 'text', inputmode: 'decimal', placeholder: '0.00' });
+  const zonaMay = h('div', { hidden: true },
+    mensaje('info', `El precio mayorista (${dinero(may)}) quedaría más caro que el normal.`, 'Escriba también el nuevo precio mayorista (igual o menor que el normal), o déjelo vacío para quitarlo.'),
+    campo('Precio mayorista nuevo (L)', nuevoMay));
+  const revisarMay = () => { const c = aCentavos(nuevo.value); zonaMay.hidden = !(may && c !== null && c < may); };
+  nuevo.addEventListener('input', revisarMay);
   const form = h('form', { class: 'formulario', novalidate: true },
     h('p', {}, `Precio actual: ${dinero(p.precio_venta_centavos)} ${p.precio_incluye_isv ? '(incluye ISV)' : '(sin ISV)'}.`),
-    campo('Precio nuevo (L)', nuevo, p.precio_incluye_isv ? 'Con ISV incluido, como lo cobra.' : 'Sin ISV.'), zonaError, sigue,
+    campo('Precio nuevo (L)', nuevo, p.precio_incluye_isv ? 'Con ISV incluido, como lo cobra.' : 'Sin ISV.'), zonaMay, zonaError, sigue,
     h('button', { type: 'button', class: 'boton boton-ancho', onclick: () => ficha(vista, ctx, p.producto_id) }, 'Volver'));
   form.addEventListener('submit', async (ev) => {
     ev.preventDefault();
@@ -172,10 +180,19 @@ async function cambiarPrecio(vista, ctx, p) {
     const c = aCentavos(nuevo.value);
     if (c === null || c < 0) { zonaError.append(errorSimple('Escriba un precio válido (por ejemplo 125.50).')); return; }
     if (c === p.precio_venta_centavos) { zonaError.append(errorSimple('Es el mismo precio.')); return; }
+    // Bajar los dos: primero el mayorista (así nunca queda más caro que el normal) y después el normal.
+    const bajarMay = may && c < may;
+    const m = bajarMay && nuevoMay.value.trim() ? aCentavos(nuevoMay.value) : null;
+    if (bajarMay && nuevoMay.value.trim() && (m === null || m <= 0 || m > c)) {
+      zonaError.append(errorSimple(`El precio mayorista nuevo debe ser mayor que cero y no más de ${dinero(c)} (o déjelo vacío para quitarlo).`)); return;
+    }
     let r = null;
     const ok = await pedirMotivo({ titulo: 'Cambiar precio', textoBoton: 'Cambiar precio',
-      explicacion: `${p.nombre}: de ${dinero(p.precio_venta_centavos)} a ${dinero(c)}.`,
-      accion: async (motivo) => { r = await rpc('cambiar_precio_producto', { p_empresa_id: E(), p_producto_id: p.producto_id, p_precio_centavos: c, p_motivo: motivo }); return r; } });
+      explicacion: `${p.nombre}: de ${dinero(p.precio_venta_centavos)} a ${dinero(c)}.` + (bajarMay ? (m ? ` Mayorista: ${dinero(m)}.` : ' Se quita el precio mayorista.') : ''),
+      accion: async (motivo) => {
+        if (bajarMay) await rpc('editar_producto', { p_empresa_id: E(), p_producto_id: p.producto_id, p_motivo: motivo,
+          p_datos: m ? { precio_mayorista_centavos: m } : { precio_mayorista_centavos: null, cantidad_mayorista: null } });
+        r = await rpc('cambiar_precio_producto', { p_empresa_id: E(), p_producto_id: p.producto_id, p_precio_centavos: c, p_motivo: motivo }); return r; } });
     if (ok) { olvidarDatos('productos'); aviso(`Precio cambiado · ${p.nombre} de ${dinero(p.precio_venta_centavos)} a ${dinero(c)}`); mostrarAvisos(r); ficha(vista, ctx, p.producto_id); }
   });
   vista.replaceChildren(h('section', { class: 'tarjeta tarjeta-angosta', 'aria-labelledby': 't-cprecio' },

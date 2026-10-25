@@ -34,13 +34,20 @@ ALTER TABLE public.producto
   ADD COLUMN cantidad_mayorista        numeric(18,4) CHECK (cantidad_mayorista > 0 AND cantidad_mayorista < 100000000000000);
 ALTER TABLE public.tercero ADD COLUMN es_mayorista boolean NOT NULL DEFAULT false;
 ALTER TABLE public.venta_linea
-  ADD COLUMN precio_tipo            text NOT NULL DEFAULT 'normal' CHECK (precio_tipo IN ('normal', 'mayorista')),
+  ADD COLUMN precio_tipo            text NOT NULL DEFAULT 'normal' CHECK (precio_tipo IN ('normal', 'mayorista', 'garantia')),
   ADD COLUMN precio_normal_centavos bigint;     -- con mayorista: el precio normal de ese momento (para el comprobante)
 
 -- El precio mayorista nunca pasa el normal (por cualquier camino: ficha, cambio de precio o Excel).
+-- Revisión de 0.18.0: es un "constraint trigger" que se puede aplazar al final de una operación que
+-- cambia los dos precios a la vez (Excel: bajar el precio y el mayorista en la misma fila). Lee la fila
+-- como queda al final.
 CREATE FUNCTION interno.revisar_precio_mayorista() RETURNS trigger
 LANGUAGE plpgsql SECURITY DEFINER SET search_path = '' AS $$
 BEGIN
+  SELECT * INTO NEW FROM public.producto x WHERE x.id = NEW.id;
+  IF NEW.id IS NULL THEN
+    RETURN NULL;
+  END IF;
   IF NEW.cantidad_mayorista IS NOT NULL AND NEW.precio_mayorista_centavos IS NULL THEN
     RAISE EXCEPTION 'PRECIO_MAYORISTA_INVALIDO: "desde cantidad" necesita el precio mayorista del producto %.', NEW.codigo;
   END IF;
@@ -48,10 +55,10 @@ BEGIN
     RAISE EXCEPTION 'PRECIO_MAYORISTA_INVALIDO: el precio mayorista (%) del producto % no puede ser mayor que el precio normal (%).',
       interno.lempiras(NEW.precio_mayorista_centavos), NEW.codigo, interno.lempiras(NEW.precio_venta_centavos);
   END IF;
-  RETURN NEW;
+  RETURN NULL;
 END $$;
-CREATE TRIGGER revisar_mayorista BEFORE INSERT OR UPDATE OF precio_venta_centavos, precio_mayorista_centavos, cantidad_mayorista
-  ON public.producto FOR EACH ROW EXECUTE FUNCTION interno.revisar_precio_mayorista();
+CREATE CONSTRAINT TRIGGER revisar_mayorista AFTER INSERT OR UPDATE OF precio_venta_centavos, precio_mayorista_centavos, cantidad_mayorista
+  ON public.producto DEFERRABLE INITIALLY IMMEDIATE FOR EACH ROW EXECUTE FUNCTION interno.revisar_precio_mayorista();
 
 -- ¿El cliente de la venta que se está calculando es mayorista? Lo anota quien calcula
 -- (app.cliente_venta, local a la transacción) para no cambiar la firma de calcular_venta.
@@ -382,6 +389,11 @@ DECLARE
   a_tip    text[] := '{}';
   a_pnor   bigint[] := '{}';
   a_mdis   boolean[] := '{}';
+  -- Revisión 0.18.0: cambio por garantía (app.precio_garantia, lo anota resolver_reclamo_garantia):
+  -- {"producto_id", "cantidad", "total_centavos"}: esa línea vale exactamente lo que el cliente pagó.
+  v_gar_dat jsonb := nullif(current_setting('app.precio_garantia', true), '')::jsonb;
+  v_gar_ya boolean := false;
+  v_gar    bigint;
 BEGIN
   PERFORM interno.exigir_lineas(p_lineas, ARRAY['producto_id', 'cantidad', 'descuento_porcentaje', 'descuento_centavos', 'promocion_id',
                                                 'precio_tipo']);
@@ -403,7 +415,17 @@ BEGIN
     v_hay_promo := coalesce(l->'promocion_id', 'null'::jsonb) <> 'null'::jsonb;
     SELECT * INTO m FROM interno.mayorista_de(p, imp.porcentaje, q, v_cli_may);
     v_usa_may := false;
-    IF v_ptip = 'mayorista' THEN
+    v_gar := NULL;
+    IF v_gar_dat IS NOT NULL AND NOT v_gar_ya AND p.id::text = v_gar_dat->>'producto_id' AND q = (v_gar_dat->>'cantidad')::numeric THEN
+      -- Precio de garantía: el mismo valor neto (con ISV) de la línea original. No es un descuento: no
+      -- cuenta para el tope ni lleva promoción, mayorista ni descuento de factura.
+      IF v_hay_promo OR v_hay_desc OR v_ptip IS NOT NULL THEN
+        RAISE EXCEPTION 'DESCUENTO_DOBLE: la línea % ("%") es el cambio por garantía (vale lo mismo que pagó el cliente); no lleva promoción, precio mayorista ni descuento.', i, p.nombre;
+      END IF;
+      v_gar_ya := true;
+      v_gar := (v_gar_dat->>'total_centavos')::bigint;
+      m.o_aplica := false;
+    ELSIF v_ptip = 'mayorista' THEN
       IF NOT m.o_aplica THEN
         RAISE EXCEPTION 'PRECIO_MAYORISTA_NO_APLICA: la línea % ("%") no lleva precio mayorista (%).', i, p.nombre,
           CASE WHEN m.o_precio IS NULL THEN 'el producto no tiene precio mayorista'
@@ -412,12 +434,12 @@ BEGIN
                ELSE 'el cliente no es mayorista' END;
       END IF;
       IF v_hay_promo OR v_hay_desc THEN
-        RAISE EXCEPTION 'DESCUENTO_DOBLE: la línea % ("%") va con precio mayorista; no admite además una promoción ni un descuento (nunca descuento sobre descuento).', i, p.nombre;
+        RAISE EXCEPTION 'DESCUENTO_DOBLE: la línea % ("%") va con precio mayorista y no lleva además una promoción ni un descuento. Para dar un descuento, toque "Usar precio normal" en la línea.', i, p.nombre;
       END IF;
       v_usa_may := true;
     ELSIF v_ptip IS NULL AND m.o_aplica AND NOT v_hay_promo THEN
       IF v_hay_desc THEN
-        RAISE EXCEPTION 'DESCUENTO_DOBLE: la línea % ("%") tiene precio mayorista; para darle un descuento manual mande "precio_tipo": "normal" (nunca descuento sobre descuento).', i, p.nombre;
+        RAISE EXCEPTION 'DESCUENTO_DOBLE: la línea % ("%") tiene precio mayorista. Para dar un descuento, toque "Usar precio normal" en la línea.', i, p.nombre;
       END IF;
       -- Sin elegir: el mejor para el cliente entre el mayorista y la promoción (si hay una sola, o la
       -- que más descuenta). Si hay varias promociones y alguna gana al mayorista, quien vende elige (abajo).
@@ -431,11 +453,14 @@ BEGIN
       END IF;
     END IF;
     a_mdis := a_mdis || m.o_aplica;
-    a_pnor := a_pnor || CASE WHEN v_usa_may THEN p.precio_venta_centavos END;
-    a_tip := a_tip || CASE WHEN v_usa_may THEN 'mayorista' ELSE 'normal' END;
+    a_pnor := a_pnor || CASE WHEN v_usa_may OR v_gar IS NOT NULL THEN p.precio_venta_centavos END;
+    a_tip := a_tip || CASE WHEN v_usa_may THEN 'mayorista' WHEN v_gar IS NOT NULL THEN 'garantia' ELSE 'normal' END;
     IF v_usa_may THEN
       p.precio_venta_centavos := m.o_precio;
       p.precio_incluye_isv := m.o_incluye;
+    ELSIF v_gar IS NOT NULL THEN
+      p.precio_venta_centavos := round(v_gar / q)::bigint;
+      p.precio_incluye_isv := true;
     END IF;
 
     a_prod := a_prod || p.id;  a_nom := a_nom || p.nombre;  a_q := a_q || q;
@@ -443,12 +468,12 @@ BEGIN
     a_tasa := a_tasa || imp.porcentaje;  a_clase := a_clase || imp.clase;  a_serv := a_serv || (p.tipo = 'servicio');
     a_cest := a_cest || CASE WHEN p.tipo = 'servicio' THEN
       (SELECT round(q * sc.costo_estimado_centavos)::bigint FROM public.servicio_costo sc WHERE sc.producto_id = p.id) END;
-    a_bruto := a_bruto || round(q * p.precio_venta_centavos)::bigint;
+    a_bruto := a_bruto || coalesce(v_gar, round(q * p.precio_venta_centavos)::bigint);
 
     -- Promociones vigentes de su categoría (o de una categoría madre). NUNCA
     -- se suman: con una sola se aplica; con varias, quien vende elige una
     -- ("promocion_id"); si no elige, PROMOCION_A_ELEGIR con la lista.
-    v_promos := CASE WHEN v_usa_may THEN '[]'::jsonb ELSE interno.promociones_de(p_empresa_id, p, p_fecha, q) END;
+    v_promos := CASE WHEN v_usa_may OR v_gar IS NOT NULL THEN '[]'::jsonb ELSE interno.promociones_de(p_empresa_id, p, p_fecha, q) END;
     v_pid := NULL; v_dp := NULL;
     IF coalesce(l->'promocion_id', 'null'::jsonb) <> 'null'::jsonb THEN
       v_pid := interno.json_uuid(l->'promocion_id', 'promocion_id');
@@ -499,7 +524,7 @@ BEGIN
     v_tot_w := v_tot_w + a_w[i];
     -- El descuento de factura solo va a las líneas SIN otro descuento.
     -- 0.18.0: la línea con precio mayorista tampoco (el mayorista ya es su rebaja).
-    a_elig := a_elig || (NOT v_usa_may AND v_pid IS NULL AND coalesce(v_pct, 0) = 0 AND coalesce(v_mto, 0) = 0);
+    a_elig := a_elig || (NOT v_usa_may AND v_gar IS NULL AND v_pid IS NULL AND coalesce(v_pct, 0) = 0 AND coalesce(v_mto, 0) = 0);
     a_we := a_we || CASE WHEN a_elig[i] THEN a_w[i] ELSE 0 END;
     v_tot_we := v_tot_we + a_we[i];
   END LOOP;
@@ -1161,7 +1186,7 @@ BEGIN
   RETURN r || jsonb_build_object('lineas', (SELECT coalesce(jsonb_agg(x.l || jsonb_strip_nulls(jsonb_build_object(
         'precio_tipo', vl.precio_tipo,
         'precio_normal_centavos', vl.precio_normal_centavos,
-        'precio_texto', CASE WHEN vl.precio_tipo = 'mayorista' THEN 'Precio mayorista' END)) ORDER BY x.n), '[]')
+        'precio_texto', CASE vl.precio_tipo WHEN 'mayorista' THEN 'Precio mayorista' WHEN 'garantia' THEN 'Cambio por garantía' END)) ORDER BY x.n), '[]')
       FROM jsonb_array_elements(r->'lineas') WITH ORDINALITY AS x(l, n)
       LEFT JOIN public.venta_linea vl ON vl.venta_id = p_venta_id AND vl.linea = (x.l->>'linea')::smallint));
 END $$;
@@ -1232,24 +1257,33 @@ END $$;
 CREATE FUNCTION interno.excel_fila_productos(p_empresa_id uuid, c jsonb, p_motivo text, p_id uuid) RETURNS jsonb
 LANGUAGE plpgsql SECURITY DEFINER SET search_path = '' AS $$
 DECLARE
-  r      jsonb := interno.excel_fila_productos_046(p_empresa_id, c - 'precio_mayorista' - 'desde_cantidad', p_motivo, p_id);
+  r      jsonb;
   p      public.producto;
   v_dat  jsonb := '{}';
   v_camb jsonb := '[]';
+  v_pv   bigint;
+  v_may  bigint;
 BEGIN
   IF NOT (c ? 'precio_mayorista' OR c ? 'desde_cantidad') THEN
-    RETURN r;
+    r := interno.excel_fila_productos_046(p_empresa_id, c, p_motivo, p_id);
+    SELECT * INTO p FROM public.producto x WHERE x.empresa_id = p_empresa_id AND x.codigo = c->>'codigo';
+    RETURN r || CASE WHEN r->>'accion' IN ('crear', 'actualizar') AND p.id IS NOT NULL
+                     THEN jsonb_build_object('avisos', interno.avisos_precio_costo(p.id)) ELSE '{}' END;
   END IF;
   SELECT * INTO p FROM public.producto x WHERE x.empresa_id = p_empresa_id AND x.codigo = c->>'codigo';
+  -- Revisión 0.18.0: la regla (mayorista <= normal) se mira con los dos precios como quedan al final
+  -- de la fila; así se pueden bajar los dos a la vez.
+  v_pv := coalesce(CASE WHEN c ? 'precio_venta' THEN (c->>'precio_venta')::bigint END, p.precio_venta_centavos);
   IF c ? 'precio_mayorista' AND (c->>'precio_mayorista')::bigint IS DISTINCT FROM p.precio_mayorista_centavos THEN
     IF (c->>'precio_mayorista')::bigint = 0 THEN
       RAISE EXCEPTION 'EXCEL_CELDA: Precio mayorista (L)|debe ser mayor que cero (para quitarlo, hágalo en la ficha del producto).';
     END IF;
-    IF (c->>'precio_mayorista')::bigint > p.precio_venta_centavos THEN
-      RAISE EXCEPTION 'EXCEL_CELDA: Precio mayorista (L)|no puede ser mayor que el precio de venta (%).', interno.lempiras(p.precio_venta_centavos);
-    END IF;
     v_dat := v_dat || jsonb_build_object('precio_mayorista_centavos', (c->>'precio_mayorista')::bigint);
     v_camb := v_camb || '["precio_mayorista"]';
+  END IF;
+  v_may := coalesce((v_dat->>'precio_mayorista_centavos')::bigint, p.precio_mayorista_centavos);
+  IF v_may > v_pv THEN
+    RAISE EXCEPTION 'EXCEL_CELDA: Precio mayorista (L)|no puede ser mayor que el precio de venta (%).', interno.lempiras(v_pv);
   END IF;
   IF c ? 'desde_cantidad' AND (c->>'desde_cantidad')::numeric IS DISTINCT FROM p.cantidad_mayorista THEN
     IF (c->>'desde_cantidad')::numeric = 0 THEN
@@ -1261,12 +1295,20 @@ BEGIN
     v_dat := v_dat || jsonb_build_object('cantidad_mayorista', (c->>'desde_cantidad')::numeric);
     v_camb := v_camb || '["desde_cantidad"]';
   END IF;
-  IF v_dat = '{}' THEN
-    RETURN r;
+  SET CONSTRAINTS public.revisar_mayorista DEFERRED;
+  r := interno.excel_fila_productos_046(p_empresa_id, c - 'precio_mayorista' - 'desde_cantidad', p_motivo, p_id);
+  IF v_dat <> '{}' THEN
+    SELECT * INTO p FROM public.producto x WHERE x.empresa_id = p_empresa_id AND x.codigo = c->>'codigo';
+    PERFORM interno.aplicar_producto_054(p_empresa_id, p.id, v_dat, p_motivo, r->>'accion' = 'crear');
   END IF;
-  PERFORM interno.aplicar_producto_054(p_empresa_id, p.id, v_dat, p_motivo, r->>'accion' = 'crear');
+  SET CONSTRAINTS public.revisar_mayorista IMMEDIATE;
+  SELECT * INTO p FROM public.producto x WHERE x.empresa_id = p_empresa_id AND x.codigo = c->>'codigo';
+  IF v_dat = '{}' THEN
+    RETURN r || CASE WHEN r->>'accion' IN ('crear', 'actualizar') AND p.id IS NOT NULL
+                     THEN jsonb_build_object('avisos', interno.avisos_precio_costo(p.id)) ELSE '{}' END;
+  END IF;
   RETURN r || jsonb_build_object('accion', CASE WHEN r->>'accion' = 'sin_cambios' THEN 'actualizar' ELSE r->>'accion' END,
-                                 'cambios', coalesce(r->'cambios', '[]') || v_camb);
+                                 'cambios', coalesce(r->'cambios', '[]') || v_camb, 'avisos', interno.avisos_precio_costo(p.id));
 END $$;
 
 CREATE FUNCTION interno.excel_fila_terceros(p_empresa_id uuid, c jsonb, p_motivo text, p_id uuid) RETURNS jsonb
@@ -1464,7 +1506,7 @@ BEGIN
   RETURN r || jsonb_build_object('lineas', (SELECT coalesce(jsonb_agg(x.l || jsonb_strip_nulls(jsonb_build_object(
         'precio_tipo', vl.precio_tipo,
         'precio_normal_centavos', vl.precio_normal_centavos,
-        'precio_texto', CASE WHEN vl.precio_tipo = 'mayorista' THEN 'Precio mayorista' END,
+        'precio_texto', CASE vl.precio_tipo WHEN 'mayorista' THEN 'Precio mayorista' WHEN 'garantia' THEN 'Cambio por garantía' END,
         'garantia_hasta', to_char(vl.garantia_hasta, 'DD/MM/YYYY'),
         'garantia_texto', CASE WHEN vl.garantia_hasta IS NOT NULL THEN 'Garantía hasta ' || to_char(vl.garantia_hasta, 'DD/MM/YYYY') END))
         ORDER BY x.n), '[]')
@@ -1842,6 +1884,13 @@ END $$;
 --   reparado:  "costo_reparacion"?: {"cuenta_dinero_id", "categoria_id", "monto_centavos"} -> registrar_gasto
 --   cambiado:  "cambio"?: lo mismo que registrar_devolucion (por defecto: el mismo producto y cantidad);
 --              "cuenta_dinero_id"?, "caja_id"?
+--              Revisión 0.18.0: el MISMO producto y cantidad se entrega con "precio de garantía": la línea
+--              nueva vale exactamente lo que el cliente pagó por lo devuelto (aunque el precio haya subido
+--              o bajado, o la venta tuviera promoción). No es un descuento: no cuenta para el tope ni es
+--              "descuento doble". El cliente no paga ni recibe diferencia. Otro producto: como un cambio de
+--              siempre ("cambio": {"lineas", "pagos"? (si paga la diferencia), "diferencia"? (si queda a su favor)}).
+--   Si la devolución o el gasto de la reparación quedaran pendientes de aprobación (pasan el tope del
+--   puesto), NO se resuelve nada: APROBACION_REQUERIDA (que lo resuelva quien aprueba).
 --   devuelto:  "destino": "dinero" | "saldo_favor", "cuenta_dinero_id"? , "caja_id"?}
 -- El cambio y la devolución usan registrar_devolucion (pide además ventas.devolver); el gasto, registrar_gasto
 -- (pide gastos.registrar). Todo junto o nada; reintento con el mismo id_operacion = la misma respuesta.
@@ -1855,6 +1904,11 @@ DECLARE
   v_c    jsonb;
   d      jsonb;
   v_nota text;
+  vl     public.venta_linea;
+  v_mismo boolean;
+  q0 numeric; b0 bigint; i0 bigint;
+  v_gar  bigint;
+  v_deu  bigint;
 BEGIN
   SELECT * INTO r FROM public.garantia_reclamo WHERE id = p_reclamo_id;
   IF r.id IS NULL THEN
@@ -1901,6 +1955,10 @@ BEGIN
                'categoria_id', v_c->'categoria_id', 'monto_centavos', v_c->'monto_centavos',
                'descripcion', 'Reparación por garantía, reclamo #' || r.numero || ' (' || r.descripcion_producto || ')'),
                md5(p_id_operacion::text || ':gasto_garantia')::uuid);
+    IF (SELECT g.estado FROM public.gasto g WHERE g.id = (v_gas->>'gasto_id')::uuid) IS DISTINCT FROM 'aplicado' THEN
+      RAISE EXCEPTION 'APROBACION_REQUERIDA: el costo de la reparación (%) pasa lo que su puesto registra sin aprobación; el reclamo no se cerró. Que lo resuelva quien aprueba (o registre el reclamo como reparado sin costo y el gasto aparte).',
+        interno.lempiras((v_c->>'monto_centavos')::bigint);
+    END IF;
   ELSIF v_res IN ('cambiado', 'devuelto') THEN
     d := jsonb_build_object('lineas', jsonb_build_array(jsonb_build_object('linea', r.linea, 'cantidad', r.cantidad)),
            'motivo', 'Garantía, reclamo #' || r.numero || ': ' || r.motivo,
@@ -1910,8 +1968,37 @@ BEGIN
     IF v_res = 'cambiado' THEN
       d := d || jsonb_build_object('cambio', coalesce(p_datos->'cambio',
              jsonb_build_object('lineas', jsonb_build_array(jsonb_build_object('producto_id', r.producto_id, 'cantidad', r.cantidad)))));
+      -- ¿Se entrega lo mismo (mismo producto y cantidad, una línea)? Entonces con precio de garantía:
+      -- lo que vale lo devuelto, con la misma cuenta que registrar_devolucion (cantidad acumulada).
+      v_mismo := jsonb_typeof(d->'cambio'->'lineas') = 'array' AND jsonb_array_length(d->'cambio'->'lineas') = 1
+                 AND d->'cambio'->'lineas'->0->>'producto_id' = r.producto_id::text
+                 AND jsonb_typeof(d->'cambio'->'lineas'->0->'cantidad') = 'number'
+                 AND (d->'cambio'->'lineas'->0->>'cantidad')::numeric = r.cantidad;
+      IF v_mismo THEN
+        SELECT * INTO vl FROM public.venta_linea x WHERE x.venta_id = r.venta_id AND x.linea = r.linea;
+        SELECT coalesce(sum(x.cantidad), 0), coalesce(sum(x.base_centavos), 0), coalesce(sum(x.impuesto_centavos), 0)
+          INTO q0, b0, i0
+          FROM public.devolucion_linea x JOIN public.devolucion y ON y.id = x.devolucion_id
+         WHERE x.venta_linea_id = vl.id AND y.estado IN ('aplicada', 'pendiente_aprobacion', 'por_aplicar');
+        v_gar := greatest(round(vl.total_centavos * (q0 + r.cantidad) / vl.cantidad)::bigint - (b0 + i0), 0);
+        PERFORM set_config('app.precio_garantia', jsonb_build_object('producto_id', r.producto_id, 'cantidad', r.cantidad,
+                                                                     'total_centavos', v_gar)::text, true);
+        -- Venta al crédito todavía sin pagar: la devolución primero rebaja esa deuda; lo que rebajó se vuelve a
+        -- deber en la venta del cambio (al crédito). El cliente queda debiendo lo mismo que antes.
+        IF NOT (d->'cambio' ? 'pagos') THEN
+          v_deu := least(v_gar, greatest(interno.saldo_documento_cxc(r.venta_id), 0));
+          IF v_deu > 0 THEN
+            d := jsonb_set(d, '{cambio,pagos}', jsonb_build_array(jsonb_build_object('forma', 'credito', 'monto_centavos', v_deu)));
+          END IF;
+        END IF;
+      END IF;
     END IF;
     v_dev := public.registrar_devolucion(r.venta_id, d, md5(p_id_operacion::text || ':devolucion_garantia')::uuid);
+    PERFORM set_config('app.precio_garantia', '', true);
+    IF (SELECT x.estado FROM public.devolucion x WHERE x.id = (v_dev->>'devolucion_id')::uuid) IS DISTINCT FROM 'aplicada' THEN
+      RAISE EXCEPTION 'APROBACION_REQUERIDA: la devolución (%) pasa lo que su puesto devuelve sin aprobación; el reclamo no se cerró. Que lo resuelva quien aprueba.',
+        interno.lempiras((v_dev->>'total_centavos')::bigint);
+    END IF;
   END IF;
 
   PERFORM set_config('app.motivo', coalesce(v_nota, initcap(v_res)), true);
@@ -1986,7 +2073,9 @@ INSERT INTO public.error_catalogo (codigo, mensaje_usuario, que_hacer) VALUES
   ('CHEQUE_POSFECHADO', 'Ese cheque todavía no se puede depositar.',
    'El cheque es posfechado: se deposita desde la fecha escrita en el cheque.'),
   ('CHEQUE_DEPOSITADO', 'El cheque ya salió de "Cheques por depositar".',
-   'Si el banco lo devolvió, use "Rebotó" (cheque rechazado): revierte el cobro y deja la constancia.');
+   'Si el banco lo devolvió, use "Rebotó" (cheque rechazado): revierte el cobro y deja la constancia.'),
+  ('CHEQUE_POR_CONFIRMAR', 'Esa venta se pagó con un cheque que el banco todavía no confirma.',
+   'Espere a que el banco confirme el depósito del cheque. Mientras tanto no se devuelve dinero ni se deja saldo a favor (si el cheque rebota, el cliente vuelve a deber).');
 
 ALTER TABLE public.cuenta_dinero DROP CONSTRAINT cuenta_dinero_tipo_check;
 ALTER TABLE public.cuenta_dinero ADD CONSTRAINT cuenta_dinero_tipo_check CHECK (tipo IN ('efectivo_caja', 'banco', 'caja_chica',
@@ -2080,7 +2169,7 @@ CREATE VIEW public.v_cheque_recibido WITH (security_invoker = true) AS
          ch.banco_id, (SELECT d.nombre FROM public.cuenta_dinero d WHERE d.id = ch.banco_id) AS banco,
          ch.fecha_deposito, ch.motivo_rechazo, ch.fecha_rechazo, ch.cargo_banco_gasto_id, ch.creado_en, ch.actualizado_en
     FROM public.cheque_recibido ch
-    JOIN public.cobro cb ON cb.id = ch.cobro_id;
+    LEFT JOIN public.cobro cb ON cb.id = ch.cobro_id;   -- quien ve dinero sin ver ventas igual ve el cheque
 REVOKE ALL ON public.v_cheque_recibido FROM PUBLIC, anon, authenticated;
 GRANT SELECT ON public.v_cheque_recibido TO authenticated, service_role;
 
@@ -2422,7 +2511,11 @@ BEGIN
     ELSIF pj->>'forma' = 'cheque' THEN
       INSERT INTO public.cheque_recibido (empresa_id, numero, cobro_id, cliente_id, cliente_nombre, sucursal_id, numero_cheque, banco_emisor,
                                           fecha_cheque, fecha_recibido, monto_centavos, cuenta_dinero_id, creado_por)
-      VALUES (p_empresa_id, interno.siguiente_numero(p_empresa_id, 'cheque_recibido'), c.id, v_cli.id, v_cli.nombre, v_suc,
+      -- Sucursal del cheque: la de la caja; si el cobro no tiene caja (sin turno), la de la factura más
+      -- vieja que paga (revisión 0.18.0: así un usuario de otra sucursal no lo ve ni lo mueve).
+      VALUES (p_empresa_id, interno.siguiente_numero(p_empresa_id, 'cheque_recibido'), c.id, v_cli.id, v_cli.nombre,
+              coalesce(v_suc, (SELECT vx.sucursal_id FROM jsonb_array_elements(v_apl) ax JOIN public.venta vx ON vx.id = (ax->>'doc')::uuid
+                                WHERE (ax->>'es_venta')::boolean ORDER BY vx.fecha_contable, vx.numero LIMIT 1)),
               v_cheq->>'numero_cheque', v_cheq->>'banco_emisor', (v_cheq->>'fecha_cheque')::date, v_fecha, (pj->>'monto')::bigint,
               (pj->>'cuenta_id')::uuid, auth.uid());
     END IF;
@@ -2564,6 +2657,36 @@ BEGIN
   RETURN interno.cheque_respuesta(ch, false) || jsonb_build_object('deposito', interno.operacion_dinero_respuesta(v_op, false));
 END $$;
 
+-- Revisión 0.18.0: anula el depósito (en tránsito) de un cheque que rebotó. Es lo mismo que
+-- anular_operacion_dinero (contra-asiento, rastro y bitácora) pero con el permiso del rebote
+-- (cobros.anular), no dinero.anular: quien registra el rebote no necesita poder anular cualquier
+-- operación de dinero.
+CREATE FUNCTION interno.anular_deposito_cheque(o public.operacion_dinero, p_motivo text, p_id_operacion uuid, p_fecha date)
+RETURNS void
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = '' AS $$
+DECLARE v_asto uuid;
+BEGIN
+  IF o.tipo <> 'deposito' OR o.estado <> 'en_transito' OR o.anulada_en IS NOT NULL THEN
+    RAISE EXCEPTION 'NO_PERMITIDO: el depósito #% ya no está en tránsito.', o.numero;
+  END IF;
+  PERFORM interno.exigir_tipo_operacion(o.empresa_id, p_id_operacion, 'anulacion_operacion_dinero');
+  PERFORM interno.reservar_operacion(o.empresa_id, p_id_operacion, 'anulacion_operacion_dinero');
+  PERFORM interno.exigir_periodo_abierto(o.empresa_id, p_fecha);
+  v_asto := interno.asiento_sistema(o.empresa_id, o.sucursal_id, p_fecha,
+    'ANULACIÓN deposito #' || o.numero || ': ' || trim(p_motivo), 'anulacion_operacion_dinero', p_id_operacion,
+    (SELECT jsonb_agg(jsonb_build_object('cuenta', c.codigo, 'debe', l.haber_centavos, 'haber', l.debe_centavos,
+                                         'descripcion', 'Reversión') ORDER BY l.linea)
+       FROM public.asiento_linea l JOIN public.cuenta c ON c.id = l.cuenta_id WHERE l.asiento_id = o.asiento_id),
+    o.asiento_id, trim(p_motivo));
+  PERFORM set_config('app.motivo', trim(p_motivo), true);
+  UPDATE public.operacion_dinero
+     SET anulada_en = now(), anulada_por = auth.uid(), motivo_anulacion = trim(p_motivo), fecha_anulacion = p_fecha,
+         asiento_anulacion_id = v_asto, anulacion_id_operacion = p_id_operacion
+   WHERE id = o.id;
+  PERFORM set_config('app.motivo', '', true);
+  PERFORM interno.rastrear_dinero(v_asto, 'anulacion_operacion_dinero', 'operacion_dinero', o.id, trim(p_motivo), NULL);
+END $$;
+
 -- registrar_cheque_rechazado(cheque, datos, id_operacion)   cobros.anular
 -- datos = {"motivo", "fecha"?, "cargo_banco"?: {"categoria_id", "monto_centavos", "cuenta_dinero_id"? (el banco del depósito)}}
 -- 1) El valor vuelve a "Cheques por depositar": si el depósito sigue en tránsito, se anula ese depósito; si ya
@@ -2606,7 +2729,9 @@ BEGIN
   IF length(coalesce(v_mot, '')) < 5 THEN
     RAISE EXCEPTION 'FALTA_MOTIVO: escriba por qué rebotó el cheque (mínimo 5 letras), ej. "fondos insuficientes".';
   END IF;
-  v_fecha := coalesce(interno.json_fecha(p_datos->'fecha', 'fecha'), greatest(public.hoy_local(ch.empresa_id), ch.fecha_recibido));
+  v_fecha := coalesce(interno.json_fecha(p_datos->'fecha', 'fecha'),
+                      greatest(public.hoy_local(ch.empresa_id), ch.fecha_recibido, ch.fecha_deposito,
+                               (SELECT o2.fecha_confirmacion FROM public.operacion_dinero o2 WHERE o2.id = ch.operacion_deposito_id)));
   v_cargo := CASE WHEN coalesce(p_datos->'cargo_banco', 'null'::jsonb) <> 'null'::jsonb THEN p_datos->'cargo_banco' END;
   IF v_cargo IS NOT NULL THEN
     PERFORM interno.exigir_claves(v_cargo, ARRAY['categoria_id', 'monto_centavos', 'cuenta_dinero_id']);
@@ -2621,12 +2746,25 @@ BEGIN
     RAISE EXCEPTION 'CHEQUE_INVALIDO: el cheque #% ya está "%".', ch.numero_cheque, ch.estado;
   END IF;
   b := CASE WHEN ch.banco_id IS NOT NULL THEN interno.cuenta_dinero_de(ch.empresa_id, ch.banco_id) END;
+  -- Revisión 0.18.0: el rebote no puede tener fecha anterior al cobro, al depósito ni a su confirmación.
+  IF v_fecha < ch.fecha_recibido THEN
+    RAISE EXCEPTION 'FECHA_INVALIDA: el rebote no puede tener fecha anterior al cobro (%).', to_char(ch.fecha_recibido, 'DD/MM/YYYY');
+  END IF;
+  IF ch.estado = 'depositado' THEN
+    SELECT * INTO od FROM public.operacion_dinero WHERE id = ch.operacion_deposito_id FOR UPDATE;
+    IF v_fecha < od.fecha_contable THEN
+      RAISE EXCEPTION 'FECHA_INVALIDA: el rebote no puede tener fecha anterior al depósito (%).', to_char(od.fecha_contable, 'DD/MM/YYYY');
+    END IF;
+    IF v_fecha < od.fecha_confirmacion THEN
+      RAISE EXCEPTION 'FECHA_INVALIDA: el rebote no puede tener fecha anterior a la confirmación del depósito (%).', to_char(od.fecha_confirmacion, 'DD/MM/YYYY');
+    END IF;
+  END IF;
 
   -- 1) El valor vuelve a "Cheques por depositar".
   IF ch.estado = 'depositado' THEN
-    SELECT * INTO od FROM public.operacion_dinero WHERE id = ch.operacion_deposito_id FOR UPDATE;
     IF od.estado = 'en_transito' THEN
-      PERFORM public.anular_operacion_dinero(od.id, 'Cheque rechazado: ' || v_mot, md5(p_id_operacion::text || ':anula_deposito')::uuid, v_fecha);
+      PERFORM interno.exigir_fecha_contable(ch.empresa_id, v_fecha);
+      PERFORM interno.anular_deposito_cheque(od, 'Cheque rechazado: ' || v_mot, md5(p_id_operacion::text || ':anula_deposito')::uuid, v_fecha);
     ELSE
       o := interno.cuenta_dinero_de(ch.empresa_id, ch.cuenta_dinero_id);
       PERFORM interno.exigir_fecha_contable(ch.empresa_id, v_fecha);
@@ -2662,6 +2800,44 @@ BEGIN
    WHERE id = ch.id RETURNING * INTO ch;
   PERFORM set_config('app.motivo', '', true);
   RETURN interno.cheque_respuesta(ch, false) || jsonb_strip_nulls(jsonb_build_object('cobro', r, 'gasto', v_gas));
+END $$;
+
+-- Revisión 0.18.0: una venta pagada (en parte) con un cheque que el banco todavía no confirma (por
+-- depositar o depositado en tránsito) no devuelve dinero ni deja saldo a favor (tampoco la diferencia
+-- de un cambio): si el cheque rebota, el cliente vuelve a deber y ese dinero ya habría salido.
+CREATE FUNCTION interno.cheque_sin_confirmar_de_venta(p_venta_id uuid) RETURNS text
+LANGUAGE sql STABLE SECURITY DEFINER SET search_path = '' AS $$
+  SELECT ch.numero_cheque || ' de ' || ch.banco_emisor
+    FROM public.cxc_aplicacion a
+    JOIN public.cheque_recibido ch ON ch.cobro_id = a.origen_id
+    LEFT JOIN public.operacion_dinero o ON o.id = ch.operacion_deposito_id
+   WHERE a.venta_id = p_venta_id AND a.origen = 'cobro' AND a.anulada_en IS NULL
+     AND (ch.estado = 'por_depositar' OR (ch.estado = 'depositado' AND o.estado IS DISTINCT FROM 'confirmada'))
+   ORDER BY ch.numero LIMIT 1
+$$;
+
+CREATE OR REPLACE FUNCTION public.registrar_devolucion(p_venta_id uuid, p_datos jsonb, p_id_operacion uuid)
+RETURNS jsonb
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = '' AS $$
+DECLARE
+  v_prev text := coalesce(current_setting('app.cliente_venta', true), '');
+  v_ch   text;
+  r      jsonb;
+BEGIN
+  IF jsonb_typeof(p_datos) = 'object'
+     AND (p_datos->>'destino' IN ('dinero', 'saldo_favor')
+          OR (jsonb_typeof(p_datos->'cambio') = 'object' AND p_datos->'cambio' ? 'diferencia')
+          OR coalesce(p_datos->'cuenta_dinero_id', 'null'::jsonb) <> 'null'::jsonb) THEN
+    v_ch := interno.cheque_sin_confirmar_de_venta(p_venta_id);
+    IF v_ch IS NOT NULL THEN
+      PERFORM interno.exigir_escritura((SELECT v.empresa_id FROM public.venta v WHERE v.id = p_venta_id), 'ventas.devolver', 'ventas');
+      RAISE EXCEPTION 'CHEQUE_POR_CONFIRMAR: esta venta se pagó con el cheque % y el banco todavía no lo confirma; no se puede devolver dinero ni dejar saldo a favor hasta que se confirme el depósito (o haga un cambio por un producto de igual o mayor valor).', v_ch;
+    END IF;
+  END IF;
+  PERFORM set_config('app.cliente_venta', coalesce((SELECT v.cliente_id::text FROM public.venta v WHERE v.id = p_venta_id), ''), true);
+  r := interno.registrar_devolucion_052(p_venta_id, p_datos, p_id_operacion);
+  PERFORM set_config('app.cliente_venta', v_prev, true);
+  RETURN r;
 END $$;
 
 -- El dinero de "Cheques por depositar" solo se mueve cheque por cheque (depositar_cheque / rebote).
@@ -2757,6 +2933,7 @@ END $$;
 REVOKE EXECUTE ON FUNCTION
   interno.proteger_cheque(), interno.cuenta_cheques(uuid), interno.datos_cheque(jsonb, integer, uuid, text, boolean, uuid),
   interno.cheque_de_cobro_anulado(), interno.cheque_deposito_anulado(), interno.cheque_respuesta(public.cheque_recibido, boolean),
+  interno.cheque_sin_confirmar_de_venta(uuid), interno.anular_deposito_cheque(public.operacion_dinero, text, uuid, date),
   interno.trasladar_dinero_022(uuid, jsonb, uuid), interno.donde_esta_mi_dinero_052(uuid), interno.proyeccion_flujo_052(uuid, integer, text)
 FROM PUBLIC, anon, authenticated, service_role;
 REVOKE EXECUTE ON FUNCTION

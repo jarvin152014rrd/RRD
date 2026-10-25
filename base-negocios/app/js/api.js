@@ -191,6 +191,7 @@ export function leer(vista, filtros = {}, { orden = null, limite = null } = {}) 
     if (v && typeof v === 'object') {
       if (v.gte !== undefined) q.append(k, 'gte.' + v.gte);
       if (v.lte !== undefined) q.append(k, 'lte.' + v.lte);
+      if (v.in !== undefined) q.append(k, 'in.(' + v.in.join(',') + ')');   // uno de varios valores (sin comas ni paréntesis)
     } else q.set(k, 'eq.' + v);
   }
   if (orden) q.set('order', orden);

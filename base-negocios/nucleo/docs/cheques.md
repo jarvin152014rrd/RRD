@@ -26,9 +26,14 @@ banco y se cuadra en la **conciliación** como cualquier depósito. Un cheque po
 fecha (`CHEQUE_POSFECHADO`). Si se anula el depósito (en tránsito) con `anular_operacion_dinero`, el cheque vuelve a
 "por depositar". La cuenta "Cheques por depositar" no se mueve con `trasladar_dinero` (`CUENTA_DINERO_INVALIDA`).
 
+Sucursal del cheque: la de la caja del cobro; si el cobro no tiene caja (sin turno), la de la factura más vieja que
+paga. Un usuario limitado a otra sucursal no lo ve, no lo deposita ni lo rebota (`SUCURSAL_NO_PERMITIDA`).
+
 ## Rebotó — `registrar_cheque_rechazado(cheque, {"motivo", "fecha"?, "cargo_banco"?}, id_operacion)` (`cobros.anular`)
 
-1. El valor vuelve a "Cheques por depositar": si el depósito sigue en tránsito, se anula ese depósito; si el banco
+0. La fecha del rebote no puede ser anterior al cobro, al depósito ni a su confirmación (`FECHA_INVALIDA`).
+1. El valor vuelve a "Cheques por depositar": si el depósito sigue en tránsito, se anula ese depósito (con el permiso
+   del rebote, `cobros.anular`; no hace falta `dinero.anular`); si el banco
    ya lo había acreditado, el banco lo devuelve (operación "traslado": Dr Cheques por depositar / Cr banco).
 2. Se anula el cobro con su contrapartida (`anular_cobro`): Dr Clientes / Cr Cheques por depositar. **El cliente
    vuelve a deber**; las comisiones se ajustan solas.
@@ -36,6 +41,13 @@ fecha (`CHEQUE_POSFECHADO`). Si se anula el depósito (en tránsito) con `anular
    (`registrar_gasto`, desde el banco del depósito o el indicado).
 Todo junto o nada; reintento con el mismo `id_operacion` = lo mismo. `anular_cobro` de un cobro con cheque solo se
 permite mientras el cheque está por depositar (`CHEQUE_DEPOSITADO`).
+
+## Devoluciones de una venta pagada con cheque
+
+Mientras el cheque no está confirmado en el banco (por depositar, o depositado en tránsito), la devolución de esa
+venta no devuelve dinero ni deja saldo a favor, tampoco como diferencia de un cambio (`CHEQUE_POR_CONFIRMAR`): si el
+cheque rebota, el cliente vuelve a deber y ese dinero ya habría salido. Sí se puede cambiar por algo de igual o mayor
+valor. Al confirmar el depósito, todo como siempre.
 
 ## Dónde se ve
 

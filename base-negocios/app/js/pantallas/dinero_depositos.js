@@ -13,6 +13,7 @@ import { hayEnMenu } from '../menu.js';
 import { cuentasDinero, cuentasQuePagan, olvidarDatos, nucleoAlMenos, categoriasGasto } from '../datos.js';
 import { hoy, inputMonto, inputFecha, textoCuenta, textoMonto } from '../formularios.js';
 
+const TOPE_CHEQUES = 300;
 const ES_CAJA = (c) => c.tipo === 'efectivo_caja' || c.tipo === 'caja_chica';
 // Qué se puede elegir en cada tipo (igual que valida trasladar_dinero en el núcleo).
 const TIPOS = {
@@ -33,7 +34,9 @@ export async function mostrar(vista, ctx) {
   const [cuentas, transito, ops, cheques] = await Promise.all([cuentasDinero(true),
     leer('v_deposito_transito', { empresa_id: empresaId() }, { orden: 'fecha_contable.asc', limite: 200 }),
     leer('operacion_dinero', { empresa_id: empresaId() }, { orden: 'numero.desc', limite: 30 }),
-    n018 ? leer('v_cheque_recibido', { empresa_id: empresaId() }, { orden: 'fecha_cheque.asc', limite: 300 }).catch(() => []) : []]);
+    // Solo los que importan aquí (por depositar y depositados), los más nuevos primero; tope de 300.
+    n018 ? leer('v_cheque_recibido', { empresa_id: empresaId(), estado: { in: ['por_depositar', 'depositado'] } },
+      { orden: 'numero.desc', limite: TOPE_CHEQUES }).catch(() => []) : []]);
   if (!ctx.sigueVigente()) return;
   const nombre = (idc) => (cuentas.find((c) => c.cuenta_dinero_id === idc) || {}).nombre || 'otra cuenta';
   const recargar = () => { vista.replaceChildren(); mostrar(vista, ctx); };
@@ -104,7 +107,8 @@ export async function mostrar(vista, ctx) {
   // (los ya confirmados se ven 30 días: el banco puede devolver un cheque unos días después)
   const hace30 = sumarDias(hoy(), -30);
   const vivos = cheques.filter((c) => c.estado === 'por_depositar'
-    || (c.estado === 'depositado' && (c.estado_deposito === 'en_transito' || (c.fecha_deposito || '') >= hace30)));
+    || (c.estado === 'depositado' && (c.estado_deposito === 'en_transito' || (c.fecha_deposito || '') >= hace30)))
+    .sort((a, b) => String(a.fecha_cheque).localeCompare(String(b.fecha_cheque)) || a.numero - b.numero);
   const filasCheques = vivos.map((c) => filaCheque(c, { cuentas, recargar }));
   vista.append(
     h('section', { class: 'tarjeta', 'aria-labelledby': 't-mover' },
@@ -121,6 +125,8 @@ export async function mostrar(vista, ctx) {
     n018 ? h('section', { class: 'tarjeta', 'aria-labelledby': 't-cheques' },
       titulo('h2', 'cheque', 'Cheques por depositar', { id: 't-cheques' }),
       h('p', { class: 'ayuda' }, 'Un cheque recibido no es efectivo: está aquí hasta que se deposita y el banco lo confirma. Si rebota, el cliente vuelve a deber.'),
+      cheques.length >= TOPE_CHEQUES ? mensaje('info', `Se muestran los ${TOPE_CHEQUES} cheques más nuevos.`,
+        'Si busca uno más viejo, deposite o registre primero los que ya tiene en la mano.', { dataset: { info: 'tope-cheques' } }) : null,
       filasCheques.length ? h('div', { class: 'lista-filas', id: 'lista-cheques' }, filasCheques)
         : estadoVacio({ icono: 'check_circulo', color: 'verde', chico: true, texto: 'No hay cheques por depositar.' })) : null,
     h('section', { class: 'tarjeta', 'aria-labelledby': 't-ult-mov' },
@@ -272,7 +278,7 @@ function filaCheque(c, { cuentas, recargar }) {
   return filaIcono({
     icono: 'cheque', color: c.estado === 'depositado' ? 'azul' : 'dorado',
     titulo: h('strong', {}, `Cheque ${c.numero_cheque} · ${c.cliente_nombre}`),
-    detalle: `${c.banco_emisor} · fecha del cheque ${fecha(c.fecha_cheque)} · cobro #${c.cobro_numero}`,
+    detalle: [c.banco_emisor, `fecha del cheque ${fecha(c.fecha_cheque)}`, c.cobro_numero ? `cobro #${c.cobro_numero}` : null].filter(Boolean).join(' · '),
     derecha: [monto(dinero(c.monto_centavos)), estado],
     abajo: h('div', { class: 'botones' },
       puedeDepositar && puede('dinero.trasladar') && bancos.length ? h('button', { type: 'button', class: 'boton boton-principal', dataset: { accion: 'depositar-cheque' },

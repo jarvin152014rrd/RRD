@@ -8,7 +8,7 @@
 //   POST /auth/v1/token?grant_type=password|refresh_token
 //   POST /auth/v1/logout
 //   POST /rest/v1/rpc/<funcion>        llama public.<funcion> (emulador.rpc)
-//   GET  /rest/v1/<vista>?col=eq.valor&col2=gte.valor&order=col.desc&limit=N  (emulador.leer; eq., gte., lte.)
+//   GET  /rest/v1/<vista>?col=eq.valor&col2=gte.valor&order=col.desc&limit=N  (emulador.leer; eq., in.(a,b), gte., lte.)
 //   GET  /auth/v1/user                 quién es el dueño del token (lo usan las Edge Functions)
 //   POST /auth/v1/admin/users          crear cuenta  } SOLO con SERVICE_KEY (variable; sin ella
 //   DELETE /auth/v1/admin/users/<id>   borrar cuenta } no existen): para probar las Edge Functions
@@ -263,8 +263,10 @@ async function manejarRest(req, res, url) {
         if (k === 'order') { orden = v; continue; }
         if (k === 'limit') { limite = Number(v) || null; continue; }
         if (v.startsWith('eq.')) { filtros[k] = v.slice(3); continue; }
+        const lista = /^in\.\((.*)\)$/.exec(v);
+        if (lista) { filtros[k] = { ...(typeof filtros[k] === 'object' ? filtros[k] : {}), in: lista[1].split(',') }; continue; }
         const op = /^(gte|lte)\.(.*)$/.exec(v);
-        if (!op) return enviar(res, 400, { message: 'Solo filtros eq., gte. y lte.' });
+        if (!op) return enviar(res, 400, { message: 'Solo filtros eq., in., gte. y lte.' });
         filtros[k] = { ...(typeof filtros[k] === 'object' ? filtros[k] : {}), [op[1]]: op[2] };
       }
       const r = await psql(guionComo(claims, `SELECT emulador.leer(${lit(ruta)}, ${lit(JSON.stringify(filtros))}::jsonb, ${orden ? lit(orden) : 'NULL'}, ${limite ? Number(limite) : 'NULL'})`));

@@ -1,5 +1,19 @@
 # Cambios de la app
 
+## app 0.12.1 (núcleo 0.18.0) — Arreglos de la revisión
+
+- **Garantías:** "Cambiado" ofrece "otro igual" (con precio de garantía: no se cobra ni se devuelve nada) u "otro
+  producto": busca el producto, el servidor calcula la diferencia y la pantalla pide cómo la paga el cliente o qué se
+  hace con lo que queda a su favor. Los reclamos abiertos se piden filtrados al servidor (recibido y en revisión).
+- **Depósitos:** se piden al servidor solo los cheques por depositar y depositados, los más nuevos primero (tope 300,
+  con aviso si se llega). Sin el número de cobro (quien no ve ventas) la fila igual sale.
+- **Vender:** al cambiar la cantidad o el cliente, el servidor vuelve a decidir entre precio normal y mayorista; una
+  línea con descuento manual se queda en precio normal.
+- **Ficha del producto:** al bajar el precio por debajo del mayorista, pide el mayorista nuevo (o vacío para quitarlo) y
+  baja los dos.
+- Menú: "Antigüedad de saldos" también para quien tiene `cobros.ver_saldos`.
+- Pruebas: 3 nuevas en `probar_0120.cjs` (14 en total). El emulador acepta el filtro `in.(a,b)`. Cascarón `cascaron-0.12.1`.
+
 ## app 0.12.0 (núcleo 0.18.0; también funciona con 0.17.0, sin lo nuevo) — Mayorista, garantías, cheques y antigüedad
 
 - **Precio mayorista:** en Productos (ficha y formulario: precio y "desde cuántas unidades"; aviso si queda bajo el

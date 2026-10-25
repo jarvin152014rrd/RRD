@@ -99,6 +99,10 @@ BEGIN
       SELECT format_type(atttypid, atttypmod) INTO v_tipo FROM pg_attribute WHERE attrelid = v_rel AND attname = v_col AND attnum > 0;
       IF p_filtros->v_col ? 'gte' THEN v_where := v_where || format('%I >= ($1->%L->>''gte'')::%s', v_col, v_col, v_tipo); END IF;
       IF p_filtros->v_col ? 'lte' THEN v_where := v_where || format('%I <= ($1->%L->>''lte'')::%s', v_col, v_col, v_tipo); END IF;
+      -- "uno de" (in.(a,b) de PostgREST)
+      IF p_filtros->v_col ? 'in' THEN
+        v_where := v_where || format('%I::text = ANY (ARRAY(SELECT jsonb_array_elements_text($1->%L->''in'')))', v_col, v_col);
+      END IF;
     ELSE
       v_where := v_where || format('%I::text = ($1->>%L)', v_col, v_col);
     END IF;

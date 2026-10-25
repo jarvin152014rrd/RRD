@@ -1,4 +1,4 @@
-# Pendientes de la app (0.12.0)
+# Pendientes de la app (0.12.1)
 
 - HECHO (0.12.0, núcleo 0.18.0): precio mayorista, garantías, abonos con cheque y antigüedad de saldos. Falta:
   probarlo contra un Supabase REAL; vender al contado con cheque (el núcleo no lo acepta, decisión); la antigüedad

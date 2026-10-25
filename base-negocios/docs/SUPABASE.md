@@ -161,7 +161,7 @@ Queda la carpeta `dist/app-<cliente>/`. Si por error pega la llave secreta, la h
 
 ## Actualizar de 0.17.0 a 0.18.0 (si YA lo tenía instalado) — precio mayorista, garantías, cheques y antigüedad
 
-Si su Supabase ya tiene la 0.17.0, **no** vuelva a pegar las partes. Solo se pega **un archivo** (unos 175 KB).
+Si su Supabase ya tiene la 0.17.0, **no** vuelva a pegar las partes. Solo se pega **un archivo** (unos 185 KB).
 Los datos de su negocio no se tocan.
 
 1. **Haga un respaldo primero** (vea "Respaldos" más abajo).
@@ -171,7 +171,8 @@ Los datos de su negocio no se tocan.
 4. Abra el archivo con el Bloc de notas, **Ctrl+A**, **Ctrl+C**, péguelo en el editor (**Ctrl+V**) y toque **Run**.
    Si pregunta por "operaciones destructivas", toque **Run this query** (es normal).
 5. Abajo debe salir: **ACTUALIZADO A 0.18.0**, **version = 0.18.0** y **migraciones = 54**.
-6. Suba la app nueva (0.12.0) a Netlify (pasos 10 y 11). La app vieja sigue funcionando mientras tanto.
+6. **Enseguida**, suba la app nueva (0.12.1) a Netlify (pasos 10 y 11). Importante: con la app vieja, cobrar a un
+   **cliente mayorista** falla (el total no coincide). Lo demás sigue funcionando mientras tanto.
 
 Si sale un error en rojo, **no se cambió nada**:
 

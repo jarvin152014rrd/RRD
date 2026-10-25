@@ -208,7 +208,12 @@ puesto ni pide aprobación), pero es la rebaja de esa línea:
 - mayorista + promoción o + descuento manual: `DESCUENTO_DOBLE` (para dar un descuento manual a un mayorista se manda
   `"precio_tipo": "normal"`); `"precio_tipo": "mayorista"` donde no aplica: `PRECIO_MAYORISTA_NO_APLICA`.
 
-La línea guarda `venta_linea.precio_tipo` (`normal` | `mayorista`) y, con mayorista, `precio_normal_centavos`.
+La línea guarda `venta_linea.precio_tipo` (`normal` | `mayorista` | `garantia`) y, con mayorista o garantía,
+`precio_normal_centavos`. `garantia` = cambio por garantía de lo mismo: vale lo que el cliente pagó (ver `garantias.md`).
+Mensaje de `DESCUENTO_DOBLE` con mayorista, para el usuario: "Para dar un descuento, toque 'Usar precio normal' en la línea".
+La app vieja (0.11.x) no manda el cliente a la venta previa: con un cliente mayorista el total de la previa y el de la
+venta no coinciden y la venta se rechaza (por eso, después de actualizar a 0.18.0 se sube enseguida la app 0.12.x).
+Mayorista en apartados, cotizaciones convertidas y cambios de producto: igual que en la venta (prueba 146).
 `documento_venta` lo devuelve por línea (`precio_tipo`, `precio_normal_centavos`, `precio_texto`: "Precio mayorista").
 `calcular_venta_previa` acepta `"cliente_id"` y devuelve por línea `precio_tipo`, `precio_normal_centavos` y
 `precio_mayorista_disponible`, y `cliente_mayorista`.

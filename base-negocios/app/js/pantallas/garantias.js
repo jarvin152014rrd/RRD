@@ -7,11 +7,12 @@ import { rpc, leer, escribir, nuevoId } from '../api.js';
 import { empresaId, puede } from '../sesion.js';
 import { dinero, fecha, cantidad, aCentavos, aNumero } from '../formato.js';
 import { h, aviso, cajaError, errorSimple, campo, conBoton, titulo, filaIcono, chip, chipEstado, estadoVacio, mensaje, pedirMotivo } from '../ui.js';
-import { cuentasDinero, cuentasQuePagan, categoriasGasto } from '../datos.js';
+import { cuentasDinero, cuentasQuePagan, categoriasGasto, productos, filtrar } from '../datos.js';
+import { nombreForma } from '../comprobante.js';
 import { limpiarImprimible } from '../imprimible.js';
 
 const E = () => empresaId();
-const RESOLUCION = { reparado: 'Reparado', cambiado: 'Cambiado por otro igual', devuelto: 'Devuelto (se regresa el dinero o queda a favor)' };
+const RESOLUCION = { reparado: 'Reparado', cambiado: 'Cambiado (por otro igual o por otro producto)', devuelto: 'Devuelto (se regresa el dinero o queda a favor)' };
 
 export async function mostrar(vista, ctx) {
   const registrar = puede('garantias.registrar');
@@ -54,9 +55,8 @@ export async function mostrar(vista, ctx) {
 
   async function pintarReclamos() {
     try {
-      // Los últimos 300 reclamos; aquí solo los abiertos (recibido o en revisión).
-      const lista = (await leer('v_garantia_reclamo', { empresa_id: E() }, { orden: 'numero.desc', limite: 300 }))
-        .filter((r) => r.estado === 'recibido' || r.estado === 'en_revision');
+      // Solo los abiertos (recibido o en revisión), los 300 más nuevos.
+      const lista = await leer('v_garantia_reclamo', { empresa_id: E(), estado: { in: ['recibido', 'en_revision'] } }, { orden: 'numero.desc', limite: 300 });
       if (!ctx.sigueVigente()) return;
       zonaReclamos.replaceChildren(...(lista.length ? lista.map((r) => filaReclamo(vista, ctx, r, { registrar, resolver }))
         : [estadoVacio({ icono: 'check_circulo', color: 'verde', chico: true, texto: 'No hay reclamos abiertos.' })]));
@@ -168,7 +168,17 @@ async function formularioResolver(vista, ctx, r) {
   const zonaReparado = h('fieldset', { class: 'grupo-campos' }, h('legend', {}, 'Costo de la reparación (opcional)'),
     campo('Monto (L)', costo, 'Si la reparación costó dinero, se registra como un gasto.'), campo('Sale de', ctaCosto), campo('Categoría del gasto', catCosto));
   const zonaDevuelto = h('fieldset', { class: 'grupo-campos', hidden: true }, h('legend', {}, 'Devolución'), campo('¿Qué se hace con el valor?', destino), campo('Sale de', ctaDev));
-  const zonaCambio = h('p', { class: 'ayuda', hidden: true }, `Se le entrega otro "${r.descripcion_producto}" igual (cantidad ${cantidad(r.cantidad)}). Queda como un cambio de producto con su nota de crédito.`);
+  const otro = cambioPorOtro(r, pagan);
+  const radiosCambio = [['igual', `Otro "${r.descripcion_producto}" igual`], ['otro', 'Otro producto']].map(([v, t], i) => {
+    const x = h('input', { type: 'radio', name: 'cambio-tipo', value: v, checked: i === 0 });
+    x.addEventListener('change', () => { otro.nodo.hidden = v !== 'otro'; ayudaIgual.hidden = v !== 'igual'; });
+    return h('label', { class: 'opcion-check' }, x, ' ' + t);
+  });
+  const ayudaIgual = h('p', { class: 'ayuda', dataset: { info: 'cambio-igual' } },
+    `Se le entrega otro igual (cantidad ${cantidad(r.cantidad)}) con "precio de garantía": vale lo mismo que pagó, aunque el precio haya cambiado. No se cobra ni se devuelve nada.`);
+  const zonaCambio = h('fieldset', { class: 'grupo-campos', hidden: true, id: 'zona-cambio-garantia' }, h('legend', {}, '¿Qué se lleva?'),
+    radiosCambio, ayudaIgual, otro.nodo);
+  const tipoCambio = () => (radiosCambio.map((x) => x.querySelector('input')).find((x) => x.checked) || {}).value;
   const elegido = () => (radios.map((x) => x.querySelector('input')).find((x) => x.checked) || {}).value;
   const pintar = () => { const v = elegido(); zonaReparado.hidden = v !== 'reparado'; zonaDevuelto.hidden = v !== 'devuelto'; zonaCambio.hidden = v !== 'cambiado'; ctaDev.disabled = destino.value !== 'dinero'; };
   radios.forEach((x) => x.addEventListener('change', pintar));
@@ -193,6 +203,9 @@ async function formularioResolver(vista, ctx, r) {
       if (!ctaCosto.value || !catCosto.value) { zonaError.append(errorSimple('Elija de dónde sale el dinero y la categoría del gasto.')); return; }
       datos.costo_reparacion = { cuenta_dinero_id: ctaCosto.value, categoria_id: catCosto.value, monto_centavos: c };
     }
+    if (v === 'cambiado' && tipoCambio() === 'otro') {
+      try { Object.assign(datos, await otro.listo()); } catch (err) { zonaError.append(err instanceof Node ? err : await cajaError(err)); return; }
+    }
     if (v === 'devuelto') {
       datos.destino = destino.value;
       if (destino.value === 'dinero') {
@@ -208,6 +221,94 @@ async function formularioResolver(vista, ctx, r) {
   pintar();
   vista.replaceChildren(h('section', { class: 'tarjeta tarjeta-angosta', 'aria-labelledby': 't-resolver' },
     titulo('h1', 'garantia', `Resolver reclamo #${r.numero}`, { id: 't-resolver' }), form));
+}
+
+// Cambio por OTRO producto (núcleo 0.18.0): el servidor calcula la diferencia (calcular_cambio_previo, la misma
+// regla del cambio de siempre) y la pantalla pide cómo la paga el cliente o qué se hace con lo que queda a su favor.
+function cambioPorOtro(r, pagan) {
+  const est = { producto: null, previa: null, forma: 'efectivo', diferencia: '', cuenta: '' };
+  let lista = null;
+  const buscar = h('input', { id: 'cambio-otro-buscar', type: 'search', autocomplete: 'off', placeholder: 'Nombre, código o código de barras' });
+  const resultados = h('div', { class: 'resultados', role: 'list' });
+  const elegido = h('p', { class: 'ayuda', dataset: { dato: 'cambio-otro-producto' } });
+  const cifras = h('div', { 'aria-live': 'polite', id: 'cambio-otro-cifras' });
+  const nodo = h('div', { hidden: true }, campo('Producto que se lleva', buscar), resultados, elegido, cifras);
+  buscar.addEventListener('input', async () => {
+    if (!lista) lista = await productos().catch(() => []);
+    const q = buscar.value.trim();
+    resultados.replaceChildren(...(q ? filtrar(lista, q, ['nombre', 'codigo', 'codigo_barras']).filter((p) => p.producto_id !== r.producto_id).slice(0, 8)
+      .map((p) => h('button', { type: 'button', class: 'resultado-producto', role: 'listitem', dataset: { producto: p.producto_id }, onclick: () => elegir(p) },
+        h('span', {}, p.nombre, h('span', { class: 'detalle' }, p.codigo || '')), h('span', { class: 'monto' }, dinero(p.precio_venta_centavos)))) : []));
+  });
+  const datosPrevio = () => ({ lineas: [{ linea: Number(r.linea), cantidad: Number(r.cantidad) }],
+    cambio: { lineas: [{ producto_id: est.producto.producto_id, cantidad: Number(r.cantidad) }] } });
+  async function elegir(p) {
+    est.producto = p; est.previa = null;
+    buscar.value = ''; resultados.replaceChildren();
+    elegido.textContent = `${cantidad(r.cantidad)} x ${p.nombre}`;
+    cifras.replaceChildren(h('p', { class: 'cargando', role: 'status' }, 'Calculando…'));
+    try {
+      const x = await rpc('calcular_cambio_previo', { p_venta_id: r.venta_id, p_datos: datosPrevio() });
+      if (est.producto !== p) return;
+      est.previa = x;
+      pintar(x);
+    } catch (err) { cifras.replaceChildren(await cajaError(err)); }
+  }
+  function pintar(x) {
+    const partes = [h('div', { class: 'fila' }, h('span', {}, 'Lo que devuelve vale'), h('span', { class: 'monto' }, dinero(x.devuelto.total_centavos))),
+      h('div', { class: 'fila' }, h('span', {}, 'El producto nuevo vale'), h('span', { class: 'monto' }, dinero(x.total_nuevo_centavos)))];
+    if (Number(x.a_cobrar_centavos) > 0) {
+      const sel = h('select', { id: 'cambio-otro-forma' }, ['efectivo', 'tarjeta', 'transferencia'].map((f) => h('option', { value: f }, nombreForma(f))));
+      sel.value = est.forma;
+      sel.addEventListener('change', () => { est.forma = sel.value; });
+      partes.push(h('div', { class: 'fila fila-total' }, h('span', {}, 'El cliente paga la diferencia'),
+        h('span', { class: 'monto', dataset: { dato: 'cambio-otro-cobrar' } }, dinero(x.a_cobrar_centavos))), campo('¿Cómo paga la diferencia?', sel));
+    } else if (Number(x.a_favor_cliente_centavos) > 0) {
+      const opciones = x.opciones_diferencia || [];
+      partes.push(h('div', { class: 'fila fila-total' }, h('span', {}, 'Diferencia a favor del cliente'),
+        h('span', { class: 'monto', dataset: { dato: 'cambio-otro-a-favor' } }, dinero(x.a_favor_cliente_centavos))));
+      if (!opciones.length) partes.push(mensaje('error', 'El dueño no permite devolver dinero ni dejar saldo a favor.', 'Elija un producto de igual o mayor valor.'));
+      else {
+        if (!opciones.some((o) => o.diferencia === est.diferencia)) est.diferencia = opciones[0].diferencia;
+        const selCta = h('select', { id: 'cambio-otro-cuenta' }, pagan.map((c) => h('option', { value: c.cuenta_dinero_id }, c.nombre)));
+        est.cuenta = selCta.value;
+        selCta.addEventListener('change', () => { est.cuenta = selCta.value; });
+        const zonaCta = campo('Sale de', selCta);
+        zonaCta.hidden = est.diferencia !== 'dinero';
+        partes.push(h('fieldset', { class: 'opciones' }, h('legend', {}, '¿Qué se hace con la diferencia?'), opciones.map((o) => {
+          const radio = h('input', { type: 'radio', name: 'cambio-otro-diferencia', value: o.diferencia, checked: o.diferencia === est.diferencia });
+          radio.addEventListener('change', () => { est.diferencia = o.diferencia; zonaCta.hidden = o.diferencia !== 'dinero'; });
+          return h('label', {}, radio, ' ', o.texto);
+        })), zonaCta);
+      }
+    } else partes.push(mensaje('ok', 'Queda parejo: no se cobra ni se devuelve nada.'));
+    if (x.pasa_tope) partes.push(mensaje('error', 'Este cambio pasa lo que su puesto puede devolver sin aprobación.', 'Que lo resuelva el dueño o quien aprueba.'));
+    cifras.replaceChildren(...partes);
+  }
+  return {
+    nodo,
+    // Datos para resolver_reclamo_garantia ("cambio" y, si sale dinero, la cuenta).
+    async listo() {
+      const x = est.previa;
+      if (!est.producto || !x) throw errorSimple('Busque y elija el producto que se lleva el cliente.');
+      if (x.pasa_tope) throw errorSimple('Este cambio pasa su tope.', 'Que lo resuelva el dueño o quien aprueba.');
+      const pl = (x.nuevo && x.nuevo.lineas && x.nuevo.lineas[0]) || {};
+      const linea = { producto_id: est.producto.producto_id, cantidad: Number(r.cantidad) };
+      if (pl.promocion_sugerida_id) linea.promocion_id = pl.promocion_sugerida_id;
+      const cambio = { lineas: [linea] };
+      const extra = {};
+      if (Number(x.a_cobrar_centavos) > 0) cambio.pagos = [{ forma: est.forma, monto_centavos: Number(x.a_cobrar_centavos) }];
+      if (Number(x.a_favor_cliente_centavos) > 0) {
+        if (!est.diferencia) throw errorSimple('El dueño no permite devolver dinero ni dejar saldo a favor.', 'Elija un producto de igual o mayor valor.');
+        cambio.diferencia = est.diferencia;
+        if (est.diferencia === 'dinero') {
+          if (!est.cuenta) throw errorSimple('Elija de dónde sale el dinero.');
+          extra.cuenta_dinero_id = est.cuenta;
+        }
+      }
+      return { cambio, ...extra };
+    },
+  };
 }
 
 // Comprobante del reclamo: solo texto (se imprime igual que el de la venta, sin íconos ni emojis).

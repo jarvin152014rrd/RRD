@@ -385,6 +385,70 @@ async function venderCon(p, codigos) {
     await ctx.close();
   });
 
+  // ===================== Revisión 0.12.1 =====================
+  await prueba('0.12.1 garantía: cambiar por OTRO producto más barato; la diferencia queda a favor del cliente', async () => {
+    const p = usar(dueno.p);
+    await p.goto(URL_APP + '/#/vender/nueva');
+    await p.waitForSelector('#buscar-producto');
+    await p.goto(URL_APP + '/#/vender/garantias');
+    await p.waitForSelector('#reclamos-abiertos [data-reclamo]');
+    await p.locator('#reclamos-abiertos [data-reclamo]', { hasText: 'El cable viene pelado' }).locator('[data-accion=resolver]').click();
+    await p.waitForSelector('#t-resolver');
+    await p.check('input[name=resolucion][value=cambiado]');
+    afirmar(await p.locator('[data-info=cambio-igual]').isVisible(), 'no explica el cambio por otro igual');
+    await p.check('input[name=cambio-tipo][value=otro]');
+    await p.fill('#cambio-otro-buscar', 'PVC');
+    await p.locator('#zona-cambio-garantia .resultado-producto').first().click();
+    await p.waitForSelector('[data-dato=cambio-otro-a-favor]');
+    const aFavor = (await textoDe(p, '[data-dato=cambio-otro-a-favor]')).trim();
+    await p.check('input[name=cambio-otro-diferencia][value=saldo_favor]');
+    await p.screenshot({ path: path.join(CAPTURAS, 'v121_garantia_otro_producto.png'), fullPage: true });
+    await p.click('form.formulario button[type=submit]');
+    await p.waitForSelector('[data-dato=reclamo-numero]', { timeout: 15000 });
+    const r = JSON.parse(sql('dueno@demo.hn', `(SELECT row_to_json(x) FROM (SELECT r.estado, r.resolucion, d.saldo_favor_centavos, d.dinero_centavos
+      FROM public.garantia_reclamo r JOIN public.devolucion d ON d.id = r.devolucion_id WHERE r.motivo = 'El cable viene pelado') x)`));
+    afirmar(r.estado === 'resuelto' && r.resolucion === 'cambiado' && r.dinero_centavos === 0 && lempiras(r.saldo_favor_centavos) === aFavor,
+      'base: ' + JSON.stringify(r) + ' pantalla: ' + aFavor);
+  });
+
+  await prueba('0.12.1 ficha: bajar el precio por debajo del mayorista pide el mayorista nuevo y baja los dos', async () => {
+    const p = usar(dueno.p);
+    await p.goto(URL_APP + '/#/inventario/productos');
+    await p.fill('#buscar-producto-inv', 'Cemento');
+    await p.getByRole('button', { name: 'Ver Cemento gris 42.5 kg' }).click();
+    await p.waitForSelector('#t-pficha');
+    const may = Number(sql('dueno@demo.hn', `(SELECT precio_mayorista_centavos FROM public.producto WHERE id = demo.id('CEM'))`));
+    await p.click('#cambiar-precio');
+    await p.waitForSelector('#precio-nuevo');
+    afirmar(!(await p.locator('#precio-nuevo-mayorista').isVisible()), 'pide el mayorista sin hacer falta');
+    await p.fill('#precio-nuevo', ((may - 500) / 100).toFixed(2));
+    await p.waitForSelector('#precio-nuevo-mayorista', { state: 'visible' });
+    await p.fill('#precio-nuevo-mayorista', ((may - 600) / 100).toFixed(2));
+    await p.click('form.formulario button[type=submit]');
+    await p.fill('dialog textarea[name=motivo]', 'Baja el cemento');
+    await p.click('dialog button[type=submit]');
+    await p.waitForSelector('#t-pficha');
+    const x = JSON.parse(sql('dueno@demo.hn', `(SELECT row_to_json(x) FROM (SELECT precio_venta_centavos AS pv, precio_mayorista_centavos AS pm
+      FROM public.producto WHERE id = demo.id('CEM')) x)`));
+    afirmar(x.pv === may - 500 && x.pm === may - 600, 'base: ' + JSON.stringify(x));
+  });
+
+  await prueba('0.12.1 Vender: tras elegir "precio normal", cambiar la cantidad deja que el servidor vuelva a decidir', async () => {
+    const p = usar(dueno.p);
+    await venderCon(p, ['VAR-038']);
+    await p.selectOption('#cliente', id('CLI1'));
+    await calculado(p);
+    await p.waitForSelector('[data-dato=chip-mayorista]');
+    await p.click('[data-accion=cambiar-precio-tipo]');
+    await calculado(p);
+    afirmar(await p.locator('[data-dato=chip-mayorista]').count() === 0, 'sigue mayorista tras elegir normal');
+    await p.fill('.linea-carrito input[name=cantidad]', '3');
+    await p.press('.linea-carrito input[name=cantidad]', 'Tab');
+    await calculado(p);
+    await p.waitForSelector('[data-dato=chip-mayorista]');
+    afirmar((await textoDe(p, '[data-dato=total]')).trim() === 'L 510.00', 'cliente mayorista 3 x 170.00: ' + await textoDe(p, '[data-dato=total]'));
+  });
+
   afirmar(true, '');
   if (erroresJs.length) { fallas++; console.log('  FALLA  errores de JavaScript: ' + erroresJs.slice(0, 3).join(' | ')); }
   await nav.close();

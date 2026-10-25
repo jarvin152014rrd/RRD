@@ -6,7 +6,7 @@ Números: MAYOR.MENOR.ARREGLO (ver `docs/CONVENCIONES.md`).
 
 ## 0.18.0 (2026-10-25) — Precio mayorista, garantías, cheques y antigüedad de saldos
 
-Migración nueva 054 (las 001-053 no se tocaron). 145 pruebas (nuevas 141 a 145; la 140 queda fija en 0.17.0). Todas
+Migración nueva 054 (las 001-053 no se tocaron). 146 pruebas (nuevas 141 a 146; la 140 queda fija en 0.17.0). Todas
 pasan también con `probar.sh --paquete`. Para quien ya tiene 0.17.0 en Supabase: `dist/actualizar_supabase_0.18.0.sql`
 (una sola pegada; ver `docs/SUPABASE.md`, "Actualizar de 0.17.0 a 0.18.0").
 
@@ -34,8 +34,19 @@ pasan también con `probar.sh --paquete`. Para quien ya tiene 0.17.0 en Supabase
 - **Antigüedad de saldos** (`nucleo/docs/antiguedad.md`): `antiguedad_saldos(empresa, al, 'cxc'|'cxp')`: por cliente
   (o proveedor) corriente, 1-30, 31-60, 61-90 y más de 90 días vencido a la fecha de corte, con totales; incluye saldos
   iniciales, respeta la sucursal y dice si cuadra con la cuenta de Clientes (o Proveedores) de los libros.
-- Pruebas: 141 (mayorista), 142 (garantías), 143 (cheques), 144 (antigüedad) y 145 (de 0.17.0 a 0.18.0 como en
-  Supabase: dos veces sin daño, sin la 053 lo dice claro, un error a mitad no deja nada, bitácora íntegra).
+- **Revisión de 0.18.0 (dentro de la misma 054, sin nada grave):** cambio por garantía de lo mismo con "precio de
+  garantía" (vale lo que pagó el cliente; sin tope ni descuento doble; el cliente no paga ni recibe diferencia;
+  `venta_linea.precio_tipo = 'garantia'`); un reclamo cuya devolución o gasto pide aprobación no se cierra
+  (`APROBACION_REQUERIDA`); una venta pagada con un cheque sin confirmar no devuelve dinero ni saldo a favor
+  (`CHEQUE_POR_CONFIRMAR`); el rebote no tiene fecha anterior al depósito ni a su confirmación y anula el depósito en
+  tránsito con `cobros.anular` (sin `dinero.anular`); la sucursal del cheque sin caja es la de la factura que paga (el
+  usuario de otra sucursal no lo ve ni lo mueve); `v_cheque_recibido` la ve quien tiene `dinero.ver` sin `ventas.ver`;
+  la regla mayorista <= normal se revisa al final de la fila del Excel (se pueden bajar los dos) y el Excel avisa
+  precio o mayorista bajo el costo; `DESCUENTO_DOBLE` del mayorista en palabras para el usuario.
+- Pruebas: 141 (mayorista), 142 (garantías), 143 (cheques), 144 (antigüedad), 145 (de 0.17.0 a 0.18.0 como en
+  Supabase: dos veces sin daño, sin la 053 lo dice claro, un error a mitad no deja nada, bitácora íntegra) y 146
+  (revisión: mayorista en apartado, cotización convertida y cambio; precio de garantía con precio que subió, que bajó y
+  con promoción; aprobación; cheque sin confirmar; fecha y permiso del rebote; sucursal en cheques y garantías).
 
 ## 0.17.0 (2026-10-24) — Fotos de productos livianas, con interruptor
 

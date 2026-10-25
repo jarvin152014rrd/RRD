@@ -45,6 +45,17 @@ vendido menos lo devuelto; motivo obligatorio. **Fuera de plazo** (fecha del rec
 - **cambiado** y **devuelto**: usan la devolución de SIEMPRE (`registrar_devolucion`, pide `ventas.devolver`, tipos
   que permite el dueño, nota de crédito, inventario al costo, efectivo del turno propio, tope y aprobación), ligada al
   reclamo (`devolucion_id`). El motivo de la devolución dice "Garantía, reclamo #N".
+- **Cambiado por otro igual** (mismo producto y cantidad; lo de siempre si no se manda "cambio"): la línea nueva lleva
+  **precio de garantía** (`venta_linea.precio_tipo = 'garantia'`, el comprobante dice "Cambio por garantía"): vale
+  exactamente lo que el cliente pagó por lo devuelto (con ISV, con la misma cuenta de la devolución), aunque el
+  precio haya subido o bajado o la venta tuviera promoción. No es un descuento: no cuenta para el tope, no lleva
+  promoción ni mayorista, y no es "descuento doble". El cliente no paga ni recibe diferencia. Si la venta era al
+  crédito y todavía se debe, la venta del cambio queda al crédito por lo mismo: sigue debiendo igual. (Revisión 0.18.0.)
+- **Cambiado por otro producto**: un cambio de siempre. `"cambio": {"lineas": [...], "pagos"?: [...] (si el nuevo vale
+  más), "diferencia"?: "dinero" | "saldo_favor" (si vale menos)}` y `"cuenta_dinero_id"` si la diferencia sale en
+  dinero. La app calcula antes con `calcular_cambio_previo`.
+- **Si la devolución o el gasto de reparación quedaran pendientes de aprobación** (pasan el tope del puesto), no se
+  resuelve nada: `APROBACION_REQUERIDA` ("que lo resuelva quien aprueba"). El reclamo sigue abierto.
 - Todo junto o nada; un reintento con el mismo `id_operacion` devuelve lo mismo (las operaciones de adentro usan
   ids derivados, así no se duplican).
 
@@ -54,3 +65,7 @@ ajuste de inventario).
 Ejemplo (prueba 142): galón con 90 días vendido hoy: hasta hoy + 90. Venta del 10/01: venció el 10/04 y su reclamo
 solo entra autorizado. Reparado con L 50.00 de costo: gasto aplicado desde el banco. Cambiado: entra un galón y sale
 otro (inventario igual). Devuelto en dinero: salen L 450.00 del banco.
+
+Ejemplo (prueba 146): galón vendido a 450.00; sube a 500.00: el cambio vale 450.00. Vendido a 500.00 y baja a 400.00:
+el cambio vale 500.00 (no se devuelve nada). Tornillos 2 x 15.00 con 10 % de promoción = 27.00; se reclama 1: el
+cambio vale 13.50. El otro se cambia por arroz de 22.00: paga 8.50.
