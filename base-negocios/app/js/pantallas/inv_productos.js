@@ -9,7 +9,7 @@ import { empresaId, puede, tieneModulo } from '../sesion.js';
 import { dinero, fechaHora, aCentavos, paraCampo, cantidad, aNumero, comaInvalida, MENSAJE_COMA } from '../formato.js';
 import { h, icono, aviso, errorSimple, campo, conBoton, pedirMotivo, confirmar, titulo, filaIcono, chipEstado, monto, estadoVacio } from '../ui.js';
 import { hayEnMenu } from '../menu.js';
-import { filtrar, olvidarDatos } from '../datos.js';
+import { filtrar, olvidarDatos, nucleoAlMenos } from '../datos.js';
 import { fotosActivas, miniatura, fotoGrande, subirFotoProducto, quitarFotoProducto, revisarArchivo } from '../fotos.js';
 
 const E = () => empresaId();
@@ -70,8 +70,8 @@ async function volverALista(vista, ctx) { vista.replaceChildren(); await mostrar
 // Ficha: datos, precio, historial de precios y botones.
 async function ficha(vista, ctx, id) {
   vista.replaceChildren(h('p', { class: 'cargando' }, 'Cargando…'));
-  const [[p], hist] = await Promise.all([leer('v_producto', { producto_id: id }),
-    leer('producto_precio', { producto_id: id }, { orden: 'cambiado_en.desc', limite: 20 }).catch(() => [])]);
+  const [[p], hist, n018] = await Promise.all([leer('v_producto', { producto_id: id }),
+    leer('producto_precio', { producto_id: id }, { orden: 'cambiado_en.desc', limite: 20 }).catch(() => []), nucleoAlMenos('0.18.0')]);
   if (!ctx.sigueVigente()) return;
   const dato = (t, v) => (v || v === 0 ? h('div', { class: 'fila' }, h('span', {}, t), h('span', {}, String(v))) : null);
   const editar = puede('productos.editar');
@@ -85,12 +85,18 @@ async function ficha(vista, ctx, id) {
       h('div', { class: 'fila' }, h('span', {}, 'Precio'), h('span', { class: 'monto', dataset: { dato: 'precio' } },
         `${dinero(p.precio_venta_centavos)} ${p.precio_incluye_isv ? '(incluye ISV)' : '(sin ISV)'}`)),
       dato('Precio con ISV', dinero(p.precio_con_isv_centavos)),
+      // App 0.12.0 (núcleo 0.18.0): precio mayorista.
+      p.precio_mayorista_centavos ? h('div', { class: 'fila' }, h('span', {}, 'Precio mayorista'), h('span', { class: 'monto', dataset: { dato: 'mayorista' } },
+        `${dinero(p.precio_mayorista_centavos)} · ${p.cantidad_mayorista ? 'desde ' + cantidad(p.cantidad_mayorista) + ' o a clientes mayoristas' : 'solo a clientes mayoristas'}`)) : null,
+      p.dias_garantia ? dato('Garantía', `${p.dias_garantia} días`) : null,
       p.tipo !== 'servicio' ? dato('Mínimo en existencia', cantidad(p.stock_minimo || 0)) : null,
       p.costo_estimado_centavos !== null && p.costo_estimado_centavos !== undefined && puede('inventario.costos') ? dato('Costo estimado', dinero(p.costo_estimado_centavos)) : null,
       Object.entries(p.campos_extra || {}).map(([k, v]) => dato(k, v)),
       h('div', { class: 'botones' },
         editar ? h('button', { type: 'button', class: 'boton boton-principal', id: 'editar-producto', onclick: () => formulario(vista, ctx, p) }, 'Editar') : null,
         puede('productos.precios') ? h('button', { type: 'button', class: 'boton', id: 'cambiar-precio', onclick: () => cambiarPrecio(vista, ctx, p) }, 'Cambiar precio') : null,
+        puede('productos.precios') && n018 ? h('button', { type: 'button', class: 'boton', id: 'precio-mayorista', onclick: () => precioMayorista(vista, ctx, p) },
+          p.precio_mayorista_centavos ? 'Precio mayorista' : 'Poner precio mayorista') : null,
         editar ? h('button', { type: 'button', class: `boton ${p.activo ? 'boton-peligro' : ''}`, id: 'activar-producto',
           onclick: () => activar(vista, ctx, p) }, p.activo ? 'Desactivar' : 'Activar') : null,
         h('button', { type: 'button', class: 'boton', onclick: () => volverALista(vista, ctx) }, 'Volver a la lista'))),
@@ -166,14 +172,55 @@ async function cambiarPrecio(vista, ctx, p) {
     const c = aCentavos(nuevo.value);
     if (c === null || c < 0) { zonaError.append(errorSimple('Escriba un precio válido (por ejemplo 125.50).')); return; }
     if (c === p.precio_venta_centavos) { zonaError.append(errorSimple('Es el mismo precio.')); return; }
+    let r = null;
     const ok = await pedirMotivo({ titulo: 'Cambiar precio', textoBoton: 'Cambiar precio',
       explicacion: `${p.nombre}: de ${dinero(p.precio_venta_centavos)} a ${dinero(c)}.`,
-      accion: (motivo) => rpc('cambiar_precio_producto', { p_empresa_id: E(), p_producto_id: p.producto_id, p_precio_centavos: c, p_motivo: motivo }) });
-    if (ok) { olvidarDatos('productos'); aviso(`Precio cambiado · ${p.nombre} de ${dinero(p.precio_venta_centavos)} a ${dinero(c)}`); ficha(vista, ctx, p.producto_id); }
+      accion: async (motivo) => { r = await rpc('cambiar_precio_producto', { p_empresa_id: E(), p_producto_id: p.producto_id, p_precio_centavos: c, p_motivo: motivo }); return r; } });
+    if (ok) { olvidarDatos('productos'); aviso(`Precio cambiado · ${p.nombre} de ${dinero(p.precio_venta_centavos)} a ${dinero(c)}`); mostrarAvisos(r); ficha(vista, ctx, p.producto_id); }
   });
   vista.replaceChildren(h('section', { class: 'tarjeta tarjeta-angosta', 'aria-labelledby': 't-cprecio' },
     titulo('h1', 'etiqueta', `Cambiar precio · ${p.nombre}`, { id: 't-cprecio' }), form));
   nuevo.focus();
+}
+
+// Avisos del servidor (precio por debajo del costo): no impiden guardar, solo se muestran.
+function mostrarAvisos(r) {
+  for (const a of (r && r.avisos) || []) aviso(a.mensaje, 'info');
+}
+
+// Precio mayorista (núcleo 0.18.0): precio, desde qué cantidad y motivo. Vacío = quitarlo.
+async function precioMayorista(vista, ctx, p) {
+  const precio = h('input', { id: 'mayorista-precio', type: 'text', inputmode: 'decimal',
+    value: p.precio_mayorista_centavos ? paraCampo(p.precio_mayorista_centavos) : '', placeholder: '0.00' });
+  const desde = h('input', { id: 'mayorista-desde', type: 'text', inputmode: 'decimal', value: p.cantidad_mayorista ? cantidad(p.cantidad_mayorista) : '' });
+  const zonaError = h('div', { 'aria-live': 'assertive' });
+  const sigue = h('button', { type: 'submit', class: 'boton boton-principal boton-ancho' }, 'Siguiente');
+  const form = h('form', { class: 'formulario', novalidate: true },
+    h('p', {}, `Precio normal: ${dinero(p.precio_venta_centavos)} ${p.precio_incluye_isv ? '(incluye ISV)' : '(sin ISV)'}.`),
+    campo('Precio mayorista (L)', precio, `${p.precio_incluye_isv ? 'Con ISV incluido, como el precio normal.' : 'Sin ISV, como el precio normal.'} No puede ser mayor que el normal. Vacío = quitarlo.`),
+    campo('Desde cuántas unidades (opcional)', desde, 'Vacío = solo para clientes marcados como mayoristas.'),
+    h('p', { class: 'ayuda' }, 'No se suma a promociones ni descuentos: en cada venta se usa uno solo.'),
+    zonaError, sigue,
+    h('button', { type: 'button', class: 'boton boton-ancho', onclick: () => ficha(vista, ctx, p.producto_id) }, 'Volver'));
+  form.addEventListener('submit', async (ev) => {
+    ev.preventDefault();
+    zonaError.replaceChildren();
+    const quitar = !precio.value.trim();
+    const c = quitar ? null : aCentavos(precio.value);
+    if (!quitar && (c === null || c <= 0)) { zonaError.append(errorSimple('Escriba un precio válido (por ejemplo 125.50) o déjelo vacío para quitarlo.')); return; }
+    if (!quitar && c > p.precio_venta_centavos) { zonaError.append(errorSimple(`El precio mayorista no puede ser mayor que el normal (${dinero(p.precio_venta_centavos)}).`)); return; }
+    const d = desde.value.trim() ? aNumero(desde.value) : null;
+    if (desde.value.trim() && (d === null || d <= 0)) { zonaError.append(errorSimple(comaInvalida(desde.value) ? MENSAJE_COMA : 'La cantidad debe ser un número mayor que cero.')); return; }
+    const datos = { precio_mayorista_centavos: c, cantidad_mayorista: quitar ? null : d };
+    let r = null;
+    const ok = await pedirMotivo({ titulo: 'Precio mayorista', textoBoton: 'Guardar',
+      explicacion: quitar ? `${p.nombre}: quitar el precio mayorista.` : `${p.nombre}: mayorista ${dinero(c)}${d ? ' desde ' + cantidad(d) + ' unidades' : ' (solo clientes mayoristas)'}.`,
+      accion: async (motivo) => { r = await rpc('editar_producto', { p_empresa_id: E(), p_producto_id: p.producto_id, p_datos: datos, p_motivo: motivo }); return r; } });
+    if (ok) { olvidarDatos('productos'); aviso(quitar ? `Precio mayorista quitado · ${p.nombre}` : `Precio mayorista guardado · ${p.nombre} a ${dinero(c)}`); mostrarAvisos(r); ficha(vista, ctx, p.producto_id); }
+  });
+  vista.replaceChildren(h('section', { class: 'tarjeta tarjeta-angosta', 'aria-labelledby': 't-pmay' },
+    titulo('h1', 'etiqueta', `Precio mayorista · ${p.nombre}`, { id: 't-pmay' }), form));
+  precio.focus();
 }
 
 async function activar(vista, ctx, p) {
@@ -187,9 +234,11 @@ async function activar(vista, ctx, p) {
 // Crear (p = null) o editar. El precio de un producto que ya existe se cambia con "Cambiar precio".
 async function formulario(vista, ctx, p) {
   vista.replaceChildren(h('p', { class: 'cargando' }, 'Cargando…'));
-  const cat = await catalogos();
+  const [cat, n018] = await Promise.all([catalogos(), nucleoAlMenos('0.18.0')]);
   if (!ctx.sigueVigente()) return;
   const nuevo = !p;
+  const mayorista = h('input', { id: 'prod-mayorista', type: 'text', inputmode: 'decimal', placeholder: 'Opcional' });
+  const mayoristaDesde = h('input', { id: 'prod-mayorista-desde', type: 'text', inputmode: 'decimal', placeholder: 'Opcional' });
   const v = (k, d = '') => (p && p[k] !== null && p[k] !== undefined ? p[k] : d);
   const codigo = h('input', { id: 'prod-codigo', type: 'text', maxlength: 30, value: v('codigo'), autocapitalize: 'characters' });
   const barras = h('input', { id: 'prod-barras', type: 'text', maxlength: 40, inputmode: 'numeric', value: v('codigo_barras') });
@@ -225,6 +274,8 @@ async function formulario(vista, ctx, p) {
     h('div', { class: 'dos-columnas' }, campo('Tipo', tipo, nuevo ? null : 'No se cambia después de crearlo.'), campo('Categoría', categoria)),
     h('div', { class: 'dos-columnas' }, campo('Unidad', unidad), campo('Impuesto', impuesto)),
     nuevo ? campo('Precio de venta (L)', precio) : null,
+    nuevo && n018 ? h('div', { class: 'dos-columnas' }, campo('Precio mayorista (L)', mayorista, 'Igual que el precio de venta (con o sin ISV).'),
+      campo('Mayorista desde (unidades)', mayoristaDesde, 'Vacío = solo clientes mayoristas.')) : null,
     h('label', { class: 'opcion-check' }, incluye, ' El precio ya incluye el ISV'),
     h('div', { class: 'dos-columnas' }, campo('Mínimo en existencia (alerta)', minimo), h('label', { class: 'opcion-check' }, fracciones, ' Se vende con decimales (por libra, por metro…)')),
     extras.length ? h('fieldset', { class: 'grupo-campos' }, h('legend', {}, 'Campos extra'), extras.map(({ x, ctl }) => campo(x.etiqueta + (x.obligatorio ? ' (obligatorio)' : ''), ctl))) : null,
@@ -261,10 +312,20 @@ async function formulario(vista, ctx, p) {
       const c = aCentavos(precio.value);
       if (c === null || c < 0) { zonaError.append(errorSimple('Escriba el precio (por ejemplo 125.50).')); return; }
       datos.tipo = tipo.value; datos.precio_venta_centavos = c; datos.precio_incluye_isv = incluye.checked;
+      if (n018 && mayorista.value.trim()) {
+        const m = aCentavos(mayorista.value);
+        if (m === null || m <= 0 || m > c) { zonaError.append(errorSimple('El precio mayorista debe ser mayor que cero y no más que el precio de venta.')); return; }
+        datos.precio_mayorista_centavos = m;
+      }
+      if (n018 && mayoristaDesde.value.trim()) {
+        const d = aNumero(mayoristaDesde.value);
+        if (d === null || d <= 0 || !datos.precio_mayorista_centavos) { zonaError.append(errorSimple('"Mayorista desde" es una cantidad mayor que cero y necesita el precio mayorista.')); return; }
+        datos.cantidad_mayorista = d;
+      }
       if (!await confirmar({ titulo: 'Crear producto', texto: `${datos.nombre} (${datos.codigo}) a ${dinero(c)} ${incluye.checked ? 'con' : 'sin'} ISV.`, textoBoton: 'Sí, crear' })) return;
       r = await conBoton(boton, zonaError, () => escribir('crear_producto', { p_empresa_id: E(), p_datos: datos }));
       if (!r) return;
-      olvidarDatos('productos'); aviso(`Producto creado · ${datos.nombre} a ${dinero(c)}`);
+      olvidarDatos('productos'); aviso(`Producto creado · ${datos.nombre} a ${dinero(c)}`); mostrarAvisos(r);
       return ficha(vista, ctx, r.producto_id);
     }
     // Editar: cambiar "incluye ISV" pide motivo (queda en el historial de precios).

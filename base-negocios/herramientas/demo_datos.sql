@@ -322,3 +322,20 @@ BEGIN
   PERFORM public.resolver_aprobacion(v_apr, true, 'Revisado con el cliente', gen_random_uuid());
   PERFORM demo.como(NULL);
 END $$;
+
+-- 10) (app 0.12.0, núcleo 0.18.0) Precio mayorista: cemento a L 250.00 desde 20 sacos, varilla a L 170.00 desde 30 y la Constructora
+--     Ríos como cliente mayorista (con una venta de hoy a ese precio). Con un núcleo anterior se salta.
+DO $$
+DECLARE e uuid := demo.id('EMPRESA');
+BEGIN
+  IF to_regprocedure('interno.mayorista_de(public.producto, numeric, numeric, boolean)') IS NULL THEN
+    RETURN;
+  END IF;
+  PERFORM demo.como('dueno@demo.hn');
+  PERFORM public.editar_producto(e, demo.id('CEM'), '{"precio_mayorista_centavos": 25000, "cantidad_mayorista": 20}', 'Demo: precio de mayoreo');
+  PERFORM public.editar_producto(e, demo.id('VAR'), '{"precio_mayorista_centavos": 17000, "cantidad_mayorista": 30}', 'Demo: precio de mayoreo');
+  PERFORM public.editar_tercero(e, demo.id('CLI1'), '{"es_mayorista": true}', 'Demo: compra para sus obras');
+  PERFORM public.registrar_venta(e, jsonb_build_object('cliente_id', demo.id('CLI1'),
+    'lineas', jsonb_build_array(demo.l('VAR', 6)), 'pagos', '[{"forma":"efectivo"}]'::jsonb), gen_random_uuid());
+  PERFORM demo.como(NULL);
+END $$;

@@ -35,7 +35,11 @@ export function comprobante(doc) {
     (doc.lineas || []).map((l) => h('div', { class: 'comp-linea' },
       h('p', {}, l.descripcion),
       fila(`${cantidad(l.cantidad)} x ${dinero(l.precio_unitario_centavos)}${l.descuento_centavos ? ' (desc. ' + dinero(l.descuento_centavos) + ')' : ''}`,
-        dinero(l.total_centavos)))),
+        dinero(l.total_centavos)),
+      // Núcleo 0.18.0: precio mayorista y garantía, en texto (lo impreso va sin íconos).
+      l.precio_tipo === 'mayorista' ? h('p', { class: 'comp-chico', dataset: { dato: 'precio-mayorista' } },
+        'Precio mayorista' + (l.precio_normal_centavos ? ` (normal ${dinero(l.precio_normal_centavos)})` : '')) : null,
+      l.garantia_hasta ? h('p', { class: 'comp-chico', dataset: { dato: 'garantia' } }, 'Garantía hasta ' + l.garantia_hasta) : null)),
     h('hr'),
     fila('Subtotal sin ISV', dinero(t.subtotal_centavos)),
     t.descuento_centavos ? fila('Descuento', '-' + dinero(t.descuento_centavos)) : null,
@@ -59,7 +63,8 @@ export function comprobante(doc) {
 // Texto corto para mandar por WhatsApp.
 export function textoWhatsApp(doc) {
   const t = doc.totales || {};
-  const lineas = (doc.lineas || []).map((l) => `${cantidad(l.cantidad)} x ${l.descripcion}: ${dinero(l.total_centavos)}`);
+  const lineas = (doc.lineas || []).map((l) => `${cantidad(l.cantidad)} x ${l.descripcion}: ${dinero(l.total_centavos)}`
+    + (l.precio_tipo === 'mayorista' ? ' (precio mayorista)' : '') + (l.garantia_hasta ? ` · Garantía hasta ${l.garantia_hasta}` : ''));
   return sinEmojis([`${doc.emisor.nombre}`, `${doc.tipo || 'Ticket'} ${doc.numero_documento} · ${doc.fecha}`, '', ...lineas, '',
     `Total: ${dinero(t.total_centavos)} (ISV ${dinero(t.impuesto_centavos)})`,
     doc.vence_el ? `Vence: ${doc.vence_el}` : null, 'Gracias por su compra.'].filter((x) => x !== null).join('\n'));

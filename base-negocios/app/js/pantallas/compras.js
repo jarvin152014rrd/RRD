@@ -52,7 +52,9 @@ export async function mostrar(vista, ctx) {
   const resumen = h('div', { class: 'cifras' });
   const tope = h('div', {});
 
+  let vez = 0;   // app 0.12.0: una respuesta vieja (filtros de antes) no pinta encima de la nueva
   async function cargar() {
+    const mia = ++vez;
     Object.assign(filtros, { desde: desde.value, hasta: hasta.value, proveedor: selProv.value });
     zona.replaceChildren(h('p', { class: 'cargando', role: 'status' }, 'Cargando…'));
     const f = { empresa_id: empresaId(), fecha_contable: { gte: filtros.desde || '2000-01-01', lte: filtros.hasta || '2100-12-31' } };
@@ -68,8 +70,8 @@ export async function mostrar(vista, ctx) {
       [compras, tot] = await Promise.all([leer('compra', f, { orden: 'numero.desc', limite: LIMITE }),
         puede('compras.ver') ? rpcSiExiste('totales_compras', { p_empresa_id: empresaId(), p_desde: filtros.desde || '2000-01-01', p_hasta: filtros.hasta || '2100-12-31',
           p_proveedor_id: filtros.proveedor || null }).catch(sinTotales) : null]);
-    } catch (err) { zona.replaceChildren(await cajaError(err)); return; }
-    if (!ctx.sigueVigente()) return;
+    } catch (err) { if (mia === vez) zona.replaceChildren(await cajaError(err)); return; }
+    if (!ctx.sigueVigente() || mia !== vez) return;
     let total, porPagar, cuantas;
     if (tot) {
       total = Number(tot.total_centavos); porPagar = Number(tot.por_pagar_centavos); cuantas = Number(tot.cantidad);

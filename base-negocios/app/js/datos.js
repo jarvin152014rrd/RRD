@@ -64,6 +64,8 @@ export function versionAlMenos(v, minima) {
   return true;
 }
 // Núcleo 0.16.0: el servidor ya filtra por sucursal proyección, comisiones, dinero, fondos y compras.
+// ¿El núcleo es al menos esta versión? (app 0.12.0: lo de 0.18.0 se oculta con un núcleo anterior)
+export const nucleoAlMenos = (minima) => versionNucleo().then((v) => versionAlMenos(v, minima));
 export const nucleoFiltraSucursal = () => versionNucleo().then((v) => versionAlMenos(v, '0.16.0'));
 
 // Cuentas de las que se puede pagar (caja de efectivo, caja chica o banco), ya leídas con cuentasDinero.

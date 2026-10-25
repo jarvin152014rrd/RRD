@@ -11,6 +11,7 @@
 #    en /opt/pw-browsers; no descarga nada).
 # 3b. Corre app-pruebas/probar_compras_dinero.cjs: Compras y Dinero (app 0.7.0), con
 #    la misma base y el mismo servidor; después app-pruebas/probar_reportes.cjs (app 0.8.0).
+# 3e. Corre app-pruebas/probar_0120.cjs: lo nuevo de la app 0.12.0 (núcleo 0.18.0).
 # 3d. Corre app-pruebas/probar_fotos.cjs: fotos de productos (app 0.11.0) con el Storage mínimo del
 #    servidor (al final: enciende las fotos y sube una).
 # 4. Corre app-pruebas/probar_funciones.mjs: las Edge Functions reales de
@@ -69,7 +70,11 @@ echo
 URL_APP="http://127.0.0.1:$PUERTO_PRUEBA" node "$RAIZ/app-pruebas/probar_funciones.mjs" 2> >(grep -v ExperimentalWarning >&2)
 codigo_funciones=$?
 echo
+# 4b. App 0.12.0 (núcleo 0.18.0): precio mayorista, garantías, cheques y antigüedad de saldos.
+URL_APP="http://127.0.0.1:$PUERTO_PRUEBA" node "$RAIZ/app-pruebas/probar_0120.cjs"
+codigo_0120=$?
+echo
 # 5. Fotos de productos (app 0.11.0): al final, porque enciende las fotos y sube archivos.
 URL_APP="http://127.0.0.1:$PUERTO_PRUEBA" node "$RAIZ/app-pruebas/probar_fotos.cjs"
 codigo_fotos=$?
-[ "$codigo_app" = "0" ] && [ "$codigo_dinero" = "0" ] && [ "$codigo_reportes" = "0" ] && [ "$codigo_funciones" = "0" ] && [ "$codigo_fotos" = "0" ]
+[ "$codigo_app" = "0" ] && [ "$codigo_dinero" = "0" ] && [ "$codigo_reportes" = "0" ] && [ "$codigo_funciones" = "0" ] && [ "$codigo_fotos" = "0" ] && [ "$codigo_0120" = "0" ]

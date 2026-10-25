@@ -95,3 +95,18 @@ Fotos livianas, con interruptor por empresa. **Apagado por defecto**: hasta que 
   (`verificar_instalacion.sql` lo muestra en la columna `fotos_productos`) y `docs/SUPABASE.md` explica los clics.
 - **Lo impreso y el Excel no llevan fotos.** (La columna "tiene foto" en el Excel no se hizo: anotado en PENDIENTES.)
 - Prueba 139 (políticas, permisos, interruptor, poner/cambiar/quitar, bitácora) y 140 (actualizar 0.16.0 -> 0.17.0).
+
+## Precio mayorista (0.18.0, migración 054)
+
+- Producto: `precio_mayorista_centavos` (opcional; se escribe igual que el precio de venta: con ISV si "precio
+  incluye ISV" está en Sí) y `cantidad_mayorista` (opcional: desde cuántas unidades). Cliente: `tercero.es_mayorista`.
+- `crear_producto` acepta las dos claves (con `productos.editar`). `editar_producto` también, pero cambiarlas pide
+  `productos.precios` y motivo (como un cambio de precio; queda en la bitácora). `null` quita el mayorista.
+- Reglas (trigger, por cualquier camino): el mayorista **nunca pasa el precio normal** (tampoco al bajar el normal con
+  `cambiar_precio_producto`) y "desde cantidad" necesita el precio mayorista: `PRECIO_MAYORISTA_INVALIDO`.
+- `crear_producto`, `editar_producto` y `cambiar_precio_producto` responden `"avisos"`: precio normal o mayorista (sin
+  ISV) por debajo del costo promedio. Solo a quien ve costos; no impide guardar.
+- Cliente mayorista: `crear_tercero` / `editar_tercero` con `"es_mayorista": true|false`; pide `productos.precios`
+  (dueño y admin) porque cambia precios.
+- `v_producto` agrega al final `precio_mayorista_centavos`, `cantidad_mayorista` y `precio_mayorista_con_isv_centavos`.
+- Cómo se usa al vender: ver `ventas.md`, "Precio mayorista".

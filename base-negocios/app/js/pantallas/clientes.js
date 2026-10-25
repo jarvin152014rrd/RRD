@@ -6,7 +6,7 @@ import { empresaId, perfilActual, puede, tieneModulo } from '../sesion.js';
 import { dinero, fecha, aCentavos, paraCampo } from '../formato.js';
 import { h, icono, aviso, cajaError, errorSimple, campo, conBoton, enlaceWhatsApp, titulo, filaIcono, chip, chipEstado, monto as cifra, estadoVacio, mensaje } from '../ui.js';
 import { hayEnMenu } from '../menu.js';
-import { clientes, filtrar, olvidarDatos } from '../datos.js';
+import { clientes, filtrar, olvidarDatos, nucleoAlMenos } from '../datos.js';
 import { nombreForma } from '../comprobante.js';
 import { sinEmojis } from '../imprimible.js';
 
@@ -29,7 +29,7 @@ export async function mostrar(vista, ctx) {
       const s = porId.get(c.id);
       return filaIcono({
         icono: 'usuario', color: c.activo ? 'azul' : 'neutro',
-        titulo: [h('strong', {}, c.nombre), !c.activo ? [' ', chipEstado('inactivo')] : null],
+        titulo: [h('strong', {}, c.nombre), c.es_mayorista ? [' ', chip('Mayorista', 'azul')] : null, !c.activo ? [' ', chipEstado('inactivo')] : null],
         detalle: [c.rtn ? 'RTN ' + c.rtn : null, c.telefono].filter(Boolean).join(' · ') || 'Sin RTN ni teléfono',
         derecha: s && s.saldo_centavos ? [cifra(dinero(s.saldo_centavos), { negativo: Boolean(s.vencido_centavos) }),
           chip(s.vencido_centavos ? 'Con atraso' : 'Debe', s.vencido_centavos ? 'rojo' : 'dorado')] : null,
@@ -69,7 +69,8 @@ export async function abrirFicha(vista, ctx, clienteId, opciones = {}) {
     const saldo = ec ? ec.saldo_actual_centavos : 0;
     vista.replaceChildren(...[
       h('section', { class: 'tarjeta', 'aria-labelledby': 't-ficha' },
-        h('div', { class: 'titulo-con-total' }, titulo('h1', 'usuario', cli.nombre, { id: 't-ficha' }), cli.activo === false ? chipEstado('inactivo') : null),
+        h('div', { class: 'titulo-con-total' }, titulo('h1', 'usuario', cli.nombre, { id: 't-ficha' }),
+          cli.es_mayorista ? chip('Mayorista', 'azul', { dataset: { dato: 'cliente-mayorista' } }) : null, cli.activo === false ? chipEstado('inactivo') : null),
         dato('Código', cli.codigo), dato('RTN', cli.rtn), dato('Teléfono', cli.telefono), dato('Correo', cli.correo), dato('Dirección', cli.direccion),
         dato('Límite de crédito', dinero(cli.limite_credito_centavos)), dato('Plazo', `${cli.plazo_dias || 0} días`),
         h('div', { class: 'botones' },
@@ -201,8 +202,11 @@ function formularioCobro(vista, ctx, cli, cxc) {
 }
 
 // Crear (cli = null) o editar un cliente.
-function formularioCliente(vista, ctx, cli) {
+async function formularioCliente(vista, ctx, cli) {
   const credito = puede('terceros.credito');
+  // Cliente mayorista (núcleo 0.18.0): lo marca quien cambia precios (productos.precios).
+  const marcaMayorista = puede('productos.precios') && await nucleoAlMenos('0.18.0');
+  const mayorista = h('input', { type: 'checkbox', id: 'cli-mayorista', checked: Boolean(cli && cli.es_mayorista) });
   const v = (k) => (cli && cli[k] !== null && cli[k] !== undefined ? String(cli[k]) : '');
   const f = {
     nombre: h('input', { id: 'cli-nombre', type: 'text', maxlength: 200, required: true, value: v('nombre') }),
@@ -222,6 +226,7 @@ function formularioCliente(vista, ctx, cli) {
     campo('Teléfono (opcional)', f.telefono), campo('Correo (opcional)', f.correo), campo('Dirección (opcional)', f.direccion),
     credito ? campo('Límite de crédito (L)', f.limite, '0 = sin crédito directo (cada venta al crédito pide aprobación).') : null,
     credito ? campo('Plazo para pagar (días)', f.plazo) : null,
+    marcaMayorista ? h('label', { class: 'opcion-check' }, mayorista, ' Cliente mayorista (paga el precio mayorista de los productos que lo tienen)') : null,
     cli ? campo('Motivo del cambio', motivo, 'Pídalo si cambia el crédito. Queda en la bitácora.') : null,
     zonaError, boton,
     h('button', { type: 'button', class: 'boton boton-ancho', onclick: () => (cli ? abrirFicha(vista, ctx, cli.id) : (vista.replaceChildren(), mostrar(vista, ctx))) }, 'Cancelar'));
@@ -252,6 +257,7 @@ function formularioCliente(vista, ctx, cli) {
       if (!cli || lim !== Number(cli.limite_credito_centavos)) datos.limite_credito_centavos = lim;
       if (!cli || plazo !== Number(cli.plazo_dias || 0)) datos.plazo_dias = plazo;
     }
+    if (marcaMayorista && mayorista.checked !== Boolean(cli && cli.es_mayorista)) datos.es_mayorista = mayorista.checked;
     if (cli && !Object.keys(datos).length) { abrirFicha(vista, ctx, cli.id); return; }
     const r = await conBoton(boton, zonaError, () => (cli
       ? rpc('editar_tercero', { p_empresa_id: empresaId(), p_tercero_id: cli.id, p_datos: datos, p_motivo: motivo.value.trim() || null })

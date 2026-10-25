@@ -8,7 +8,7 @@ import { empresaId, perfilActual, puede, tieneModulo } from '../sesion.js';
 import { dinero, cantidad as fCantidad, aCentavos, paraCampo } from '../formato.js';
 import { h, icono, aviso, cajaError, errorSimple, campo, dialogo, titulo, estadoVacio, mensaje, chip } from '../ui.js';
 import { hayEnMenu } from '../menu.js';
-import { productos, clientes, miTurno, filtrar, olvidarDatos } from '../datos.js';
+import { productos, clientes, miTurno, filtrar, olvidarDatos, nucleoAlMenos } from '../datos.js';
 import { vistaComprobante, nombreForma } from '../comprobante.js';
 import { abrirTurnoDialogo } from './caja_turno.js';
 import { fotosActivas, miniatura } from '../fotos.js';
@@ -61,7 +61,8 @@ export async function armarCarrito(vista, ctx, { modo, alTerminar = null }) {
   const perfil = perfilActual();
   const cobra = modo === 'venta' && puedeCobrar() && tieneModulo('dinero');
   const formas = cobra ? ['efectivo', 'tarjeta', 'transferencia', 'credito', 'mixto'] : ['credito'];
-  const [lista, listaClientes] = await Promise.all([productos(), clientes().catch(() => [])]);
+  // n018: núcleo 0.18.0 (precio mayorista: la previa recibe el cliente).
+  const [lista, listaClientes, n018] = await Promise.all([productos(), clientes().catch(() => []), nucleoAlMenos('0.18.0')]);
   if (!ctx.sigueVigente()) return;
 
   const estado = {
@@ -119,7 +120,7 @@ export async function armarCarrito(vista, ctx, { modo, alTerminar = null }) {
   function agregar(p) {
     const ya = estado.lineas.find((l) => l.producto.producto_id === p.producto_id);
     if (ya) ya.cantidad = String(Number(ya.cantidad || 0) + 1);
-    else estado.lineas.push({ producto: p, cantidad: '1', descPct: '', promocionId: null, elegida: false });
+    else estado.lineas.push({ producto: p, cantidad: '1', descPct: '', promocionId: null, elegida: false, precioTipo: null });
     buscar.value = '';
     resultados.replaceChildren();
     zonaBuscar.replaceChildren();
@@ -142,7 +143,8 @@ export async function armarCarrito(vista, ctx, { modo, alTerminar = null }) {
     carrito.replaceChildren(...estado.lineas.map((l, i) => {
       const p = l.producto;
       const pl = previa && previa.lineas ? previa.lineas[i] : null;
-      const promos = (pl && pl.promociones) || [];
+      const esMayorista = Boolean(pl && pl.precio_tipo === 'mayorista');
+      const promos = esMayorista ? [] : (pl && pl.promociones) || [];
       const cant = h('input', { name: 'cantidad', type: 'number', min: p.permite_fracciones ? '0.001' : '1',
         step: p.permite_fracciones ? '0.001' : '1', inputmode: p.permite_fracciones ? 'decimal' : 'numeric', value: l.cantidad,
         'aria-label': `Cantidad de ${p.nombre}` });
@@ -156,11 +158,13 @@ export async function armarCarrito(vista, ctx, { modo, alTerminar = null }) {
           : nombreLinea,
         h('div', { class: 'linea-datos' },
           campo('Cantidad', cant),
-          h('div', { class: 'campo' }, h('span', { class: 'etiqueta-campo' }, 'Precio'), h('span', { class: 'monto valor-campo' }, dinero(p.precio_venta_centavos))),
-          promos.length ? null : (() => {
+          h('div', { class: 'campo' }, h('span', { class: 'etiqueta-campo' }, 'Precio'), h('span', { class: 'monto valor-campo', dataset: { dato: 'precio-linea' } },
+            dinero(pl ? pl.precio_unitario_centavos : p.precio_venta_centavos))),
+          promos.length || esMayorista ? null : (() => {
             const d = h('input', { name: 'descuento', type: 'number', min: '0', max: '100', step: '0.01', inputmode: 'decimal',
               value: l.descPct, placeholder: '0' });
-            d.addEventListener('change', () => { l.descPct = d.value; cambio(); });
+            // Un descuento manual va con el precio normal (nunca descuento sobre el mayorista).
+            d.addEventListener('change', () => { l.descPct = d.value; if (Number(d.value) > 0 && pl && pl.precio_mayorista_disponible) l.precioTipo = 'normal'; cambio(); });
             return campo('Desc. %', d);
           })(),
           h('div', { class: 'campo' }, h('span', { class: 'etiqueta-campo' }, 'Total'),
@@ -168,6 +172,15 @@ export async function armarCarrito(vista, ctx, { modo, alTerminar = null }) {
           h('button', { type: 'button', class: 'boton boton-peligro boton-quitar', 'aria-label': `Quitar ${p.nombre}`,
             onclick: () => { estado.lineas.splice(i, 1); cambio(); } }, 'Quitar')),
       ];
+      // Precio mayorista (núcleo 0.18.0): chip y botón para cambiar entre normal y mayorista.
+      if (pl && pl.precio_mayorista_disponible) {
+        partes.push(h('div', { class: 'linea-mayorista' },
+          esMayorista ? chip('Mayorista', 'azul', { dataset: { dato: 'chip-mayorista' } }) : null,
+          esMayorista && pl.precio_normal_centavos ? h('span', { class: 'detalle' }, ` Precio normal ${dinero(pl.precio_normal_centavos)} · no se suma a promociones ni descuentos `) : null,
+          h('button', { type: 'button', class: 'boton', dataset: { accion: 'cambiar-precio-tipo' },
+            onclick: () => { l.precioTipo = esMayorista ? 'normal' : 'mayorista'; l.promocionId = null; l.elegida = false; l.descPct = ''; cambio(); } },
+            esMayorista ? 'Usar precio normal' : 'Usar precio mayorista')));
+      }
       if (promos.length === 1) partes.push(h('p', { class: 'promo-una' }, `Promoción: ${promos[0].nombre} (−${dinero(promos[0].descuento_centavos)})`));
       if (promos.length > 1) {
         const elegida = l.promocionId || (pl && pl.promocion_id);
@@ -188,7 +201,11 @@ export async function armarCarrito(vista, ctx, { modo, alTerminar = null }) {
   // ---------------- Cliente, totales y pago ----------------
   const selCliente = h('select', { id: 'cliente' }, h('option', { value: '' }, 'Consumidor final'),
     listaClientes.filter((c) => c.activo).map((c) => h('option', { value: c.id }, c.nombre + (c.rtn ? ` · RTN ${c.rtn}` : ''))));
-  selCliente.addEventListener('change', () => { estado.clienteId = selCliente.value; cambio(false); });
+  // Con núcleo 0.18.0 el cliente puede cambiar el precio (mayorista): se recalcula.
+  selCliente.addEventListener('change', () => {
+    estado.clienteId = selCliente.value;
+    if (n018) { for (const l of estado.lineas) l.precioTipo = null; cambio(); } else cambio(false);
+  });
   const descFactura = h('input', { id: 'descuento-factura', type: 'number', min: '0', max: '100', step: '0.01', inputmode: 'decimal', placeholder: '0' });
   descFactura.addEventListener('change', () => { estado.descFactura = descFactura.value; cambio(); });
   const totales = h('div', { class: 'totales', 'aria-live': 'polite' });
@@ -287,8 +304,9 @@ export async function armarCarrito(vista, ctx, { modo, alTerminar = null }) {
     return estado.lineas.map((l) => {
       const x = { producto_id: l.producto.producto_id, cantidad: Number(l.cantidad) };
       if (l.promocionId) x.promocion_id = l.promocionId;
+      if (l.precioTipo && n018) x.precio_tipo = l.precioTipo;
       const d = Number(l.descPct);
-      if (l.descPct !== '' && d > 0 && !l.promocionId) x.descuento_porcentaje = d;
+      if (l.descPct !== '' && d > 0 && !l.promocionId && l.precioTipo !== 'mayorista') x.descuento_porcentaje = d;
       return x;
     });
   }
@@ -312,7 +330,7 @@ export async function armarCarrito(vista, ctx, { modo, alTerminar = null }) {
     }
     try {
       const pv = await rpc('calcular_venta_previa', { p_empresa_id: empresaId(),
-        p_datos: { lineas: lineasServidor(), descuento_factura: descuentoFactura() } });
+        p_datos: { lineas: lineasServidor(), descuento_factura: descuentoFactura(), ...(n018 && estado.clienteId ? { cliente_id: estado.clienteId } : {}) } });
       if (mia !== vez) return;
       // Varias promociones y nadie eligió: se usa la sugerida (y se manda explícita al cobrar).
       pv.lineas.forEach((pl, i) => {

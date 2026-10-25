@@ -3,7 +3,7 @@
 // service worker no los toca. Las fotos de productos las guarda la app (js/fotos.js) en su propia caché
 // "fotos-<empresa>", que se borra al salir; al activar una versión nueva solo se borran cascarones viejos.
 // Al cambiar cualquier archivo del cascarón, suba VERSION.
-const VERSION = 'cascaron-0.11.1';
+const VERSION = 'cascaron-0.12.0';
 const CASCARON = [
   './', 'index.html', 'manifest.webmanifest', 'config.js',
   'css/tema.css', 'css/base.css', 'css/controles.css',

@@ -190,3 +190,29 @@ Clientes (1.1.02.01) no acepta asientos manuales con el módulo activo; activar
   anulación de una venta (en otra aprobación: `DATO_INVALIDO`). Ver `caja.md`.
   `interno.registrar_venta_base` tiene un parámetro más (el apartado que se completa);
   `interno.emitir_venta` y `interno.anular_venta_base` se reemplazaron con la misma firma.
+
+## Precio mayorista (0.18.0, migración 054)
+
+Una línea usa el precio mayorista del producto si lo tiene y (el cliente es mayorista o la cantidad de la línea es
+igual o mayor que "desde cantidad"), y si en esa sucursal de verdad es más barato que el precio normal. Vale igual en
+ventas, cotizaciones, apartados, cambios de producto y `calcular_venta_previa` (todas usan `interno.calcular_venta`;
+el cliente le llega por `app.cliente_venta`, que anota quien calcula).
+
+**Decisión (nunca descuento sobre descuento):** el mayorista es un PRECIO (no cuenta para el tope de descuento del
+puesto ni pide aprobación), pero es la rebaja de esa línea:
+- no se suma a una promoción ni a un descuento manual, y la línea mayorista queda fuera del descuento de factura;
+- quien vende puede elegir con `"precio_tipo": "normal" | "mayorista"` en la línea;
+- sin elegir: con una promoción, se usa lo mejor para el cliente (con ISV; empate = mayorista); con varias, el mayorista
+  se usa solo si es mejor que todas; si alguna gana, se elige como siempre (`PROMOCION_A_ELEGIR`, que menciona el
+  mayorista);
+- mayorista + promoción o + descuento manual: `DESCUENTO_DOBLE` (para dar un descuento manual a un mayorista se manda
+  `"precio_tipo": "normal"`); `"precio_tipo": "mayorista"` donde no aplica: `PRECIO_MAYORISTA_NO_APLICA`.
+
+La línea guarda `venta_linea.precio_tipo` (`normal` | `mayorista`) y, con mayorista, `precio_normal_centavos`.
+`documento_venta` lo devuelve por línea (`precio_tipo`, `precio_normal_centavos`, `precio_texto`: "Precio mayorista").
+`calcular_venta_previa` acepta `"cliente_id"` y devuelve por línea `precio_tipo`, `precio_normal_centavos` y
+`precio_mayorista_disponible`, y `cliente_mayorista`.
+
+Ejemplo (prueba 141): tornillo L 15.00 con ISV, mayorista L 12.00 desde 12. 10 = 15,000; 12 = 14,400 (12,522 + ISV
+1,878). Con promoción de 10 %: 12 unidades 18,000 − 1,800 = 16,200 contra 14,400: gana el mayorista. Galón mayorista
+40,000 + servicio 23,000 con 10 % de factura: solo el servicio baja (20,700): total 60,700.

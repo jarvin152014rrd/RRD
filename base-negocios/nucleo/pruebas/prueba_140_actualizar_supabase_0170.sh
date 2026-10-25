@@ -3,7 +3,8 @@
 set -euo pipefail
 BASE="$1"
 RAIZ="${RAIZ:-$(cd "$(dirname "$0")/../.." && pwd)}"
-VERSION="$(tr -d '[:space:]' < "$RAIZ/VERSION_NUCLEO")"
+# Fija en 0.17.0 (desde 0.18.0 el paquete actual trae más; la 145 prueba 0.17.0 -> 0.18.0).
+VERSION="0.17.0"
 VIEJA="${BASE}_016"
 OTRA="${BASE}_sin052"
 SINPERM="${BASE}_sinperm"
@@ -15,12 +16,17 @@ q() { psql -X -q -tA -v ON_ERROR_STOP=1 -d "$1" -c "$2"; }
 una() { python3 "$RAIZ/herramientas/sql_una_peticion.py" "$PGHOST" "$PGPORT" supa_postgres "$1" "$2"; }
 
 # 1) Paquete 0.16.0 (migraciones 001-052) y el paquete actual (con la actualización a 0.17.0).
-mkdir -p "$TMP/v016/herramientas" "$TMP/v016/nucleo/sql/migraciones" "$TMP/dist016" "$TMP/dist"
+mkdir -p "$TMP/v016/herramientas" "$TMP/v016/nucleo/sql/migraciones" "$TMP/dist016" "$TMP/dist" \
+  "$TMP/v017/herramientas" "$TMP/v017/nucleo/sql/migraciones"
 cp "$RAIZ/herramientas/armar_instalacion.sh" "$TMP/v016/herramientas/"
 for f in "$RAIZ"/nucleo/sql/migraciones/0[0-4][0-9]_*.sql "$RAIZ"/nucleo/sql/migraciones/05[012]_*.sql; do cp "$f" "$TMP/v016/nucleo/sql/migraciones/"; done
 echo "0.16.0" > "$TMP/v016/VERSION_NUCLEO"
 bash "$TMP/v016/herramientas/armar_instalacion.sh" "$TMP/dist016" >/dev/null || falla "no se armó el paquete 0.16.0"
-bash "$RAIZ/herramientas/armar_instalacion.sh" "$TMP/dist" >/dev/null || falla "no se armó el paquete actual"
+cp "$RAIZ/herramientas/armar_instalacion.sh" "$TMP/v017/herramientas/"
+cp "$RAIZ/CHANGELOG.md" "$TMP/v017/"
+for f in "$RAIZ"/nucleo/sql/migraciones/0[0-4][0-9]_*.sql "$RAIZ"/nucleo/sql/migraciones/05[0-3]_*.sql; do cp "$f" "$TMP/v017/nucleo/sql/migraciones/"; done
+echo "0.17.0" > "$TMP/v017/VERSION_NUCLEO"
+bash "$TMP/v017/herramientas/armar_instalacion.sh" "$TMP/dist" >/dev/null || falla "no se armó el paquete 0.17.0"
 ACT="$TMP/dist/actualizar_supabase_0.17.0.sql"
 [ -f "$ACT" ] || falla "no hay $ACT"
 [ "$(ls "$TMP"/dist/actualizar_supabase_* | wc -l)" = "1" ] || falla "la actualización debía ser un solo archivo"
@@ -126,7 +132,9 @@ END $$;
 ROLLBACK;
 SQL
 PEND="$(PGDATABASE="$VIEJA" SIN_PREGUNTAR=1 SIN_RESPALDO=1 bash "$RAIZ/herramientas/migrar.sh" --solo-mostrar)" || falla "migrar.sh"
-echo "$PEND" | grep -q "No hay migraciones pendientes" || falla "migrar.sh no reconoce la base actualizada: $PEND"
+# migrar.sh reconoce lo instalado (misma huella): solo quedan pendientes las migraciones posteriores a la 053.
+echo "$PEND" | grep -q "No hay migraciones pendientes" \
+  || ! echo "$PEND" | grep -E "^  - 0([0-4][0-9]|5[0-3])_" >/dev/null || falla "migrar.sh no reconoce la base actualizada: $PEND"
 
 # 8) Un Supabase donde el rol "postgres" NO puede crear el bucket ni las políticas (storage de otro dueño,
 #    sin permisos): la actualización igual termina, dice qué falta y, con los "clics" de docs/SUPABASE.md

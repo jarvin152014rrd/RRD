@@ -42,7 +42,9 @@ export async function mostrar(vista, ctx) {
   const zona = h('div', {});
   const yo = (usuarioActual() || {}).id;
 
+  let vez = 0;   // app 0.12.0: una respuesta vieja (filtros de antes) no pinta encima de la nueva
   async function cargar() {
+    const mia = ++vez;
     Object.assign(filtros, { desde: desde.value, hasta: hasta.value, categoria: selCat.value, cuenta: selCta.value });
     zona.replaceChildren(h('p', { class: 'cargando', role: 'status' }, 'Cargando…'));
     const f = { empresa_id: empresaId(), fecha_contable: { gte: filtros.desde || '2000-01-01', lte: filtros.hasta || '2100-12-31' } };
@@ -59,8 +61,8 @@ export async function mostrar(vista, ctx) {
       [gastos, tot] = await Promise.all([leer('v_gasto', f, { orden: 'numero.desc', limite: LIMITE }),
         puede('dinero.ver') ? rpcSiExiste('totales_gastos', { p_empresa_id: empresaId(), p_desde: filtros.desde || '2000-01-01', p_hasta: filtros.hasta || '2100-12-31',
           p_categoria_id: filtros.categoria || null, p_cuenta_dinero_id: filtros.cuenta || null }).catch(sinTotales) : null]);
-    } catch (err) { zona.replaceChildren(await cajaError(err)); return; }
-    if (!ctx.sigueVigente()) return;
+    } catch (err) { if (mia === vez) zona.replaceChildren(await cajaError(err)); return; }
+    if (!ctx.sigueVigente() || mia !== vez) return;
     const suma = (e) => gastos.filter((g) => g.estado === e).reduce((s, g) => s + Number(g.monto_centavos), 0);
     const gastado = tot ? Number(tot.gastado_centavos) : suma('aplicado');
     const espera = tot ? Number(tot.en_espera_centavos) : suma('pendiente_aprobacion');

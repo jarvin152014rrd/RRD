@@ -104,3 +104,11 @@ vendió o trasladó, eso no se pierde). Ejemplo (prueba 127): sistema 100, conta
 al aprobar queda 92. Rechazar pide motivo y no mueve nada. Tabla `conteo_fisico` (lee quien tiene `inventario.ajustar`).
 
 **Tablas nuevas:** `importacion_excel` (cada importación aplicada, con su resumen; lee `excel.importar`) y `conteo_fisico`.
+
+## 0.18.0: precio mayorista
+
+- Productos: columnas azules **"Precio mayorista (L)"** y **"Desde cantidad"** (después de "Precio incluye ISV"). Se
+  importan con las reglas de la ficha (no mayor que el precio de venta; "desde cantidad" necesita el precio). Celda
+  vacía conserva; quitar el mayorista se hace en la ficha.
+- Clientes y proveedores: columna azul **"Mayorista"** (Sí/No) después de "Plazo en días". Cambiarla pide
+  `productos.precios`.
