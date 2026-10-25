@@ -295,13 +295,20 @@ async function leerExcel(p, descarga) {
     }
   });
 
-  await prueba('Permisos: cajero y vendedor no ven Reportes; menú pide lo que exige el núcleo; limitado a su sucursal no ve lo de toda la empresa', async () => {
+  await prueba('Permisos: el vendedor no ve Reportes y el cajero solo "Antigüedad de saldos" (cobros.ver_saldos, app 0.12.1); menú pide lo que exige el núcleo; limitado a su sucursal no ve lo de toda la empresa', async () => {
     for (const correo of ['cajero@demo.hn', 'vendedor@demo.hn']) {
       const { ctx, p } = await nueva();
       await entrar(p, correo);
-      afirmar(await p.locator('a.pestana[data-pestana=reportes]').count() === 0, `${correo} ve la pestaña Reportes`);
+      if (correo === 'vendedor@demo.hn') {
+        afirmar(await p.locator('a.pestana[data-pestana=reportes]').count() === 0, `${correo} ve la pestaña Reportes`);
+      } else {
+        await p.goto(URL_APP + '/#/reportes/antiguedad');
+        await p.waitForSelector('#t-antig');
+        const subs = await p.locator('a.subpestana[href^="#/reportes/"]').evaluateAll((xs) => xs.map((x) => x.getAttribute('href')));
+        afirmar(subs.every((x) => x === '#/reportes/antiguedad'), `${correo} ve en Reportes: ${subs.join(', ')}`);
+      }
       await p.goto(URL_APP + '/#/reportes/gane');
-      await p.waitForFunction(() => !location.hash.startsWith('#/reportes'));
+      await p.waitForFunction(() => location.hash !== '#/reportes/gane');
       await ctx.close();
     }
     const m = await d.p.evaluate(async () => {

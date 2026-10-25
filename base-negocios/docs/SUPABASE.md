@@ -161,7 +161,7 @@ Queda la carpeta `dist/app-<cliente>/`. Si por error pega la llave secreta, la h
 
 ## Actualizar de 0.17.0 a 0.18.0 (si YA lo tenía instalado) — precio mayorista, garantías, cheques y antigüedad
 
-Si su Supabase ya tiene la 0.17.0, **no** vuelva a pegar las partes. Solo se pega **un archivo** (unos 185 KB).
+Si su Supabase ya tiene la 0.17.0, **no** vuelva a pegar las partes. Solo se pega **un archivo** (unos 190 KB).
 Los datos de su negocio no se tocan.
 
 1. **Haga un respaldo primero** (vea "Respaldos" más abajo).
