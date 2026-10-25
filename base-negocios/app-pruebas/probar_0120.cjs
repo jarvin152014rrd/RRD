@@ -252,6 +252,84 @@ async function venderCon(p, codigos) {
     await ctx.close();
   });
 
+  // ===================== 3) Abonos con cheque =====================
+  await prueba('cobrar con cheque desde la ficha del cliente: pide los datos, no deja saldo a favor y queda por depositar', async () => {
+    const p = usar(dueno.p);
+    await p.goto(URL_APP + '/#/inicio/hoy');
+    await p.waitForSelector('[data-dato=ventas_hoy]');
+    await p.goto(URL_APP + '/#/clientes/lista');
+    await p.waitForSelector('#buscar-cliente');
+    await p.getByRole('button', { name: 'Ver a Pedro Castillo' }).click();
+    await p.click('#cobrar-abono');
+    await p.waitForSelector('#abono-forma');
+    await p.selectOption('#abono-forma', 'cheque');
+    await p.fill('#abono-monto', '9999');
+    await p.click('form.formulario button[type=submit]');
+    afirmar((await textoDe(p, '.formulario .mensaje-error')).includes('Con cheque se cobra hasta lo que debe'), 'dejó cobrar de más con cheque');
+    await p.fill('#abono-monto', '100');
+    await p.click('form.formulario button[type=submit]');
+    afirmar((await textoDe(p, '.formulario .mensaje-error')).includes('número del cheque'), 'no pidió los datos del cheque');
+    await p.fill('#cheque-numero', '556677');
+    await p.fill('#cheque-banco-emisor', 'BAC Credomatic');
+    await p.click('form.formulario button[type=submit]');
+    await p.waitForSelector('#t-cobok', { timeout: 15000 });
+    const ch = JSON.parse(sql('dueno@demo.hn', `(SELECT row_to_json(x) FROM (SELECT estado, monto_centavos, banco_emisor FROM public.cheque_recibido WHERE numero_cheque = '556677') x)`));
+    afirmar(ch.estado === 'por_depositar' && ch.monto_centavos === 10000 && ch.banco_emisor === 'BAC Credomatic', 'cheque: ' + JSON.stringify(ch));
+  });
+
+  await prueba('Dinero: cheques por depositar con "Depositar" (queda en tránsito) y "Rebotó" (el cliente vuelve a deber, cargo del banco)', async () => {
+    const p = usar(dueno.p);
+    await p.goto(URL_APP + '/#/dinero/donde');
+    await p.waitForSelector('[data-dato=cheques-detalle]');
+    afirmar((await textoDe(p, '[data-dato=cheques-detalle]')).includes('3 cheques por depositar'), 'dónde está mi dinero: ' + await textoDe(p, '[data-dato=cheques-detalle]'));
+    await p.goto(URL_APP + '/#/dinero/depositos');
+    await p.waitForSelector('#lista-cheques');
+    afirmar(await p.locator('#lista-cheques [data-estado=posfechado]').count() === 1, 'no marca el posfechado');
+    afirmar(await p.locator('#lista-cheques [data-cheque]', { hasText: '120077' }).locator('[data-accion=depositar-cheque]').count() === 0, 'deja depositar un posfechado');
+    await p.screenshot({ path: path.join(CAPTURAS, 'v12_cheques.png'), fullPage: true });
+    // Depositar el del Taller Mejía al BAC.
+    await p.locator('#lista-cheques [data-cheque]', { hasText: '004518' }).locator('[data-accion=depositar-cheque]').click();
+    await p.selectOption('#cheque-banco', id('BAC'));
+    await p.fill('#cheque-referencia', 'Boleta 7777');
+    await p.click('#cheque-depositar-si');
+    await p.waitForSelector('#lista-cheques [data-estado=depositado]');
+    afirmar(sql('dueno@demo.hn', `(SELECT o.estado FROM public.cheque_recibido c JOIN public.operacion_dinero o ON o.id = c.operacion_deposito_id WHERE c.numero_cheque = '004518')`) === 'en_transito', 'depósito no quedó en tránsito');
+    afirmar(await p.locator('#lista-transito [data-transito]').count() >= 1, 'no sale en depósitos en tránsito');
+    // Rebotó el de Pedro Castillo (por depositar) con cargo del banco de L 25.00.
+    const debeAntes = Number(sql('dueno@demo.hn', `(SELECT coalesce(sum(saldo_centavos), 0) FROM public.v_cxc_documento WHERE cliente_id = demo.id('CLI3'))`));
+    await p.locator('#lista-cheques [data-cheque]', { hasText: '556677' }).locator('[data-accion=cheque-reboto]').click();
+    await p.fill('#rebote-motivo', 'Fondos insuficientes');
+    await p.fill('#rebote-cargo', '25');
+    await p.selectOption('#rebote-categoria', id('CAT_MANT'));
+    await p.click('#rebote-si');
+    await p.waitForFunction(() => !document.querySelector('dialog[open]'));
+    await p.waitForSelector('#t-mover');
+    const r = JSON.parse(sql('dueno@demo.hn', `(SELECT row_to_json(x) FROM (SELECT c.estado, g.monto_centavos AS cargo, cb.anulada_en IS NOT NULL AS cobro_anulado
+      FROM public.cheque_recibido c JOIN public.cobro cb ON cb.id = c.cobro_id LEFT JOIN public.gasto g ON g.id = c.cargo_banco_gasto_id WHERE c.numero_cheque = '556677') x)`));
+    const debeDespues = Number(sql('dueno@demo.hn', `(SELECT coalesce(sum(saldo_centavos), 0) FROM public.v_cxc_documento WHERE cliente_id = demo.id('CLI3'))`));
+    afirmar(r.estado === 'rechazado' && r.cobro_anulado && r.cargo === 2500 && debeDespues === debeAntes + 10000, 'rebote: ' + JSON.stringify([r, debeAntes, debeDespues]));
+  });
+
+  await prueba('cheques en el celular: Depósitos y traslados sin salirse; el cajero cobra con cheque pero no ve Depositar', async () => {
+    const { ctx, p } = await nueva(celular);
+    usar(p);
+    await entrar(p, 'dueno@demo.hn');
+    await p.goto(URL_APP + '/#/dinero/depositos');
+    await p.waitForSelector('#lista-cheques');
+    afirmar(await anchoPagina(p) <= 390, 'se sale a lo ancho');
+    await p.screenshot({ path: path.join(CAPTURAS, 'v12_cheques_celular.png'), fullPage: true });
+    await ctx.close();
+    const c2 = await nueva(celular);
+    usar(c2.p);
+    await entrar(c2.p, 'cajero@demo.hn');
+    await c2.p.goto(URL_APP + '/#/caja/cobros');
+    await c2.p.waitForSelector('#t-deben', { timeout: 15000 });
+    await c2.p.getByRole('button', { name: /Cobrar/ }).first().click();
+    await c2.p.waitForSelector('#abono-forma');
+    afirmar(await c2.p.locator('#abono-forma option[value=cheque]').count() === 1, 'el cajero no tiene la forma cheque');
+    await c2.ctx.close();
+  });
+
   // [PARTES SIGUIENTES]
 
   afirmar(true, '');

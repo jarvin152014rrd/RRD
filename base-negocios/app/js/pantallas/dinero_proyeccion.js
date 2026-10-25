@@ -10,7 +10,8 @@ import { alcance, reiniciarAlSalir, nucleoFiltraSucursal } from '../datos.js';
 import { cifraChica } from '../formularios.js';
 
 const TIPO = { cobro: ['Cobro a cliente', 'cobrar'], pago_proveedor: ['Pago a proveedor', 'proveedor'], pago_fijo: ['Pago fijo', 'calendario'],
-  comisiones: ['Comisiones', 'credencial'], dividendos: ['Dividendos a socios', 'usuarios'] };
+  comisiones: ['Comisiones', 'credencial'], dividendos: ['Dividendos a socios', 'usuarios'],
+  cheque: ['Cheque por depositar (en la semana de su fecha)', 'cheque'] };   // núcleo 0.18.0
 let dias = 30;
 reiniciarAlSalir(() => { dias = 30; });
 
@@ -50,15 +51,15 @@ export async function mostrar(vista, ctx) {
         cifraChica(`Al final (${dias} días)`, dinero(r.saldo_final_proyectado_centavos), { dato: 'saldo-final', clase: r.saldo_final_proyectado_centavos < 0 ? 'monto-sale' : 'monto-entra' }),
         cifraChica('Cobros vencidos (aparte)', dinero(r.cobros_vencidos_centavos), { dato: 'cobros-vencidos' })),
       r.solo_mis_sucursales ? mensaje('info', 'Solo sus sucursales', r.nota_sucursal || 'Las comisiones y los dividendos son de toda la empresa y no se incluyen.', { dataset: { info: 'proyeccion-sucursal' } }) : null,
-      h('p', { class: 'ayuda', dataset: { info: 'formula' } }, 'Cada semana: lo que había + cobros que vencen − pagos a proveedores − pagos fijos − comisiones y dividendos = lo que queda. Los cobros vencidos no se cuentan (no se sabe si entran).'),
+      h('p', { class: 'ayuda', dataset: { info: 'formula' } }, 'Cada semana: lo que había + cobros que vencen + cheques por depositar (en la semana de su fecha) − pagos a proveedores − pagos fijos − comisiones y dividendos = lo que queda. Los cobros vencidos no se cuentan (no se sabe si entran).'),
       ...(r.alertas || []).map((a) => mensaje('error', a.mensaje, null, { dataset: { info: 'alerta-negativa' } })),
       Number(r.no_disponible_aun_centavos) ? mensaje('info', `${dinero(r.no_disponible_aun_centavos)} todavía no están disponibles`, 'Depósitos en tránsito, tarjetas por liquidar o transferencias por confirmar: no se suman.') : null,
       graf,
       tabla({ props: { id: 'tabla-proyeccion' },
-        columnas: [{ titulo: 'Semana' }, { titulo: 'Empieza con', num: true }, { titulo: 'Entra (cobros)', num: true }, { titulo: 'Proveedores', num: true },
+        columnas: [{ titulo: 'Semana' }, { titulo: 'Empieza con', num: true }, { titulo: 'Entra (cobros y cheques)', num: true }, { titulo: 'Proveedores', num: true },
           { titulo: 'Pagos fijos', num: true }, { titulo: 'Otros', num: true }, { titulo: 'Termina con', num: true }],
         filas: sem.map((s) => [`Semana ${s.semana} · ${fecha(s.desde)} al ${fecha(s.hasta)}`, dinero(s.saldo_inicial_centavos),
-          monto(dinero(s.cobros_centavos), { sentido: 'entra', signo: '+' }), monto(dinero(s.pagos_proveedores_centavos), { sentido: 'sale', signo: '-' }),
+          monto(dinero(Number(s.cobros_centavos) + Number(s.cheques_centavos || 0)), { sentido: 'entra', signo: '+' }), monto(dinero(s.pagos_proveedores_centavos), { sentido: 'sale', signo: '-' }),
           monto(dinero(s.pagos_fijos_centavos), { sentido: 'sale', signo: '-' }), monto(dinero(Number(s.comisiones_centavos) + Number(s.dividendos_centavos)), { sentido: 'sale', signo: '-' }),
           monto(dinero(s.saldo_final_centavos), { negativo: s.negativo, dato: `final-${s.semana}` })]) }),
       h('h2', { class: 'titulo-chico' }, 'Lo que entra y sale, uno por uno'),

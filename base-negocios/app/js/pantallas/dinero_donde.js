@@ -12,6 +12,7 @@ import { hoy } from '../formularios.js';
 const TIPO = {
   efectivo_caja: ['caja', 'azul'], caja_chica: ['billetes', 'azul'], banco: ['banco', 'azul'],
   transito: ['deposito', 'dorado'], pos_por_liquidar: ['reloj', 'dorado'], transferencia_por_confirmar: ['reloj', 'dorado'],
+  cheques_por_depositar: ['cheque', 'dorado'],   // núcleo 0.18.0: cheques recibidos, todavía no es efectivo
 };
 
 // sucursales: null = ve todas; lista de ids = usuario limitado a esas sucursales (mi_estado_sesion).
@@ -30,7 +31,10 @@ export function tarjetaDinero(d, sucursales = null) {
         h('div', { class: 'fila-icono-titulo' }, c.nombre,
           c.tipo === 'transito' && dias ? [' ', chip(`hace ${dias} días`, 'dorado')] : null),
         c.numero_enmascarado || c.banco
-          ? h('div', { class: 'fila-icono-detalle' }, [c.banco, c.numero_enmascarado].filter(Boolean).join(' ')) : null),
+          ? h('div', { class: 'fila-icono-detalle' }, [c.banco, c.numero_enmascarado].filter(Boolean).join(' ')) : null,
+        c.tipo === 'cheques_por_depositar' && d.cheques_por_depositar ? h('div', { class: 'fila-icono-detalle', dataset: { dato: 'cheques-detalle' } },
+          `${d.cheques_por_depositar.cantidad} ${d.cheques_por_depositar.cantidad === 1 ? 'cheque' : 'cheques'} por depositar · no es efectivo todavía`
+          + (d.cheques_por_depositar.posfechados_centavos ? ` · ${dinero(d.cheques_por_depositar.posfechados_centavos)} posfechados` : '')) : null),
       h('span', { class: 'monto' + (c.saldo_centavos < 0 ? ' peligro' : '') }, dinero(c.saldo_centavos)));
   });
   filas.push(h('div', { class: 'fila fila-total' }, h('span', {}, 'Total'),

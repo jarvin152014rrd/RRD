@@ -107,15 +107,25 @@ export async function abrirFicha(vista, ctx, clienteId, opciones = {}) {
   }
 }
 
-function formularioCobro(vista, ctx, cli, cxc) {
+async function formularioCobro(vista, ctx, cli, cxc) {
+  // Núcleo 0.18.0: también con cheque (número, banco que lo emitió y fecha; puede ser posfechado).
+  const conCheque = await nucleoAlMenos('0.18.0');
   const pend = (cxc && cxc.clientes[0]) || { saldo_centavos: 0, facturas: [] };
   const deuda = pend.saldo_centavos;
   // Restringido por sucursal: el cobro se aplica solo a las facturas que ve (la más vieja primero).
   const soloLasMias = cxc && !cxc.todas_las_sucursales;
-  const formas = ['efectivo', 'tarjeta', 'transferencia'];
+  const formas = ['efectivo', 'tarjeta', 'transferencia', ...(conCheque ? ['cheque'] : [])];
   const monto = h('input', { id: 'abono-monto', type: 'text', inputmode: 'decimal', autocomplete: 'off', value: paraCampo(deuda) });
   const selForma = h('select', { id: 'abono-forma' }, formas.map((f) => h('option', { value: f }, nombreForma(f))));
   const referencia = h('input', { id: 'abono-referencia', type: 'text', maxlength: 100 });
+  const chNumero = h('input', { id: 'cheque-numero', type: 'text', maxlength: 30, inputmode: 'numeric' });
+  const chBanco = h('input', { id: 'cheque-banco-emisor', type: 'text', maxlength: 100, placeholder: 'Ej.: Banco Atlántida' });
+  const chFecha = h('input', { id: 'cheque-fecha', type: 'date', value: perfilActual().empresa.hoy || '' });
+  const zonaCheque = h('fieldset', { class: 'grupo-campos', hidden: true }, h('legend', {}, 'Datos del cheque'),
+    campo('Número del cheque', chNumero), campo('Banco que lo emitió', chBanco),
+    campo('Fecha del cheque', chFecha, 'Si es posfechado, ponga la fecha escrita en el cheque: se deposita desde ese día.'),
+    h('p', { class: 'ayuda' }, 'El cheque no es efectivo: queda en "Cheques por depositar" hasta que se deposita. Si rebota, el cliente vuelve a deber.'));
+  selForma.addEventListener('change', () => { zonaCheque.hidden = selForma.value !== 'cheque'; revisar(); });
   const elegir = h('input', { type: 'checkbox', id: 'abono-elegir' });
   const zonaFacturas = h('div', { class: 'lista', hidden: true });
   const excedente = h('input', { type: 'checkbox', id: 'abono-excedente' });
@@ -138,14 +148,14 @@ function formularioCobro(vista, ctx, cli, cxc) {
     const m = aCentavos(monto.value) || 0;
     const tope = elegir.checked ? aplicarElegido() : deuda;
     const sobra = m - tope;
-    zonaExcedente.hidden = !(sobra > 0);
+    zonaExcedente.hidden = !(sobra > 0) || selForma.value === 'cheque';
     zonaExcedente.lastChild.textContent = ` Recibe ${dinero(m)} y debe ${dinero(tope)}: los ${dinero(Math.max(sobra, 0))} que sobran quedan como saldo a favor de ${cli.nombre}.`;
   }
   zonaFacturas.addEventListener('input', revisar);
   zonaFacturas.addEventListener('change', revisar);
   const form = h('form', { class: 'formulario', novalidate: true },
     h('p', {}, `Debe ${dinero(deuda)}.`),
-    campo('Monto que paga (L)', monto), campo('Forma de pago', selForma), campo('Referencia (opcional)', referencia),
+    campo('Monto que paga (L)', monto), campo('Forma de pago', selForma), zonaCheque, campo('Referencia (opcional)', referencia),
     h('label', { class: 'opcion-check' }, elegir, ' Elegir a qué facturas va (si no, a la más vieja primero)'),
     zonaFacturas, zonaExcedente, zonaError, boton,
     h('button', { type: 'button', class: 'boton boton-ancho', onclick: () => abrirFicha(vista, ctx, cli.id) }, 'Volver'));
@@ -155,6 +165,14 @@ function formularioCobro(vista, ctx, cli, cxc) {
     const m = aCentavos(monto.value);
     if (!m) { zonaError.append(errorSimple('Escriba el monto que paga.')); return; }
     const pago = { forma: selForma.value, monto_centavos: m };
+    if (selForma.value === 'cheque') {
+      const tope = elegir.checked ? aplicarElegido() : deuda;
+      if (m > tope) { zonaError.append(errorSimple(`Con cheque se cobra hasta lo que debe (${dinero(tope)}).`, 'Un cheque no deja saldo a favor: si rebota no habría con qué devolverlo.')); return; }
+      if (!chNumero.value.trim() || chBanco.value.trim().length < 2 || !chFecha.value) {
+        zonaError.append(errorSimple('Escriba el número del cheque, el banco que lo emitió y la fecha del cheque.')); return;
+      }
+      Object.assign(pago, { numero_cheque: chNumero.value.trim(), banco_emisor: chBanco.value.trim(), fecha_cheque: chFecha.value });
+    }
     if (referencia.value.trim()) pago.referencia = referencia.value.trim();
     const datos = { cliente_id: cli.id, pagos: [pago] };
     if (elegir.checked) {

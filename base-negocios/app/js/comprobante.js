@@ -8,7 +8,7 @@ import { h, enlaceWhatsApp } from './ui.js';
 import { limpiarImprimible, sinEmojis } from './imprimible.js';
 
 const FORMA = { efectivo: 'Efectivo', tarjeta: 'Tarjeta', transferencia: 'Transferencia', credito: 'Crédito',
-  saldo_favor: 'Saldo a favor', anticipo: 'Anticipo' };
+  saldo_favor: 'Saldo a favor', anticipo: 'Anticipo', cheque: 'Cheque' };
 export function nombreForma(f) { return FORMA[f] || f; }
 
 function fila(izq, der, clase = '') {

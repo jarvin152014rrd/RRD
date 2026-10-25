@@ -163,3 +163,8 @@ Con "ventas" apagado se pueden anular cobros, condonaciones y saldos iniciales; 
   Norte cobra 2,000 a la más vieja: van a V3 (queda 4,000); V4 sigue en 3,000. El dueño cobra 1,000: van a V4.
 - Condonar (0.16.0): `condonar_saldo_cxc` de un usuario limitado solo sobre ventas de sus sucursales; un saldo
   inicial de cliente (de toda la empresa): `SUCURSAL_NO_PERMITIDA`.
+
+## Cheque (0.18.0)
+
+Forma de pago `"cheque"` con `numero_cheque`, `banco_emisor` y `fecha_cheque`: entra a "Cheques por depositar"
+(no es efectivo), va sola en el cobro y no deja excedente. Depositar, rebote y reglas: `cheques.md`.

@@ -164,3 +164,9 @@ una venta el dinero sale de la misma cuenta a la que entró.
 `donde_esta_mi_dinero` a un usuario limitado a su sucursal: cuentas de sus sucursales y de toda la empresa,
 depósitos en tránsito que salen o llegan a ellas, sin "otras cuentas de efectivo sin rastro" y con
 `solo_mis_sucursales: true`. Para el dueño, igual que antes (sin la clave nueva).
+
+## 0.18.0: cheques por depositar
+
+Tipo nuevo de cuenta de dinero `cheques_por_depositar` ("Cheques por depositar", se crea sola con el primer cobro con
+cheque). No es efectivo disponible ni sirve para pagar; solo se mueve cheque por cheque con `depositar_cheque` (depósito
+en tránsito de siempre) o con `registrar_cheque_rechazado`. `trasladar_dinero` la rechaza. Ver `cheques.md`.

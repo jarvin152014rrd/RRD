@@ -2,13 +2,15 @@
 // (trasladar_dinero, dinero.trasladar): depositar (queda "en tránsito" hasta confirmar), retirar del banco,
 // pasar entre cuentas y reponer la caja chica. Los depósitos en tránsito se confirman cuando el banco ya
 // los tiene (confirmar_deposito) y lo que se registró mal se anula con motivo (anular_operacion_dinero).
+// App 0.12.0 (núcleo 0.18.0): "Cheques por depositar" con "Depositar" (depositar_cheque, queda en tránsito como
+// cualquier depósito) y "Rebotó" (registrar_cheque_rechazado: el cliente vuelve a deber; cargo del banco opcional).
 import { leer, escribir, nuevoId } from '../api.js';
 import { empresaId, puede } from '../sesion.js';
-import { dinero, fecha, aCentavos } from '../formato.js';
+import { dinero, fecha, aCentavos, sumarDias } from '../formato.js';
 import { h, icono, aviso, cajaError, errorSimple, campo, conBoton, confirmar, pedirMotivo, dialogo, titulo, filaIcono, chip, chipEstado, monto,
   estadoVacio, mensaje } from '../ui.js';
 import { hayEnMenu } from '../menu.js';
-import { cuentasDinero, cuentasQuePagan, olvidarDatos } from '../datos.js';
+import { cuentasDinero, cuentasQuePagan, olvidarDatos, nucleoAlMenos, categoriasGasto } from '../datos.js';
 import { hoy, inputMonto, inputFecha, textoCuenta, textoMonto } from '../formularios.js';
 
 const ES_CAJA = (c) => c.tipo === 'efectivo_caja' || c.tipo === 'caja_chica';
@@ -27,9 +29,11 @@ const NOMBRE_TIPO = { deposito: 'Depósito', retiro: 'Retiro', traslado: 'Trasla
   saldo_inicial: 'Saldo inicial', envio_sucursal: 'Envío a otra sucursal' };
 
 export async function mostrar(vista, ctx) {
-  const [cuentas, transito, ops] = await Promise.all([cuentasDinero(true),
+  const n018 = await nucleoAlMenos('0.18.0');
+  const [cuentas, transito, ops, cheques] = await Promise.all([cuentasDinero(true),
     leer('v_deposito_transito', { empresa_id: empresaId() }, { orden: 'fecha_contable.asc', limite: 200 }),
-    leer('operacion_dinero', { empresa_id: empresaId() }, { orden: 'numero.desc', limite: 30 })]);
+    leer('operacion_dinero', { empresa_id: empresaId() }, { orden: 'numero.desc', limite: 30 }),
+    n018 ? leer('v_cheque_recibido', { empresa_id: empresaId() }, { orden: 'fecha_cheque.asc', limite: 300 }).catch(() => []) : []]);
   if (!ctx.sigueVigente()) return;
   const nombre = (idc) => (cuentas.find((c) => c.cuenta_dinero_id === idc) || {}).nombre || 'otra cuenta';
   const recargar = () => { vista.replaceChildren(); mostrar(vista, ctx); };
@@ -96,6 +100,12 @@ export async function mostrar(vista, ctx) {
   });
 
   const pagan = cuentasQuePagan(cuentas);
+  // ---- Cheques por depositar (y los depositados que el banco todavía no confirma: también pueden rebotar) ----
+  // (los ya confirmados se ven 30 días: el banco puede devolver un cheque unos días después)
+  const hace30 = sumarDias(hoy(), -30);
+  const vivos = cheques.filter((c) => c.estado === 'por_depositar'
+    || (c.estado === 'depositado' && (c.estado_deposito === 'en_transito' || (c.fecha_deposito || '') >= hace30)));
+  const filasCheques = vivos.map((c) => filaCheque(c, { cuentas, recargar }));
   vista.append(
     h('section', { class: 'tarjeta', 'aria-labelledby': 't-mover' },
       h('div', { class: 'titulo-con-boton' }, titulo('h1', 'deposito', 'Depósitos y traslados', { id: 't-mover' }),
@@ -108,6 +118,11 @@ export async function mostrar(vista, ctx) {
       h('h2', { class: 'titulo-chico' }, 'Depósitos en tránsito'),
       filasTransito.length ? h('div', { class: 'lista-filas', id: 'lista-transito' }, filasTransito)
         : estadoVacio({ icono: 'check_circulo', color: 'verde', chico: true, texto: 'No hay depósitos esperando confirmación.' })),
+    n018 ? h('section', { class: 'tarjeta', 'aria-labelledby': 't-cheques' },
+      titulo('h2', 'cheque', 'Cheques por depositar', { id: 't-cheques' }),
+      h('p', { class: 'ayuda' }, 'Un cheque recibido no es efectivo: está aquí hasta que se deposita y el banco lo confirma. Si rebota, el cliente vuelve a deber.'),
+      filasCheques.length ? h('div', { class: 'lista-filas', id: 'lista-cheques' }, filasCheques)
+        : estadoVacio({ icono: 'check_circulo', color: 'verde', chico: true, texto: 'No hay cheques por depositar.' })) : null,
     h('section', { class: 'tarjeta', 'aria-labelledby': 't-ult-mov' },
       titulo('h2', 'lista', 'Últimos movimientos entre cuentas', { id: 't-ult-mov' }),
       filasOps.length ? h('div', { class: 'lista-filas', id: 'lista-operaciones' }, filasOps)
@@ -118,7 +133,7 @@ function formularioMover(vista, ctx, cuentas) {
   const volver = () => { vista.replaceChildren(); mostrar(vista, ctx); };
   const id = nuevoId();
   const tipo = { valor: 'deposito' };
-  const lista = cuentas.filter((c) => c.tipo !== 'transito');
+  const lista = cuentas.filter((c) => c.tipo !== 'transito' && c.tipo !== 'cheques_por_depositar');
   const selOrigen = h('select', { id: 'mover-origen' });
   const selDestino = h('select', { id: 'mover-destino' });
   const montoIn = inputMonto('mover-monto');
@@ -190,3 +205,79 @@ function formularioMover(vista, ctx, cuentas) {
     titulo('h1', 'traslado', 'Mover dinero', { id: 't-fmover' }), form));
 }
 
+
+// Un cheque: por depositar (Depositar / Rebotó) o depositado (Rebotó, también si el banco ya lo confirmó).
+function filaCheque(c, { cuentas, recargar }) {
+  const hoyNegocio = hoy();
+  const puedeDepositar = c.estado === 'por_depositar' && c.fecha_cheque <= hoyNegocio;
+  const bancos = cuentas.filter((x) => x.tipo === 'banco');
+  const depositar = () => {
+    const idOp = nuevoId();
+    const sel = h('select', { id: 'cheque-banco' }, bancos.map((b) => h('option', { value: b.cuenta_dinero_id }, textoCuenta(b, { saldo: false }))));
+    const f = inputFecha('cheque-fecha', hoyNegocio, { min: c.fecha_cheque, max: hoyNegocio });
+    const ref = h('input', { id: 'cheque-referencia', type: 'text', maxlength: 100, placeholder: 'Número de boleta' });
+    const zonaError = h('div', { 'aria-live': 'assertive' });
+    const si = h('button', { type: 'button', class: 'boton boton-principal', id: 'cheque-depositar-si' }, 'Registrar depósito');
+    const { cerrar } = dialogo(`Depositar el cheque ${c.numero_cheque}`,
+      h('p', {}, `${dinero(c.monto_centavos)} de ${c.cliente_nombre} (${c.banco_emisor}). Queda en tránsito hasta que confirme que el banco lo acreditó.`),
+      campo('Banco donde se deposita', sel), campo('Fecha', f), campo('Referencia (opcional)', ref), zonaError,
+      h('div', { class: 'botones' }, h('button', { type: 'button', class: 'boton', onclick: () => cerrar() }, 'Cancelar'), si));
+    si.addEventListener('click', async () => {
+      if (!sel.value) { zonaError.replaceChildren(errorSimple('Elija el banco.')); return; }
+      const r = await conBoton(si, zonaError, () => escribir('depositar_cheque', { p_cheque_id: c.cheque_id, p_banco_id: sel.value,
+        p_fecha: f.value || null, p_referencia: ref.value.trim() || null, p_id_operacion: idOp }), 'Registrando…');
+      if (!r) return;
+      cerrar();
+      olvidarDatos('cuentas');
+      aviso(`Cheque ${c.numero_cheque} depositado · ${dinero(c.monto_centavos)} en tránsito hasta confirmar`, 'ok', 7000);
+      recargar();
+    });
+  };
+  const reboto = async () => {
+    const idOp = nuevoId();
+    const cats = await categoriasGasto().catch(() => []);
+    const motivo = h('input', { id: 'rebote-motivo', type: 'text', maxlength: 300, placeholder: 'Ej.: fondos insuficientes' });
+    const cargo = inputMonto('rebote-cargo');
+    const cat = h('select', { id: 'rebote-categoria' }, h('option', { value: '' }, 'Categoría del gasto'), cats.map((x) => h('option', { value: x.id }, x.nombre)));
+    const zonaError = h('div', { 'aria-live': 'assertive' });
+    const si = h('button', { type: 'button', class: 'boton boton-peligro', id: 'rebote-si' }, 'Sí, rebotó');
+    const { cerrar } = dialogo(`Cheque ${c.numero_cheque} rebotado`,
+      mensaje('info', `${c.cliente_nombre} vuelve a deber ${dinero(c.monto_centavos)}.`,
+        c.estado === 'depositado' ? `El valor sale de ${c.banco || 'el banco'} (o se anula el depósito si sigue en tránsito).` : 'Se anula el cobro con su contrapartida.'),
+      campo('Motivo', motivo, 'Queda en la bitácora.'),
+      h('fieldset', { class: 'grupo-campos' }, h('legend', {}, 'Cargo del banco (opcional)'), campo('Monto (L)', cargo), campo('Categoría', cat)),
+      zonaError, h('div', { class: 'botones' }, h('button', { type: 'button', class: 'boton', onclick: () => cerrar() }, 'Cancelar'), si));
+    si.addEventListener('click', async () => {
+      zonaError.replaceChildren();
+      if (motivo.value.trim().length < 5) { zonaError.append(errorSimple('Escriba el motivo (mínimo 5 letras).')); return; }
+      const datos = { motivo: motivo.value.trim() };
+      if (cargo.value.trim()) {
+        const m = aCentavos(cargo.value);
+        if (!m) { zonaError.append(errorSimple('El cargo del banco no es un monto válido (o déjelo vacío).')); return; }
+        if (!cat.value) { zonaError.append(errorSimple('Elija la categoría del gasto del cargo.')); return; }
+        datos.cargo_banco = { categoria_id: cat.value, monto_centavos: m };
+        if (!c.banco_id) { const b = cuentas.find((x) => x.tipo === 'banco'); if (b) datos.cargo_banco.cuenta_dinero_id = b.cuenta_dinero_id; }
+      }
+      const r = await conBoton(si, zonaError, () => escribir('registrar_cheque_rechazado', { p_cheque_id: c.cheque_id, p_datos: datos, p_id_operacion: idOp }), 'Registrando…');
+      if (!r) return;
+      cerrar();
+      olvidarDatos('cuentas');
+      aviso(`Cheque ${c.numero_cheque} rebotado · ${c.cliente_nombre} vuelve a deber ${dinero(c.monto_centavos)}`, 'info', 8000);
+      recargar();
+    });
+  };
+  const estado = c.estado === 'depositado'
+    ? chipEstado('depositado', c.estado_deposito === 'en_transito' ? 'Depositado · en tránsito' : 'Depositado · confirmado')
+    : c.fecha_cheque > hoyNegocio ? chip(`Posfechado · ${fecha(c.fecha_cheque)}`, 'dorado', { dataset: { estado: 'posfechado' } }) : chipEstado('por_depositar');
+  return filaIcono({
+    icono: 'cheque', color: c.estado === 'depositado' ? 'azul' : 'dorado',
+    titulo: h('strong', {}, `Cheque ${c.numero_cheque} · ${c.cliente_nombre}`),
+    detalle: `${c.banco_emisor} · fecha del cheque ${fecha(c.fecha_cheque)} · cobro #${c.cobro_numero}`,
+    derecha: [monto(dinero(c.monto_centavos)), estado],
+    abajo: h('div', { class: 'botones' },
+      puedeDepositar && puede('dinero.trasladar') && bancos.length ? h('button', { type: 'button', class: 'boton boton-principal', dataset: { accion: 'depositar-cheque' },
+        onclick: depositar }, icono('deposito'), 'Depositar') : null,
+      puede('cobros.anular') ? h('button', { type: 'button', class: 'boton boton-peligro', dataset: { accion: 'cheque-reboto' }, onclick: reboto }, 'Rebotó') : null),
+    props: { dataset: { cheque: c.cheque_id, estado: c.estado } },
+  });
+}

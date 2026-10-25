@@ -363,3 +363,21 @@ BEGIN
     'motivo', 'Se calienta y se apaga', 'descripcion', 'Lo trajo en su caja, sin golpes.'), gen_random_uuid());
   PERFORM demo.como(NULL);
 END $$;
+
+-- 12) (app 0.12.0, núcleo 0.18.0) Abonos con cheque: el Taller Mejía abona L 200.00 con un cheque de hoy y la
+--     Constructora Ríos L 100.00 con uno posfechado (dentro de 12 días). Los dos quedan "por depositar".
+DO $$
+DECLARE e uuid := demo.id('EMPRESA');
+BEGIN
+  IF to_regprocedure('public.depositar_cheque(uuid, uuid, date, text, uuid)') IS NULL THEN
+    RETURN;
+  END IF;
+  PERFORM demo.como('dueno@demo.hn');
+  PERFORM public.registrar_cobro(e, jsonb_build_object('cliente_id', demo.id('CLI2'), 'referencia', 'Recibo 301',
+    'pagos', jsonb_build_array(jsonb_build_object('forma', 'cheque', 'monto_centavos', 20000, 'numero_cheque', '004518',
+      'banco_emisor', 'Banco Atlántida', 'fecha_cheque', public.hoy_local(e)))), gen_random_uuid());
+  PERFORM public.registrar_cobro(e, jsonb_build_object('cliente_id', demo.id('CLI1'), 'referencia', 'Recibo 302',
+    'pagos', jsonb_build_array(jsonb_build_object('forma', 'cheque', 'monto_centavos', 10000, 'numero_cheque', '120077',
+      'banco_emisor', 'Ficohsa', 'fecha_cheque', public.hoy_local(e) + 12))), gen_random_uuid());
+  PERFORM demo.como(NULL);
+END $$;

@@ -1970,3 +1970,803 @@ GRANT EXECUTE ON FUNCTION
   public.cambiar_estado_reclamo(uuid, text, text, uuid), public.resolver_reclamo_garantia(uuid, jsonb, uuid),
   public.documento_reclamo_garantia(uuid)
 TO authenticated;
+
+-- =====================================================================
+-- 3) ABONOS CON CHEQUE (nucleo/docs/cheques.md)
+--    Forma de pago "cheque" en los cobros a clientes (no en ventas: ver cheques.md). El cheque
+--    NO es efectivo disponible: entra a la cuenta de dinero "Cheques por depositar" (tipo
+--    cheques_por_depositar, subcuenta 1.1.01.NN; se crea sola la primera vez) y de ahí se
+--    deposita a un banco con el flujo de siempre (en tránsito -> confirmar_deposito). Si
+--    rebota: registrar_cheque_rechazado revierte el cobro con contrapartida (el cliente vuelve
+--    a deber) y, si se pide, registra el cargo del banco como gasto.
+-- =====================================================================
+INSERT INTO public.error_catalogo (codigo, mensaje_usuario, que_hacer) VALUES
+  ('CHEQUE_INVALIDO', 'Los datos del cheque no son válidos.',
+   'Revise el número, el banco que lo emitió y la fecha. Un cheque va solo en el cobro y no deja saldo a favor.'),
+  ('CHEQUE_POSFECHADO', 'Ese cheque todavía no se puede depositar.',
+   'El cheque es posfechado: se deposita desde la fecha escrita en el cheque.'),
+  ('CHEQUE_DEPOSITADO', 'El cheque ya salió de "Cheques por depositar".',
+   'Si el banco lo devolvió, use "Rebotó" (cheque rechazado): revierte el cobro y deja la constancia.');
+
+ALTER TABLE public.cuenta_dinero DROP CONSTRAINT cuenta_dinero_tipo_check;
+ALTER TABLE public.cuenta_dinero ADD CONSTRAINT cuenta_dinero_tipo_check CHECK (tipo IN ('efectivo_caja', 'banco', 'caja_chica',
+  'pos_por_liquidar', 'transferencia_por_confirmar', 'transito', 'cheques_por_depositar'));
+ALTER TABLE public.cobro_pago DROP CONSTRAINT cobro_pago_forma_check;
+ALTER TABLE public.cobro_pago ADD CONSTRAINT cobro_pago_forma_check CHECK (forma IN ('efectivo', 'tarjeta', 'transferencia', 'saldo_favor', 'cheque'));
+
+-- Cada cheque recibido (uno por cobro).
+CREATE TABLE public.cheque_recibido (
+  id                      uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  empresa_id              uuid NOT NULL REFERENCES public.empresa(id),
+  numero                  bigint NOT NULL,
+  cobro_id                uuid NOT NULL,
+  cliente_id              uuid NOT NULL,
+  cliente_nombre          text NOT NULL,
+  sucursal_id             uuid,
+  numero_cheque           text NOT NULL CHECK (length(numero_cheque) BETWEEN 1 AND 30),
+  banco_emisor            text NOT NULL CHECK (length(banco_emisor) BETWEEN 2 AND 100),
+  fecha_cheque            date NOT NULL,
+  fecha_recibido          date NOT NULL,
+  monto_centavos          bigint NOT NULL CHECK (monto_centavos BETWEEN 1 AND 9007199254740991),
+  cuenta_dinero_id        uuid NOT NULL,          -- "Cheques por depositar"
+  estado                  text NOT NULL DEFAULT 'por_depositar'
+                            CHECK (estado IN ('por_depositar', 'depositado', 'rechazado', 'anulado')),
+  operacion_deposito_id   uuid,                   -- el depósito vigente (en tránsito o confirmado)
+  banco_id                uuid,
+  fecha_deposito          date,
+  motivo_rechazo          text,
+  fecha_rechazo           date,
+  cargo_banco_gasto_id    uuid,
+  rechazo_id_operacion    uuid,
+  rechazado_por           uuid,
+  rechazado_en            timestamptz,
+  creado_por              uuid,
+  creado_en               timestamptz NOT NULL DEFAULT now(),
+  actualizado_en          timestamptz NOT NULL DEFAULT now(),
+  UNIQUE (empresa_id, id),
+  UNIQUE (empresa_id, numero),
+  UNIQUE (cobro_id),
+  UNIQUE (empresa_id, rechazo_id_operacion),
+  FOREIGN KEY (empresa_id, cobro_id) REFERENCES public.cobro(empresa_id, id),
+  FOREIGN KEY (empresa_id, cuenta_dinero_id) REFERENCES public.cuenta_dinero(empresa_id, id),
+  FOREIGN KEY (empresa_id, banco_id) REFERENCES public.cuenta_dinero(empresa_id, id),
+  CHECK (estado <> 'depositado' OR operacion_deposito_id IS NOT NULL),
+  CHECK (estado <> 'por_depositar' OR operacion_deposito_id IS NULL),
+  CHECK (estado <> 'rechazado' OR length(trim(motivo_rechazo)) >= 5)
+);
+CREATE INDEX cheque_recibido_estado ON public.cheque_recibido (empresa_id, estado);
+
+-- Lo que se recibió no cambia; el estado solo lo mueven las funciones (y queda en la bitácora).
+CREATE FUNCTION interno.proteger_cheque() RETURNS trigger
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = '' AS $$
+BEGIN
+  IF (NEW.id, NEW.empresa_id, NEW.numero, NEW.cobro_id, NEW.cliente_id, NEW.numero_cheque, NEW.banco_emisor, NEW.fecha_cheque,
+      NEW.fecha_recibido, NEW.monto_centavos, NEW.cuenta_dinero_id, NEW.creado_por, NEW.creado_en)
+     IS DISTINCT FROM (OLD.id, OLD.empresa_id, OLD.numero, OLD.cobro_id, OLD.cliente_id, OLD.numero_cheque, OLD.banco_emisor, OLD.fecha_cheque,
+      OLD.fecha_recibido, OLD.monto_centavos, OLD.cuenta_dinero_id, OLD.creado_por, OLD.creado_en) THEN
+    RAISE EXCEPTION 'PROHIBIDO: los datos de un cheque recibido no se editan.';
+  END IF;
+  IF OLD.estado IN ('rechazado', 'anulado') THEN
+    RAISE EXCEPTION 'PROHIBIDO: el cheque #% ya está %.', OLD.numero, OLD.estado;
+  END IF;
+  NEW.actualizado_en := now();
+  RETURN NEW;
+END $$;
+CREATE TRIGGER proteger BEFORE UPDATE ON public.cheque_recibido FOR EACH ROW EXECUTE FUNCTION interno.proteger_cheque();
+CREATE TRIGGER auditar AFTER INSERT OR UPDATE OR DELETE ON public.cheque_recibido FOR EACH ROW EXECUTE FUNCTION interno.auditar();
+CREATE TRIGGER no_borrar BEFORE DELETE ON public.cheque_recibido
+  FOR EACH ROW EXECUTE FUNCTION interno.prohibir_cambios('Los cheques recibidos no se borran.');
+CREATE TRIGGER no_vaciar BEFORE TRUNCATE ON public.cheque_recibido
+  FOR EACH STATEMENT EXECUTE FUNCTION interno.prohibir_cambios('No se permite vaciar tablas.');
+ALTER TABLE public.cheque_recibido ENABLE ROW LEVEL SECURITY;
+REVOKE ALL ON public.cheque_recibido FROM PUBLIC, anon, authenticated;
+GRANT SELECT ON public.cheque_recibido TO authenticated, service_role;
+CREATE POLICY leer ON public.cheque_recibido FOR SELECT TO authenticated
+  USING (empresa_id = ANY (ARRAY(SELECT public.empresas_con_permiso('dinero.ver')))
+         OR empresa_id = ANY (ARRAY(SELECT public.empresas_con_permiso('ventas.ver')))
+         OR empresa_id = ANY (ARRAY(SELECT public.empresas_con_permiso('cobros.ver_saldos'))));
+CREATE POLICY por_sucursal ON public.cheque_recibido AS RESTRICTIVE FOR SELECT TO authenticated
+  USING (empresa_id = ANY (ARRAY(SELECT public.empresas_sin_restriccion()))
+         OR sucursal_id = ANY (ARRAY(SELECT public.sucursales_permitidas())));
+
+INSERT INTO interno.id_operacion_uso (tabla, columna, tipo, orden) VALUES
+  ('cheque_recibido', 'rechazo_id_operacion', 'rechazo_cheque', 97);
+
+CREATE VIEW public.v_cheque_recibido WITH (security_invoker = true) AS
+  SELECT ch.empresa_id, ch.id AS cheque_id, ch.numero, ch.estado, ch.cobro_id, cb.numero AS cobro_numero,
+         ch.cliente_id, ch.cliente_nombre, ch.sucursal_id, ch.numero_cheque, ch.banco_emisor, ch.fecha_cheque,
+         ch.fecha_recibido, ch.monto_centavos, ch.cuenta_dinero_id, ch.operacion_deposito_id,
+         (SELECT o.estado FROM public.operacion_dinero o WHERE o.id = ch.operacion_deposito_id) AS estado_deposito,
+         ch.banco_id, (SELECT d.nombre FROM public.cuenta_dinero d WHERE d.id = ch.banco_id) AS banco,
+         ch.fecha_deposito, ch.motivo_rechazo, ch.fecha_rechazo, ch.cargo_banco_gasto_id, ch.creado_en, ch.actualizado_en
+    FROM public.cheque_recibido ch
+    JOIN public.cobro cb ON cb.id = ch.cobro_id;
+REVOKE ALL ON public.v_cheque_recibido FROM PUBLIC, anon, authenticated;
+GRANT SELECT ON public.v_cheque_recibido TO authenticated, service_role;
+
+-- Cuenta "Cheques por depositar" de la empresa (la primera activa; se crea la primera vez).
+CREATE FUNCTION interno.cuenta_cheques(p_empresa_id uuid) RETURNS public.cuenta_dinero
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = '' AS $$
+DECLARE d public.cuenta_dinero;
+BEGIN
+  SELECT * INTO d FROM public.cuenta_dinero x WHERE x.empresa_id = p_empresa_id AND x.tipo = 'cheques_por_depositar' AND x.activa
+   ORDER BY x.creado_en, x.id LIMIT 1;
+  IF d.id IS NOT NULL THEN
+    RETURN d;
+  END IF;
+  RETURN interno.crear_cuenta_dinero_base(p_empresa_id, 'cheques_por_depositar',
+    CASE WHEN EXISTS (SELECT 1 FROM public.cuenta_dinero x WHERE x.empresa_id = p_empresa_id AND lower(x.nombre) = 'cheques por depositar')
+         THEN 'Cheques por depositar (' || to_char(public.hoy_local(p_empresa_id), 'YYYY-MM-DD') || ')' ELSE 'Cheques por depositar' END,
+    NULL, NULL, NULL, NULL, NULL, (SELECT e.moneda FROM public.empresa e WHERE e.id = p_empresa_id), NULL);
+END $$;
+
+-- Datos del cheque de un pago (y sus reglas): {"numero_cheque", "banco_emisor", "fecha_cheque"}.
+CREATE FUNCTION interno.datos_cheque(pj jsonb, p_pagos integer, p_apartado_id uuid, p_tipo text, p_excedente boolean,
+                                     p_empresa_id uuid) RETURNS jsonb
+LANGUAGE plpgsql STABLE SECURITY DEFINER SET search_path = '' AS $$
+DECLARE
+  v_num   text := interno.json_texto(pj->'numero_cheque', 'numero_cheque', 30);
+  v_banco text := interno.json_texto(pj->'banco_emisor', 'banco_emisor', 100);
+  v_fecha date := interno.json_fecha(pj->'fecha_cheque', 'fecha_cheque');
+  v_hoy   date := public.hoy_local(p_empresa_id);
+BEGIN
+  IF p_apartado_id IS NOT NULL OR p_tipo <> 'cxc' THEN
+    RAISE EXCEPTION 'CHEQUE_INVALIDO: un cheque se recibe solo como abono a lo que el cliente debe (no como anticipo ni apartado).';
+  END IF;
+  IF p_pagos <> 1 THEN
+    RAISE EXCEPTION 'CHEQUE_INVALIDO: el cheque va solo en el cobro (si paga parte en efectivo, son dos cobros).';
+  END IF;
+  IF p_excedente THEN
+    RAISE EXCEPTION 'CHEQUE_INVALIDO: un cheque no deja saldo a favor (si rebota no habría con qué devolverlo); cobre solo lo que debe.';
+  END IF;
+  IF v_num IS NULL OR v_banco IS NULL OR length(v_banco) < 2 OR v_fecha IS NULL THEN
+    RAISE EXCEPTION 'CHEQUE_INVALIDO: indique el número del cheque, el banco que lo emitió y la fecha del cheque.';
+  END IF;
+  IF v_fecha < v_hoy - 180 OR v_fecha > v_hoy + 365 THEN
+    RAISE EXCEPTION 'CHEQUE_INVALIDO: la fecha del cheque va de 6 meses atrás a un año adelante (posfechado).';
+  END IF;
+  RETURN jsonb_build_object('numero_cheque', v_num, 'banco_emisor', v_banco, 'fecha_cheque', v_fecha);
+END $$;
+
+-- Cobros (reemplaza la de 033; misma firma): acepta la forma "cheque" y guarda el cheque.
+CREATE OR REPLACE FUNCTION interno.registrar_cobro_base(p_empresa_id uuid, p_datos jsonb, p_id_operacion uuid,
+                                             p_apartado_id uuid DEFAULT NULL, p_apartado_saldo bigint DEFAULT NULL)
+RETURNS jsonb
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = '' AS $$
+DECLARE
+  c        public.cobro;
+  v_cli    public.tercero;
+  v_tipo   text;
+  v_fecha  date;
+  v_caja   uuid;
+  pj       jsonb;
+  k        integer := 0;
+  v_forma  text;
+  v_monto  bigint;
+  v_rec    bigint;
+  v_total  bigint := 0;
+  v_dinero bigint := 0;
+  v_sfav   bigint := 0;
+  v_norm   jsonb := '[]';
+  v_apl    jsonb := '[]';
+  v_aplic  bigint := 0;
+  v_exc    bigint;
+  v_doc    uuid;
+  v_esvta  boolean;
+  v_saldo  bigint;
+  v_resto  bigint;
+  r        record;
+  d        public.cuenta_dinero;
+  f        public.saldo_favor;
+  v_lin    jsonb := '[]';
+  v_usos   jsonb;
+  v_vale   text;
+  v_suc    uuid;
+  v_asto   uuid;
+  v_pid    uuid;
+  a        jsonb;
+  v_cheq   jsonb;      -- 0.18.0: datos del cheque (número, banco emisor, fecha)
+BEGIN
+  IF p_id_operacion IS NULL THEN
+    RAISE EXCEPTION 'FALTA_ID_OPERACION: cada operación necesita un id_operacion (uuid) único.';
+  END IF;
+  SELECT * INTO c FROM public.cobro x WHERE x.empresa_id = p_empresa_id AND x.id_operacion = p_id_operacion;
+  IF c.id IS NOT NULL THEN
+    RETURN interno.cobro_respuesta(c, true);
+  END IF;
+  PERFORM interno.exigir_claves(p_datos, ARRAY['cliente_id', 'tipo', 'pagos', 'aplicar', 'excedente', 'caja_id', 'fecha',
+                                               'referencia', 'nota', 'equipo']);
+  IF NOT interno.puede_cobrar(p_empresa_id) THEN
+    RAISE EXCEPTION 'SIN_PERMISO: su rol no tiene el permiso "ventas.cobrar" (recibir dinero de clientes).';
+  END IF;
+  v_cli := interno.cliente_de(p_empresa_id, p_datos->'cliente_id');
+  v_tipo := CASE WHEN p_apartado_id IS NOT NULL THEN 'apartado'
+                 ELSE coalesce(interno.json_texto(p_datos->'tipo', 'tipo', 20), 'cxc') END;
+  IF p_apartado_id IS NULL AND v_tipo NOT IN ('cxc', 'anticipo') THEN
+    RAISE EXCEPTION 'DATO_INVALIDO: el tipo de cobro es "cxc" (a facturas) o "anticipo" (queda como saldo a favor).';
+  END IF;
+  IF coalesce(p_datos->'excedente', 'null'::jsonb) <> 'null'::jsonb AND interno.json_texto(p_datos->'excedente', 'excedente', 20) <> 'saldo_favor' THEN
+    RAISE EXCEPTION 'DATO_INVALIDO: "excedente" solo puede ser "saldo_favor" (lo que pase del saldo queda a favor del cliente).';
+  END IF;
+  v_fecha := coalesce(interno.json_fecha(p_datos->'fecha', 'fecha'), public.hoy_local(p_empresa_id));
+  PERFORM interno.exigir_fecha_contable(p_empresa_id, v_fecha);
+  v_caja := interno.json_uuid(p_datos->'caja_id', 'caja_id');
+
+  -- Formas de pago.
+  IF jsonb_typeof(p_datos->'pagos') IS DISTINCT FROM 'array' OR jsonb_array_length(p_datos->'pagos') = 0 THEN
+    RAISE EXCEPTION 'DATO_INVALIDO: indique cómo paga el cliente ("pagos": efectivo, tarjeta, transferencia o saldo a favor).';
+  END IF;
+  IF jsonb_array_length(p_datos->'pagos') > 10 THEN
+    RAISE EXCEPTION 'DATO_INVALIDO: máximo 10 formas de pago por cobro.';
+  END IF;
+  FOR pj IN SELECT * FROM jsonb_array_elements(p_datos->'pagos') LOOP
+    k := k + 1;
+    IF jsonb_typeof(pj) <> 'object' THEN
+      RAISE EXCEPTION 'DATO_INVALIDO: cada pago es {"forma", "monto_centavos"}.';
+    END IF;
+    PERFORM interno.exigir_claves(pj, ARRAY['forma', 'monto_centavos', 'cuenta_dinero_id', 'referencia', 'recibido_centavos', 'vale',
+                                            'numero_cheque', 'banco_emisor', 'fecha_cheque']);
+    v_forma := interno.json_texto(pj->'forma', 'forma', 20);
+    IF coalesce(v_forma, '') NOT IN ('efectivo', 'tarjeta', 'transferencia', 'saldo_favor', 'cheque') THEN
+      RAISE EXCEPTION 'DATO_INVALIDO: la forma de pago de un cobro es efectivo, tarjeta, transferencia, cheque o saldo_favor.';
+    END IF;
+    -- 0.18.0: cheque. Va solo en el cobro, a facturas (no anticipo, apartado ni excedente) y con sus datos.
+    IF v_forma <> 'cheque' AND (pj ? 'numero_cheque' OR pj ? 'banco_emisor' OR pj ? 'fecha_cheque') THEN
+      RAISE EXCEPTION 'DATO_INVALIDO: el número, el banco y la fecha del cheque solo van con la forma "cheque".';
+    END IF;
+    IF v_forma = 'cheque' THEN
+      v_cheq := interno.datos_cheque(pj, jsonb_array_length(p_datos->'pagos'), p_apartado_id, v_tipo,
+                                     coalesce(p_datos->>'excedente', '') = 'saldo_favor', p_empresa_id);
+    END IF;
+    v_monto := interno.json_centavos(pj->'monto_centavos', 'monto_centavos');
+    IF v_monto = 0 THEN
+      RAISE EXCEPTION 'DATO_INVALIDO: cada forma de pago lleva un monto mayor que cero ("monto_centavos").';
+    END IF;
+    v_rec := NULL;
+    IF coalesce(pj->'recibido_centavos', 'null'::jsonb) <> 'null'::jsonb THEN
+      IF v_forma <> 'efectivo' THEN
+        RAISE EXCEPTION 'DATO_INVALIDO: "recibido_centavos" (para el vuelto) solo va en efectivo.';
+      END IF;
+      v_rec := interno.json_centavos(pj->'recibido_centavos', 'recibido_centavos');
+      IF v_rec < v_monto THEN
+        RAISE EXCEPTION 'DATO_INVALIDO: lo recibido (%) es menos que lo que se cobra en efectivo (%).', interno.lempiras(v_rec), interno.lempiras(v_monto);
+      END IF;
+    END IF;
+    IF v_forma IN ('efectivo', 'saldo_favor', 'cheque') AND coalesce(pj->'cuenta_dinero_id', 'null'::jsonb) <> 'null'::jsonb THEN
+      RAISE EXCEPTION 'DATO_INVALIDO: en % no se indica cuenta de dinero.', v_forma;
+    END IF;
+    IF v_forma <> 'saldo_favor' AND pj ? 'vale' THEN
+      RAISE EXCEPTION 'DATO_INVALIDO: "vale" solo va con la forma saldo_favor.';
+    END IF;
+    IF v_forma = 'saldo_favor' THEN
+      v_sfav := v_sfav + v_monto;
+    ELSE
+      v_dinero := v_dinero + v_monto;
+    END IF;
+    v_total := v_total + v_monto;
+    v_norm := v_norm || jsonb_build_object('linea', k, 'forma', v_forma, 'monto', v_monto, 'recibido', v_rec,
+      'cuenta', interno.json_uuid(pj->'cuenta_dinero_id', 'cuenta_dinero_id'),
+      'referencia', interno.json_texto(pj->'referencia', 'referencia', 100), 'vale', interno.json_texto(pj->'vale', 'vale', 20));
+  END LOOP;
+  IF v_dinero > 0 AND NOT public.modulo_esta_activo(p_empresa_id, 'dinero') THEN
+    RAISE EXCEPTION 'MODULO_INACTIVO: el módulo "dinero" no está activo para esta empresa (el cobro entra a una cuenta de dinero).';
+  END IF;
+  IF v_tipo = 'anticipo' AND v_sfav > 0 THEN
+    RAISE EXCEPTION 'DATO_INVALIDO: un anticipo no se paga con saldo a favor (ya es saldo a favor).';
+  END IF;
+  IF v_tipo = 'anticipo' AND p_datos ? 'aplicar' THEN
+    RAISE EXCEPTION 'DATO_INVALIDO: un anticipo no se aplica a facturas; todo queda como saldo a favor del cliente.';
+  END IF;
+
+  -- Candado, reintento.
+  PERFORM interno.reservar_operacion(p_empresa_id, p_id_operacion, 'cobro');
+  SELECT * INTO c FROM public.cobro x WHERE x.empresa_id = p_empresa_id AND x.id_operacion = p_id_operacion;
+  IF c.id IS NOT NULL THEN
+    RETURN interno.cobro_respuesta(c, true);
+  END IF;
+
+  -- A qué se aplica (con el candado: los saldos no cambian por debajo).
+  IF v_tipo = 'apartado' THEN
+    IF v_total > p_apartado_saldo THEN
+      RAISE EXCEPTION 'COBRO_EXCEDE_SALDO: el abono (%) pasa lo que falta pagar del apartado (%).', interno.lempiras(v_total), interno.lempiras(p_apartado_saldo);
+    END IF;
+    v_aplic := v_total;
+  ELSIF v_tipo = 'cxc' THEN
+    IF coalesce(p_datos->'aplicar', 'null'::jsonb) <> 'null'::jsonb THEN
+      IF jsonb_typeof(p_datos->'aplicar') <> 'array' OR jsonb_array_length(p_datos->'aplicar') = 0 THEN
+        RAISE EXCEPTION 'DATO_INVALIDO: "aplicar" es una lista [{"venta_id" o "saldo_inicial_id", "monto_centavos"}].';
+      END IF;
+      FOR a IN SELECT * FROM jsonb_array_elements(p_datos->'aplicar') LOOP
+        PERFORM interno.exigir_claves(a, ARRAY['venta_id', 'saldo_inicial_id', 'monto_centavos']);
+        v_doc := coalesce(interno.json_uuid(a->'venta_id', 'venta_id'), interno.json_uuid(a->'saldo_inicial_id', 'saldo_inicial_id'));
+        IF v_doc IS NULL OR (a ? 'venta_id' AND a ? 'saldo_inicial_id') THEN
+          RAISE EXCEPTION 'DATO_INVALIDO: cada aplicación lleva "venta_id" o "saldo_inicial_id" (uno solo).';
+        END IF;
+        IF v_apl @> jsonb_build_array(jsonb_build_object('doc', v_doc)) THEN
+          RAISE EXCEPTION 'DATO_INVALIDO: la misma factura viene dos veces en "aplicar".';
+        END IF;
+        v_monto := interno.json_centavos(a->'monto_centavos', 'monto_centavos');
+        IF v_monto = 0 THEN
+          RAISE EXCEPTION 'DATO_INVALIDO: cada aplicación lleva un monto mayor que cero.';
+        END IF;
+        v_esvta := a ? 'venta_id';
+        IF v_esvta THEN
+          PERFORM 1 FROM public.venta x WHERE x.id = v_doc AND x.empresa_id = p_empresa_id AND x.cliente_id = v_cli.id
+             AND x.estado = 'emitida' AND x.credito_centavos > 0 FOR UPDATE;
+        ELSE
+          PERFORM 1 FROM public.cxc_saldo_inicial x WHERE x.id = v_doc AND x.empresa_id = p_empresa_id AND x.cliente_id = v_cli.id
+             AND x.anulada_en IS NULL FOR UPDATE;
+        END IF;
+        IF NOT FOUND THEN
+          RAISE EXCEPTION 'DATO_INVALIDO: la factura indicada no es una cuenta por cobrar vigente de este cliente.';
+        END IF;
+        v_saldo := interno.saldo_documento_cxc(v_doc);
+        IF v_monto > v_saldo THEN
+          RAISE EXCEPTION 'COBRO_EXCEDE_SALDO: a esa factura se le quieren aplicar % y su saldo es %.', interno.lempiras(v_monto), interno.lempiras(v_saldo);
+        END IF;
+        v_apl := v_apl || jsonb_build_object('doc', v_doc, 'es_venta', v_esvta, 'monto', v_monto);
+        v_aplic := v_aplic + v_monto;
+      END LOOP;
+      IF v_aplic > v_total THEN
+        RAISE EXCEPTION 'DATO_INVALIDO: lo aplicado a facturas (%) pasa lo recibido (%).', interno.lempiras(v_aplic), interno.lempiras(v_total);
+      END IF;
+    ELSE
+      -- La más vieja primero (fecha de la factura, vencimiento, número).
+      v_resto := v_total;
+      FOR r IN SELECT x.doc, x.es_venta FROM (
+                 SELECT v.id AS doc, true AS es_venta, v.fecha_contable AS f, v.vence_el AS ve, v.numero AS n
+                   FROM public.venta v
+                  WHERE v.empresa_id = p_empresa_id AND v.cliente_id = v_cli.id AND v.estado = 'emitida' AND v.credito_centavos > 0
+                 UNION ALL
+                 SELECT s.id, false, s.fecha_documento, s.fecha_vencimiento, s.numero
+                   FROM public.cxc_saldo_inicial s
+                  WHERE s.empresa_id = p_empresa_id AND s.cliente_id = v_cli.id AND s.anulada_en IS NULL) x
+               ORDER BY x.f, x.ve, NOT x.es_venta, x.n LOOP
+        EXIT WHEN v_resto = 0;
+        IF r.es_venta THEN
+          PERFORM 1 FROM public.venta x WHERE x.id = r.doc FOR UPDATE;
+        ELSE
+          PERFORM 1 FROM public.cxc_saldo_inicial x WHERE x.id = r.doc FOR UPDATE;
+        END IF;
+        v_saldo := interno.saldo_documento_cxc(r.doc);
+        CONTINUE WHEN v_saldo <= 0;
+        v_monto := least(v_saldo, v_resto);
+        v_apl := v_apl || jsonb_build_object('doc', r.doc, 'es_venta', r.es_venta, 'monto', v_monto);
+        v_aplic := v_aplic + v_monto;
+        v_resto := v_resto - v_monto;
+      END LOOP;
+    END IF;
+  END IF;
+  v_exc := v_total - v_aplic;
+  IF v_exc > 0 THEN
+    IF coalesce(p_datos->>'excedente', '') <> 'saldo_favor' AND v_tipo <> 'anticipo' THEN
+      RAISE EXCEPTION 'COBRO_EXCEDE_SALDO: se reciben % y el cliente debe % en lo indicado (excedente %). Cobre solo el saldo o indique "excedente": "saldo_favor" para dejarlo a favor del cliente.',
+        interno.lempiras(v_total), interno.lempiras(v_aplic), interno.lempiras(v_exc);
+    END IF;
+    IF v_sfav > 0 THEN
+      RAISE EXCEPTION 'DATO_INVALIDO: el excedente no puede venir de un saldo a favor; use menos saldo a favor.';
+    END IF;
+  END IF;
+
+  -- Guardar.
+  c.id := gen_random_uuid();
+  -- Caja: la indicada o la del turno abierto del usuario.
+  IF v_caja IS NULL THEN
+    SELECT t.caja_id INTO v_caja FROM public.turno_caja t
+     WHERE t.empresa_id = p_empresa_id AND t.cajero_id = auth.uid() AND t.estado = 'abierto';
+  END IF;
+  IF v_caja IS NOT NULL AND NOT EXISTS (SELECT 1 FROM public.caja x WHERE x.id = v_caja AND x.empresa_id = p_empresa_id) THEN
+    RAISE EXCEPTION 'DATO_INVALIDO: la caja no existe en esta empresa.';
+  END IF;
+  SELECT x.sucursal_id INTO v_suc FROM public.caja x WHERE x.id = v_caja;
+
+  -- Pagos (las cuentas de dinero se pueden crear la primera vez, con el candado).
+  FOR pj IN SELECT * FROM jsonb_array_elements(v_norm) LOOP
+    d := NULL;
+    IF pj->>'forma' = 'efectivo' THEN
+      d := interno.cuenta_efectivo_cobro(p_empresa_id, v_caja);
+      IF v_caja IS NULL THEN
+        v_caja := d.caja_id;
+        SELECT x.sucursal_id INTO v_suc FROM public.caja x WHERE x.id = v_caja;
+      END IF;
+    ELSIF pj->>'forma' IN ('tarjeta', 'transferencia') THEN
+      d := interno.cuenta_cobro_venta(p_empresa_id, pj->>'forma', (pj->>'cuenta')::uuid);
+    ELSIF pj->>'forma' = 'cheque' THEN
+      d := interno.cuenta_cheques(p_empresa_id);
+    END IF;
+    IF d.id IS NOT NULL THEN
+      v_lin := v_lin || jsonb_build_object('cuenta', interno.codigo_cuenta_dinero(d.id), 'debe', (pj->>'monto')::bigint,
+                                           'descripcion', 'Cobro a ' || v_cli.nombre || ' (' || (pj->>'forma') || ')');
+    ELSE
+      v_lin := v_lin || jsonb_build_object('uso', 'saldo_favor', 'debe', (pj->>'monto')::bigint,
+                                           'descripcion', 'Cobro con saldo a favor de ' || v_cli.nombre);
+    END IF;
+    pj := pj || jsonb_build_object('cuenta_id', d.id);
+    v_norm := jsonb_set(v_norm, ARRAY[((pj->>'linea')::integer - 1)::text], pj);
+  END LOOP;
+
+  v_lin := v_lin || jsonb_build_object('uso', CASE v_tipo WHEN 'apartado' THEN 'anticipo_clientes' ELSE 'cxc' END,
+                                       'haber', v_aplic,
+                                       'descripcion', CASE v_tipo WHEN 'apartado' THEN 'Anticipo de apartado de ' ELSE 'Cobro a ' END || v_cli.nombre)
+                 || jsonb_build_object('uso', 'saldo_favor', 'haber', v_exc,
+                                       'descripcion', 'Saldo a favor de ' || v_cli.nombre);
+  c.numero := interno.siguiente_numero(p_empresa_id, 'cobro');
+  v_asto := interno.asiento_sistema(p_empresa_id, interno.sucursal_activa(v_suc), v_fecha,
+    CASE v_tipo WHEN 'cxc' THEN 'Cobro #' || c.numero || ' a ' || v_cli.nombre
+                WHEN 'anticipo' THEN 'Anticipo #' || c.numero || ' de ' || v_cli.nombre || ' (saldo a favor)'
+                ELSE 'Abono #' || c.numero || ' a apartado de ' || v_cli.nombre END
+      || coalesce(' ref. ' || interno.json_texto(p_datos->'referencia', 'referencia', 100), ''),
+    'cobro', p_id_operacion, v_lin);
+
+  -- El excedente es un lote de saldo a favor del cliente (documento = este cobro).
+  IF v_exc > 0 THEN
+    f := interno.crear_saldo_favor(p_empresa_id, v_cli.id, CASE WHEN v_tipo = 'anticipo' THEN 'anticipo' ELSE 'excedente_cobro' END,
+                                   'cobro', c.id, v_exc, v_fecha);
+  END IF;
+  INSERT INTO public.cobro (id, empresa_id, numero, tipo, cliente_id, apartado_id, caja_id, sucursal_id, fecha_contable,
+    monto_centavos, aplicado_centavos, excedente_centavos, saldo_favor_id, referencia, nota, equipo, asiento_id, id_operacion, creado_por)
+  VALUES (c.id, p_empresa_id, c.numero, v_tipo, v_cli.id, p_apartado_id, v_caja, v_suc, v_fecha, v_total, v_aplic, v_exc, f.id,
+    interno.json_texto(p_datos->'referencia', 'referencia', 100), interno.json_texto(p_datos->'nota', 'nota', 500),
+    interno.equipo(p_datos), v_asto, p_id_operacion, auth.uid())
+  RETURNING * INTO c;
+
+  FOR pj IN SELECT * FROM jsonb_array_elements(v_norm) LOOP
+    INSERT INTO public.cobro_pago (empresa_id, cobro_id, linea, forma, monto_centavos, cuenta_dinero_id, turno_id, referencia,
+                                   recibido_centavos, vuelto_centavos, estado_transferencia)
+    VALUES (p_empresa_id, c.id, (pj->>'linea')::smallint, pj->>'forma', (pj->>'monto')::bigint, (pj->>'cuenta_id')::uuid,
+            CASE WHEN pj->>'forma' = 'efectivo' THEN interno.turno_de_cuenta((pj->>'cuenta_id')::uuid) END, pj->>'referencia',
+            (pj->>'recibido')::bigint, (pj->>'recibido')::bigint - (pj->>'monto')::bigint,
+            CASE WHEN pj->>'forma' = 'transferencia' THEN 'por_confirmar' END);
+    IF pj->>'forma' = 'saldo_favor' THEN
+      v_usos := interno.usar_saldo_favor(p_empresa_id, v_cli.id, pj->>'vale', (pj->>'monto')::bigint, 'cobro', c.id, v_fecha);
+    ELSIF pj->>'forma' = 'cheque' THEN
+      INSERT INTO public.cheque_recibido (empresa_id, numero, cobro_id, cliente_id, cliente_nombre, sucursal_id, numero_cheque, banco_emisor,
+                                          fecha_cheque, fecha_recibido, monto_centavos, cuenta_dinero_id, creado_por)
+      VALUES (p_empresa_id, interno.siguiente_numero(p_empresa_id, 'cheque_recibido'), c.id, v_cli.id, v_cli.nombre, v_suc,
+              v_cheq->>'numero_cheque', v_cheq->>'banco_emisor', (v_cheq->>'fecha_cheque')::date, v_fecha, (pj->>'monto')::bigint,
+              (pj->>'cuenta_id')::uuid, auth.uid());
+    END IF;
+  END LOOP;
+
+  FOR a IN SELECT * FROM jsonb_array_elements(v_apl) LOOP
+    INSERT INTO public.cxc_aplicacion (empresa_id, cliente_id, venta_id, saldo_inicial_id, origen, origen_id, monto_centavos,
+                                       fecha_contable, creado_por)
+    VALUES (p_empresa_id, v_cli.id, CASE WHEN (a->>'es_venta')::boolean THEN (a->>'doc')::uuid END,
+            CASE WHEN NOT (a->>'es_venta')::boolean THEN (a->>'doc')::uuid END, 'cobro', c.id, (a->>'monto')::bigint, v_fecha, auth.uid());
+  END LOOP;
+
+  PERFORM interno.rastrear_dinero(v_asto, 'cobro', 'cobro', c.id,
+    coalesce(interno.json_texto(p_datos->'referencia', 'referencia', 100), 'Cobro #' || c.numero), interno.equipo(p_datos));
+  FOR a IN SELECT * FROM jsonb_array_elements(v_apl) LOOP
+    IF (a->>'es_venta')::boolean THEN
+      PERFORM interno.recalcular_comision((a->>'doc')::uuid, p_id_operacion, v_fecha);
+    END IF;
+  END LOOP;
+  RETURN interno.cobro_respuesta(c, false);
+END $$;
+
+-- Anular un cobro con cheque (reemplaza la de 034; misma firma): solo mientras el cheque sigue
+-- "por depositar" (el valor está en esa cuenta). Depositado: se usa registrar_cheque_rechazado.
+CREATE OR REPLACE FUNCTION interno.validar_anulacion_cobro(c public.cobro) RETURNS void
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = '' AS $$
+DECLARE v_est text;
+BEGIN
+  IF c.tipo = 'apartado' THEN
+    SELECT a.estado INTO v_est FROM public.apartado a WHERE a.id = c.apartado_id FOR UPDATE;
+    IF v_est <> 'vigente' THEN
+      RAISE EXCEPTION 'NO_PERMITIDO: el apartado de este anticipo ya está %; el anticipo ya se aplicó.', v_est;
+    END IF;
+  END IF;
+  SELECT ch.estado INTO v_est FROM public.cheque_recibido ch WHERE ch.cobro_id = c.id FOR UPDATE;
+  IF v_est IS NOT NULL AND v_est <> 'por_depositar' THEN
+    RAISE EXCEPTION 'CHEQUE_DEPOSITADO: el cheque de este cobro está "%"; si el banco lo devolvió, regístrelo como cheque rechazado.', v_est;
+  END IF;
+END $$;
+
+-- Al anular el cobro: su cheque queda "anulado" (salvo que lo anule registrar_cheque_rechazado).
+CREATE FUNCTION interno.cheque_de_cobro_anulado() RETURNS trigger
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = '' AS $$
+BEGIN
+  -- (registrar_cheque_rechazado lo marca él mismo, con sus datos)
+  UPDATE public.cheque_recibido SET estado = 'anulado'
+   WHERE cobro_id = NEW.id AND estado = 'por_depositar' AND coalesce(current_setting('app.cheque_rechazo', true), '') <> NEW.id::text;
+  RETURN NEW;
+END $$;
+CREATE TRIGGER cheque AFTER UPDATE OF anulada_en ON public.cobro FOR EACH ROW
+  WHEN (OLD.anulada_en IS NULL AND NEW.anulada_en IS NOT NULL) EXECUTE FUNCTION interno.cheque_de_cobro_anulado();
+
+-- Si se anula el depósito de un cheque (todavía en tránsito), el cheque vuelve a "por depositar".
+CREATE FUNCTION interno.cheque_deposito_anulado() RETURNS trigger
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = '' AS $$
+BEGIN
+  UPDATE public.cheque_recibido SET estado = 'por_depositar', operacion_deposito_id = NULL, banco_id = NULL, fecha_deposito = NULL
+   WHERE operacion_deposito_id = NEW.id AND estado = 'depositado';
+  RETURN NEW;
+END $$;
+CREATE TRIGGER cheque AFTER UPDATE OF anulada_en ON public.operacion_dinero FOR EACH ROW
+  WHEN (OLD.anulada_en IS NULL AND NEW.anulada_en IS NOT NULL) EXECUTE FUNCTION interno.cheque_deposito_anulado();
+
+CREATE FUNCTION interno.cheque_respuesta(ch public.cheque_recibido, p_duplicado boolean) RETURNS jsonb
+LANGUAGE sql STABLE SECURITY DEFINER SET search_path = '' AS $$
+  SELECT jsonb_build_object('cheque_id', ch.id, 'numero', ch.numero, 'estado', ch.estado, 'cobro_id', ch.cobro_id,
+    'numero_cheque', ch.numero_cheque, 'banco_emisor', ch.banco_emisor, 'fecha_cheque', to_char(ch.fecha_cheque, 'YYYY-MM-DD'),
+    'monto_centavos', ch.monto_centavos, 'operacion_deposito_id', ch.operacion_deposito_id, 'banco_id', ch.banco_id,
+    'fecha_deposito', to_char(ch.fecha_deposito, 'YYYY-MM-DD'), 'motivo_rechazo', ch.motivo_rechazo, 'duplicado', p_duplicado)
+$$;
+
+-- depositar_cheque(cheque, banco, fecha?, referencia?, id_operacion)   dinero.trasladar
+-- Un depósito de siempre (operacion_dinero "deposito"): Dr Depósitos en tránsito / Cr Cheques por depositar,
+-- en tránsito hasta confirmar_deposito (Dr banco / Cr tránsito). Un cheque posfechado se deposita desde su fecha.
+CREATE FUNCTION public.depositar_cheque(p_cheque_id uuid, p_banco_id uuid, p_fecha date, p_referencia text, p_id_operacion uuid)
+RETURNS jsonb
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = '' AS $$
+DECLARE
+  ch      public.cheque_recibido;
+  o       public.cuenta_dinero;
+  b       public.cuenta_dinero;
+  t       public.cuenta_dinero;
+  v_op    public.operacion_dinero;
+  v_fecha date;
+BEGIN
+  SELECT * INTO ch FROM public.cheque_recibido WHERE id = p_cheque_id;
+  IF ch.id IS NULL THEN
+    RAISE EXCEPTION 'NO_EXISTE: el cheque no existe.';
+  END IF;
+  PERFORM interno.exigir_escritura(ch.empresa_id, 'dinero.trasladar', 'dinero');
+  PERFORM interno.exigir_sucursal(ch.empresa_id, ch.sucursal_id);
+  IF p_id_operacion IS NULL THEN
+    RAISE EXCEPTION 'FALTA_ID_OPERACION: cada operación necesita un id_operacion (uuid) único.';
+  END IF;
+  PERFORM interno.exigir_tipo_operacion(ch.empresa_id, p_id_operacion, 'dinero_deposito');
+  SELECT * INTO v_op FROM public.operacion_dinero x WHERE x.empresa_id = ch.empresa_id AND x.id_operacion = p_id_operacion;
+  IF v_op.id IS NOT NULL THEN
+    RETURN interno.cheque_respuesta(ch, true) || jsonb_build_object('deposito', interno.operacion_dinero_respuesta(v_op, true));
+  END IF;
+  b := interno.cuenta_dinero_de(ch.empresa_id, p_banco_id);
+  IF b.tipo <> 'banco' OR NOT b.activa THEN
+    RAISE EXCEPTION 'CUENTA_DINERO_INVALIDA: un cheque se deposita en una cuenta de banco activa.';
+  END IF;
+  PERFORM interno.exigir_sucursal(ch.empresa_id, b.sucursal_id);
+  v_fecha := coalesce(p_fecha, public.hoy_local(ch.empresa_id));
+  PERFORM interno.exigir_fecha_contable(ch.empresa_id, v_fecha);
+  IF v_fecha < ch.fecha_cheque THEN
+    RAISE EXCEPTION 'CHEQUE_POSFECHADO: el cheque #% es del % y no se puede depositar antes.', ch.numero_cheque, to_char(ch.fecha_cheque, 'DD/MM/YYYY');
+  END IF;
+  IF v_fecha < ch.fecha_recibido THEN
+    RAISE EXCEPTION 'FECHA_INVALIDA: el depósito no puede tener fecha anterior al cobro (%).', to_char(ch.fecha_recibido, 'DD/MM/YYYY');
+  END IF;
+  IF length(trim(coalesce(p_referencia, ''))) > 100 THEN
+    RAISE EXCEPTION 'DATO_INVALIDO: la referencia es demasiado larga (máximo 100 letras).';
+  END IF;
+
+  PERFORM interno.reservar_operacion(ch.empresa_id, p_id_operacion, 'dinero_deposito');
+  SELECT * INTO v_op FROM public.operacion_dinero x WHERE x.empresa_id = ch.empresa_id AND x.id_operacion = p_id_operacion;
+  IF v_op.id IS NOT NULL THEN
+    SELECT * INTO ch FROM public.cheque_recibido WHERE id = p_cheque_id;
+    RETURN interno.cheque_respuesta(ch, true) || jsonb_build_object('deposito', interno.operacion_dinero_respuesta(v_op, true));
+  END IF;
+  SELECT * INTO ch FROM public.cheque_recibido WHERE id = p_cheque_id FOR UPDATE;
+  IF ch.estado <> 'por_depositar' THEN
+    RAISE EXCEPTION 'CHEQUE_DEPOSITADO: el cheque #% ya está "%".', ch.numero_cheque, ch.estado;
+  END IF;
+  PERFORM interno.exigir_periodo_abierto(ch.empresa_id, v_fecha);
+  o := interno.cuenta_dinero_de(ch.empresa_id, ch.cuenta_dinero_id);
+  t := interno.cuenta_transito(ch.empresa_id, NULL);
+  v_op := interno.guardar_operacion_dinero(ch.empresa_id, 'deposito', o, b, t, NULL, ch.monto_centavos, v_fecha,
+    coalesce(nullif(trim(p_referencia), ''), 'Cheque ' || ch.numero_cheque), 'Cheque #' || ch.numero_cheque || ' de ' || ch.banco_emisor
+      || ' (' || ch.cliente_nombre || ')', NULL, NULL,
+    'Depósito #N del cheque ' || ch.numero_cheque || ' de ' || ch.cliente_nombre || ' a ' || b.nombre || ' (en tránsito)',
+    jsonb_build_array(jsonb_build_object('cuenta', (SELECT c.codigo FROM public.cuenta c WHERE c.id = t.cuenta_id), 'debe', ch.monto_centavos),
+                      jsonb_build_object('cuenta', (SELECT c.codigo FROM public.cuenta c WHERE c.id = o.cuenta_id), 'haber', ch.monto_centavos)),
+    p_id_operacion);
+  UPDATE public.cheque_recibido SET estado = 'depositado', operacion_deposito_id = v_op.id, banco_id = b.id, fecha_deposito = v_fecha
+   WHERE id = ch.id RETURNING * INTO ch;
+  RETURN interno.cheque_respuesta(ch, false) || jsonb_build_object('deposito', interno.operacion_dinero_respuesta(v_op, false));
+END $$;
+
+-- registrar_cheque_rechazado(cheque, datos, id_operacion)   cobros.anular
+-- datos = {"motivo", "fecha"?, "cargo_banco"?: {"categoria_id", "monto_centavos", "cuenta_dinero_id"? (el banco del depósito)}}
+-- 1) El valor vuelve a "Cheques por depositar": si el depósito sigue en tránsito, se anula ese depósito; si ya
+--    se confirmó, el banco lo devuelve (Dr Cheques por depositar / Cr banco, operación "traslado").
+-- 2) Se anula el cobro (anular_cobro de siempre): Dr Clientes / Cr Cheques por depositar; las facturas
+--    recuperan su saldo y las comisiones se ajustan. El cliente vuelve a deber.
+-- 3) Opcional: el cargo del banco como gasto (registrar_gasto, pide gastos.registrar).
+-- Todo junto o nada; reintento con el mismo id_operacion = la misma respuesta.
+CREATE FUNCTION public.registrar_cheque_rechazado(p_cheque_id uuid, p_datos jsonb, p_id_operacion uuid) RETURNS jsonb
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = '' AS $$
+DECLARE
+  ch      public.cheque_recibido;
+  od      public.operacion_dinero;
+  o       public.cuenta_dinero;
+  b       public.cuenta_dinero;
+  v_mot   text;
+  v_fecha date;
+  v_cargo jsonb;
+  v_gas   jsonb;
+  r       jsonb;
+BEGIN
+  SELECT * INTO ch FROM public.cheque_recibido WHERE id = p_cheque_id;
+  IF ch.id IS NULL THEN
+    RAISE EXCEPTION 'NO_EXISTE: el cheque no existe.';
+  END IF;
+  PERFORM interno.exigir_escritura(ch.empresa_id, 'cobros.anular', 'ventas');
+  PERFORM interno.exigir_sucursal(ch.empresa_id, ch.sucursal_id);
+  IF p_id_operacion IS NULL THEN
+    RAISE EXCEPTION 'FALTA_ID_OPERACION: cada operación necesita un id_operacion (uuid) único.';
+  END IF;
+  PERFORM interno.exigir_tipo_operacion(ch.empresa_id, p_id_operacion, 'rechazo_cheque');
+  IF ch.rechazo_id_operacion = p_id_operacion THEN
+    RETURN interno.cheque_respuesta(ch, true);
+  END IF;
+  IF jsonb_typeof(p_datos) IS DISTINCT FROM 'object' THEN
+    RAISE EXCEPTION 'DATO_INVALIDO: los datos deben ser un objeto JSON.';
+  END IF;
+  PERFORM interno.exigir_claves(p_datos, ARRAY['motivo', 'fecha', 'cargo_banco']);
+  v_mot := interno.json_texto(p_datos->'motivo', 'motivo', 300);
+  IF length(coalesce(v_mot, '')) < 5 THEN
+    RAISE EXCEPTION 'FALTA_MOTIVO: escriba por qué rebotó el cheque (mínimo 5 letras), ej. "fondos insuficientes".';
+  END IF;
+  v_fecha := coalesce(interno.json_fecha(p_datos->'fecha', 'fecha'), greatest(public.hoy_local(ch.empresa_id), ch.fecha_recibido));
+  v_cargo := CASE WHEN coalesce(p_datos->'cargo_banco', 'null'::jsonb) <> 'null'::jsonb THEN p_datos->'cargo_banco' END;
+  IF v_cargo IS NOT NULL THEN
+    PERFORM interno.exigir_claves(v_cargo, ARRAY['categoria_id', 'monto_centavos', 'cuenta_dinero_id']);
+  END IF;
+
+  PERFORM interno.reservar_operacion(ch.empresa_id, p_id_operacion, 'rechazo_cheque');
+  SELECT * INTO ch FROM public.cheque_recibido WHERE id = p_cheque_id FOR UPDATE;
+  IF ch.rechazo_id_operacion = p_id_operacion THEN
+    RETURN interno.cheque_respuesta(ch, true);
+  END IF;
+  IF ch.estado NOT IN ('por_depositar', 'depositado') THEN
+    RAISE EXCEPTION 'CHEQUE_INVALIDO: el cheque #% ya está "%".', ch.numero_cheque, ch.estado;
+  END IF;
+  b := CASE WHEN ch.banco_id IS NOT NULL THEN interno.cuenta_dinero_de(ch.empresa_id, ch.banco_id) END;
+
+  -- 1) El valor vuelve a "Cheques por depositar".
+  IF ch.estado = 'depositado' THEN
+    SELECT * INTO od FROM public.operacion_dinero WHERE id = ch.operacion_deposito_id FOR UPDATE;
+    IF od.estado = 'en_transito' THEN
+      PERFORM public.anular_operacion_dinero(od.id, 'Cheque rechazado: ' || v_mot, md5(p_id_operacion::text || ':anula_deposito')::uuid, v_fecha);
+    ELSE
+      o := interno.cuenta_dinero_de(ch.empresa_id, ch.cuenta_dinero_id);
+      PERFORM interno.exigir_fecha_contable(ch.empresa_id, v_fecha);
+      PERFORM interno.exigir_periodo_abierto(ch.empresa_id, v_fecha);
+      PERFORM interno.guardar_operacion_dinero(ch.empresa_id, 'traslado', b, o, NULL, NULL, ch.monto_centavos, v_fecha,
+        'Cheque ' || ch.numero_cheque || ' rechazado', v_mot, NULL, NULL,
+        'Cheque ' || ch.numero_cheque || ' de ' || ch.cliente_nombre || ' devuelto por ' || b.nombre || ' (#N)',
+        jsonb_build_array(jsonb_build_object('cuenta', (SELECT c.codigo FROM public.cuenta c WHERE c.id = o.cuenta_id), 'debe', ch.monto_centavos),
+                          jsonb_build_object('cuenta', (SELECT c.codigo FROM public.cuenta c WHERE c.id = b.cuenta_id), 'haber', ch.monto_centavos)),
+        md5(p_id_operacion::text || ':devuelve_banco')::uuid);
+    END IF;
+    UPDATE public.cheque_recibido SET estado = 'por_depositar', operacion_deposito_id = NULL WHERE id = ch.id;
+  END IF;
+
+  -- 2) Se anula el cobro: el cliente vuelve a deber.
+  PERFORM set_config('app.cheque_rechazo', ch.cobro_id::text, true);
+  r := public.anular_cobro(ch.cobro_id, 'Cheque ' || ch.numero_cheque || ' rechazado: ' || v_mot,
+                           md5(p_id_operacion::text || ':anula_cobro')::uuid, v_fecha);
+  PERFORM set_config('app.cheque_rechazo', '', true);
+
+  -- 3) Cargo del banco como gasto (opcional).
+  IF v_cargo IS NOT NULL THEN
+    v_gas := public.registrar_gasto(ch.empresa_id, jsonb_build_object(
+      'cuenta_dinero_id', coalesce(v_cargo->'cuenta_dinero_id', to_jsonb(b.id)), 'categoria_id', v_cargo->'categoria_id',
+      'monto_centavos', v_cargo->'monto_centavos', 'fecha', v_fecha,
+      'descripcion', 'Cargo del banco por el cheque ' || ch.numero_cheque || ' rechazado (' || ch.cliente_nombre || ')'),
+      md5(p_id_operacion::text || ':cargo_banco')::uuid);
+  END IF;
+  PERFORM set_config('app.motivo', v_mot, true);
+  UPDATE public.cheque_recibido SET estado = 'rechazado', motivo_rechazo = v_mot, fecha_rechazo = v_fecha, banco_id = coalesce(banco_id, b.id),
+         cargo_banco_gasto_id = (v_gas->>'gasto_id')::uuid, rechazo_id_operacion = p_id_operacion,
+         rechazado_por = auth.uid(), rechazado_en = now()
+   WHERE id = ch.id RETURNING * INTO ch;
+  PERFORM set_config('app.motivo', '', true);
+  RETURN interno.cheque_respuesta(ch, false) || jsonb_strip_nulls(jsonb_build_object('cobro', r, 'gasto', v_gas));
+END $$;
+
+-- El dinero de "Cheques por depositar" solo se mueve cheque por cheque (depositar_cheque / rebote).
+ALTER FUNCTION public.trasladar_dinero(uuid, jsonb, uuid) SET SCHEMA interno;
+ALTER FUNCTION interno.trasladar_dinero(uuid, jsonb, uuid) RENAME TO trasladar_dinero_022;
+CREATE FUNCTION public.trasladar_dinero(p_empresa_id uuid, p_datos jsonb, p_id_operacion uuid) RETURNS jsonb
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = '' AS $$
+BEGIN
+  IF jsonb_typeof(p_datos) = 'object' AND EXISTS (SELECT 1 FROM public.cuenta_dinero d
+       WHERE d.empresa_id = p_empresa_id AND d.tipo = 'cheques_por_depositar'
+         AND d.id::text IN (p_datos->>'origen_id', p_datos->>'destino_id')) THEN
+    PERFORM interno.exigir_escritura(p_empresa_id, 'dinero.trasladar', 'dinero');
+    RAISE EXCEPTION 'CUENTA_DINERO_INVALIDA: los cheques por depositar se mueven uno por uno: "Depositar" (depositar_cheque) o "Rebotó".';
+  END IF;
+  RETURN interno.trasladar_dinero_022(p_empresa_id, p_datos, p_id_operacion);
+END $$;
+
+-- ¿Dónde está mi dinero? (la de 052 pasa a interno sin cambios): además "cheques_por_depositar" con
+-- cada cheque (los que el usuario puede ver), su fecha y si ya se puede depositar.
+ALTER FUNCTION public.donde_esta_mi_dinero(uuid) SET SCHEMA interno;
+ALTER FUNCTION interno.donde_esta_mi_dinero(uuid) RENAME TO donde_esta_mi_dinero_052;
+CREATE FUNCTION public.donde_esta_mi_dinero(p_empresa_id uuid) RETURNS jsonb
+LANGUAGE plpgsql STABLE SECURITY DEFINER SET search_path = '' AS $$
+DECLARE
+  r      jsonb := interno.donde_esta_mi_dinero_052(p_empresa_id);
+  v_restr boolean := interno.usuario_restringido(p_empresa_id);
+  v_hoy  date := public.hoy_local(p_empresa_id);
+BEGIN
+  RETURN r || jsonb_build_object('cheques_por_depositar', (SELECT jsonb_build_object(
+      'total_centavos', coalesce(sum(ch.monto_centavos), 0), 'cantidad', count(*),
+      'posfechados_centavos', coalesce(sum(ch.monto_centavos) FILTER (WHERE ch.fecha_cheque > v_hoy), 0),
+      'cheques', coalesce(jsonb_agg(jsonb_build_object('cheque_id', ch.id, 'numero_cheque', ch.numero_cheque, 'banco_emisor', ch.banco_emisor,
+         'cliente', ch.cliente_nombre, 'fecha_cheque', to_char(ch.fecha_cheque, 'YYYY-MM-DD'), 'monto_centavos', ch.monto_centavos,
+         'se_puede_depositar', ch.fecha_cheque <= v_hoy) ORDER BY ch.fecha_cheque, ch.numero), '[]'))
+    FROM public.cheque_recibido ch
+   WHERE ch.empresa_id = p_empresa_id AND ch.estado = 'por_depositar'
+     AND (NOT v_restr OR interno.sucursal_permitida(p_empresa_id, ch.sucursal_id))));
+END $$;
+
+-- Proyección (la de 052 pasa a interno sin cambios): los cheques por depositar entran en la semana de su fecha
+-- (los de hoy o antes, en la semana 1). La cuenta "Cheques por depositar" nunca cuenta como disponible.
+ALTER FUNCTION public.proyeccion_flujo(uuid, integer, text) SET SCHEMA interno;
+ALTER FUNCTION interno.proyeccion_flujo(uuid, integer, text) RENAME TO proyeccion_flujo_052;
+CREATE FUNCTION public.proyeccion_flujo(p_empresa_id uuid, p_dias integer DEFAULT 30, p_agrupar text DEFAULT 'semana') RETURNS jsonb
+LANGUAGE plpgsql STABLE SECURITY DEFINER SET search_path = '' AS $$
+DECLARE
+  r       jsonb := interno.proyeccion_flujo_052(p_empresa_id, p_dias, p_agrupar);
+  v_hoy   date;
+  v_hasta date;
+  v_restr boolean := interno.usuario_restringido(p_empresa_id);
+  v_ch    jsonb;
+  v_sem   jsonb := '[]';
+  s       jsonb;
+  v_acum  bigint := 0;
+  v_mas   bigint;
+  v_alert jsonb := '[]';
+  i       integer;
+BEGIN
+  v_hoy := (r->>'desde')::date;
+  v_hasta := (r->>'hasta')::date;
+  SELECT coalesce(jsonb_agg(jsonb_build_object('semana', least(greatest((ch.fecha_cheque - v_hoy) / 7 + 1, 1), jsonb_array_length(r->'semanas')),
+           'tipo', 'cheque', 'monto', ch.monto_centavos, 'fecha', to_char(greatest(ch.fecha_cheque, v_hoy), 'YYYY-MM-DD'),
+           'detalle', 'Cheque ' || ch.numero_cheque || ' de ' || ch.cliente_nombre || ' (' || ch.banco_emisor || ')')
+           ORDER BY ch.fecha_cheque, ch.numero), '[]')
+    INTO v_ch
+    FROM public.cheque_recibido ch
+   WHERE ch.empresa_id = p_empresa_id AND ch.estado = 'por_depositar' AND ch.fecha_cheque <= v_hasta
+     AND (NOT v_restr OR interno.sucursal_permitida(p_empresa_id, ch.sucursal_id));
+  i := 0;
+  FOR s IN SELECT x FROM jsonb_array_elements(r->'semanas') x LOOP
+    i := i + 1;
+    v_mas := coalesce((SELECT sum((m->>'monto')::bigint) FROM jsonb_array_elements(v_ch) m WHERE (m->>'semana')::integer = i), 0);
+    s := s || jsonb_build_object('cheques_centavos', v_mas,
+      'saldo_inicial_centavos', (s->>'saldo_inicial_centavos')::bigint + v_acum,
+      'entradas_centavos', (s->>'entradas_centavos')::bigint + v_mas);
+    v_acum := v_acum + v_mas;
+    s := s || jsonb_build_object('saldo_final_centavos', (s->>'saldo_final_centavos')::bigint + v_acum,
+                                 'negativo', (s->>'saldo_final_centavos')::bigint + v_acum < 0);
+    IF (s->>'negativo')::boolean THEN
+      v_alert := v_alert || jsonb_build_object('semana', i, 'saldo_final_centavos', (s->>'saldo_final_centavos')::bigint,
+        'mensaje', 'En la semana ' || i || ' (desde el ' || to_char((s->>'desde')::date, 'DD/MM/YYYY') || ') el dinero proyectado queda en '
+                   || interno.lempiras((s->>'saldo_final_centavos')::bigint) || '. Busque cobrar antes o mover pagos.');
+    END IF;
+    v_sem := v_sem || jsonb_build_array(s);
+  END LOOP;
+  RETURN r || jsonb_build_object('semanas', v_sem, 'saldo_final_proyectado_centavos', (r->>'saldo_final_proyectado_centavos')::bigint + v_acum,
+    'cheques_por_depositar_centavos', v_acum, 'alerta', jsonb_array_length(v_alert) > 0, 'alertas', v_alert,
+    'detalle', (SELECT coalesce(jsonb_agg(m ORDER BY (m->>'semana')::integer, m->>'fecha', m->>'tipo'), '[]')
+                  FROM jsonb_array_elements((r->'detalle') || v_ch) m),
+    'nota', (r->>'nota') || ' Los cheques por depositar entran en la semana de su fecha.');
+END $$;
+
+REVOKE EXECUTE ON FUNCTION
+  interno.proteger_cheque(), interno.cuenta_cheques(uuid), interno.datos_cheque(jsonb, integer, uuid, text, boolean, uuid),
+  interno.cheque_de_cobro_anulado(), interno.cheque_deposito_anulado(), interno.cheque_respuesta(public.cheque_recibido, boolean),
+  interno.trasladar_dinero_022(uuid, jsonb, uuid), interno.donde_esta_mi_dinero_052(uuid), interno.proyeccion_flujo_052(uuid, integer, text)
+FROM PUBLIC, anon, authenticated, service_role;
+REVOKE EXECUTE ON FUNCTION
+  public.depositar_cheque(uuid, uuid, date, text, uuid), public.registrar_cheque_rechazado(uuid, jsonb, uuid),
+  public.trasladar_dinero(uuid, jsonb, uuid)
+FROM PUBLIC, anon, service_role;
+GRANT EXECUTE ON FUNCTION
+  public.depositar_cheque(uuid, uuid, date, text, uuid), public.registrar_cheque_rechazado(uuid, jsonb, uuid),
+  public.trasladar_dinero(uuid, jsonb, uuid)
+TO authenticated;
+-- Lecturas: como antes (también service_role).
+REVOKE EXECUTE ON FUNCTION public.donde_esta_mi_dinero(uuid), public.proyeccion_flujo(uuid, integer, text) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.donde_esta_mi_dinero(uuid), public.proyeccion_flujo(uuid, integer, text) TO authenticated, service_role;
