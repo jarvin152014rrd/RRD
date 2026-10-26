@@ -12,7 +12,7 @@ etapa 3.
   reclamos, abonos con cheque (depositar y rebote) y antigüedad de saldos de clientes y proveedores.
 - FALTA (dueño): pegar `dist/actualizar_supabase_0.18.0.sql` en su Supabase real. **NO PROBADO en un Supabase real**
   (solo en el mini Supabase de la prueba 145).
-- A CONFIRMAR (dueño) [DINERO]: las ventas al contado NO aceptan cheque (solo abonos de clientes). Si lo quiere en
+- CONFIRMADO por el dueño (ver REQUISITOS, Cheques) [DINERO]: las ventas al contado NO aceptan cheque (solo abonos de clientes). Si lo quiere en
   ventas, es otra parte.
 - A CONFIRMAR (dueño): con precio mayorista no se suma ninguna promoción ni descuento en esa línea (DESCUENTO_DOBLE);
   si hay una promoción, gana lo más barato para el cliente.
