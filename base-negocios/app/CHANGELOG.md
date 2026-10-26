@@ -1,5 +1,12 @@
 # Cambios de la app
 
+## app 0.13.1 (núcleo 0.19.0) — Revisión
+
+- **Ajustes > Reglas y topes:** interruptor "Cambio exacto" (solo el dueño, con motivo y bitácora). Oculto con núcleo 0.18.0.
+- **Garantías:** el cálculo previo del cambio por otro producto manda el reclamo (`reclamo_id`), así coincide con lo que
+  se guarda (sin ajuste mayorista).
+- Pruebas: `probar_0130.cjs` (8) y `probar_0130_nucleo_viejo.cjs` (4). Cascarón `cascaron-0.13.1`.
+
 ## app 0.13.0 (núcleo 0.19.0; también funciona con 0.18.0, sin lo nuevo) — Decisiones del dueño
 
 - **Devoluciones, ajuste mayorista:** antes de guardar se ve lo que se devuelve (`calcular_devolucion_previa`): lo que

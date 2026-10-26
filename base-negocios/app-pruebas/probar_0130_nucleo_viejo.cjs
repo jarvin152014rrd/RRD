@@ -81,6 +81,12 @@ async function entrar(p, correo) {
     afirmar(await p.locator('#cambio-contador').count() === 0 && !(await p.locator('#dev-guardar').isDisabled()), 'cambio como antes');
   });
 
+  await prueba('Ajustes > Reglas y topes sin "Cambio exacto"', async () => {
+    await p.goto(URL_APP + '/#/ajustes/reglas');
+    await p.waitForSelector('#reglas-guardar');
+    afirmar(await p.locator('#regla-cambio-exacto').count() === 0, 'sale el interruptor con el núcleo 0.18.0');
+  });
+
   await prueba('celular: Fondos y Devoluciones sin errores ni salirse a lo ancho', async () => {
     const c = await nueva({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
     await entrar(c.p, 'dueno@demo.hn');

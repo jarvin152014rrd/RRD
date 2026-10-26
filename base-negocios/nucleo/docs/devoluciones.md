@@ -168,6 +168,12 @@ que conserva vale a **precio normal**, y esa diferencia se descuenta de lo que s
   descontó; negativo: se devolvió un ajuste anterior). La respuesta de `registrar_devolucion` trae
   `ajuste_mayorista_centavos`, `valor_centavos` (lo que pagó por esas unidades) y `ajuste_mayorista_texto`
   ("Ajuste por perder precio mayorista: L 18.00"); igual `documento_nota_credito` (por línea y arriba) y `v_devolucion`.
+- **Pendiente de aprobación (revisión 0.19.0):** si la línea tiene otra devolución esperando aprobación, una nueva se
+  rechaza (`DEVOLUCION_INVALIDA`: "resuélvala primero"). Ejemplo (prueba 151): 10 a L 90.00 (normal L 100.00 desde 10);
+  A pendiente por 2; B por 3 se rechaza; rechazada A, B da L 200.00 (no L 300.00).
+- **Garantía después de una devolución con ajuste:** solo el valor proporcional de las unidades de la garantía; el ajuste
+  ya cobrado se mantiene (prueba 151: devolvió 2 y recibió L 100.00; la garantía de 1 da L 90.00, no L 170.00).
+- Líneas de antes de 0.19.0 vendidas con menos que "desde cantidad": "por cliente" (sin ajuste).
 - Registrar vuelve a calcular los montos con el candado puesto: si otra devolución de la misma venta entró mientras
   tanto, `DEVOLUCION_INVALIDA` ("revise las cantidades").
 
@@ -190,8 +196,11 @@ nuevas). Con la regla:
   dinero (`"destino": "dinero"`).
 - Nunca hay diferencia: un cambio no lleva `"pagos"`, `"diferencia"` ni `"cuenta_dinero_id"` (`CAMBIO_NO_EXACTO`).
 - Venta al crédito todavía sin pagar: la devolución primero rebaja la deuda (como siempre) y esa parte se vuelve a
-  deber en la venta nueva (pago `credito`); el cliente debe lo mismo que antes (como el cambio por garantía). La venta
-  nueva vence con el plazo del cliente desde hoy.
+  deber en la venta nueva (pago `credito`); el cliente debe lo mismo que antes (como el cambio por garantía). Ese
+  crédito "de vuelta" no pide aprobación de crédito ni cuenta para el límite, y la venta nueva vence cuando vencía la
+  original (revisión 0.19.0, prueba 151).
+- `calcular_cambio_previo` acepta `"reclamo_id"` (de esa venta): el cambio por garantía se calcula sin ajuste mayorista,
+  igual que al resolver el reclamo.
 - El cambio por garantía con "precio de garantía" (mismo producto y cantidad) sigue igual: ya vale lo pagado. Por otro
   producto, también debe dar exacto (si no, se resuelve como "devuelto").
 - `calcular_cambio_previo` trae `cambio_exacto`, `exacto`, `falta_centavos`, `sobra_centavos` (contra lo devuelto),

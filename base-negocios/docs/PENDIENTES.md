@@ -1,4 +1,4 @@
-# Pendientes (núcleo 0.19.0, 150 pruebas OK; también con probar.sh --paquete)
+# Pendientes (núcleo 0.19.0, 151 pruebas OK; también con probar.sh --paquete)
 
 Estado: etapa 2 terminada. Las correcciones de la revisión de la etapa 2 están
 HECHAS en la migración 038 (núcleo 0.9.1) y las de la revisión de 0.9.1 en la
@@ -18,11 +18,13 @@ etapa 3.
   `cambio_exacto` encendida por defecto.
 - A CONFIRMAR (dueño) [DINERO]: en una garantía no se cobra el ajuste mayorista; el precio normal del ajuste es el de
   la venta, sin promociones; en un cambio exacto de una venta al crédito sin pagar, la parte de la deuda se vuelve a
-  deber en la venta nueva (con plazo nuevo desde hoy).
+  deber en la venta nueva, sin pedir aprobación de crédito y con el vencimiento de la venta original (revisión).
 - FALTA (dueño): pegar en orden `actualizar_supabase_0.16.0.sql`, `0.17.0`, `0.18.0` y `0.19.0` en su Supabase real
   (`docs/SUPABASE.md`). **NO PROBADO en un Supabase real** (solo en el mini Supabase de la prueba 150).
-- FALTA (menor): la regla `cambio_exacto` no está en Ajustes de la app ni en la ficha/Armador (hoy: `configurar_empresa`
-  por el proveedor). Si el precio de una sucursal tenía otra marca de "incluye ISV" que el mayorista, el ajuste usa la
+- HECHO (revisión, dentro de la 055, prueba 151): devolución con otra pendiente se rechaza; garantía sin devolver el ajuste
+  ya cobrado; previo del cambio por garantía = lo guardado; crédito de vuelta sin aprobación y con el vencimiento original;
+  líneas viejas con menos que "desde cantidad" = por cliente. Interruptor "Cambio exacto" en Ajustes > Reglas (app 0.13.1).
+- FALTA (menor): la regla `cambio_exacto` no está en la ficha/Armador. Si el precio de una sucursal tenía otra marca de "incluye ISV" que el mayorista, el ajuste usa la
   del mayorista (caso raro).
 - NOTA: un cambio exacto de una venta al crédito puede pedir aprobación de crédito si el cliente no tiene límite
   (`APROBACION_REQUERIDA`; lo hace quien aprueba), igual que el cambio por garantía.

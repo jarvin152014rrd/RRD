@@ -151,6 +151,13 @@ BEGIN
       RAISE EXCEPTION 'DEVOLUCION_INVALIDA: de la línea % ("%") se vendieron % y ya se devolvieron %; no se pueden devolver %.',
         vl.linea, vl.descripcion, trim_scale(vl.cantidad), trim_scale(q0), trim_scale(q);
     END IF;
+    -- Revisión 0.19.0: una devolución pendiente de aprobación entra en la cuenta acumulada de esta; si después se
+    -- rechazara, esta quedaría pagada de más (con el ajuste mayorista). Primero se resuelve la pendiente.
+    IF EXISTS (SELECT 1 FROM public.devolucion_linea x JOIN public.devolucion y ON y.id = x.devolucion_id
+                WHERE x.venta_linea_id = vl.id AND y.estado = 'pendiente_aprobacion') THEN
+      RAISE EXCEPTION 'DEVOLUCION_INVALIDA: hay una devolución de "%" de esta venta esperando aprobación; resuélvala primero (que la aprueben o la rechacen) y después registre esta.',
+        vl.descripcion;
+    END IF;
     v_r := q0 + q;
     v_k := vl.cantidad - v_r;
     t_acum := round(vl.total_centavos * v_r / vl.cantidad)::bigint;
@@ -159,10 +166,12 @@ BEGIN
     -- A1: ¿pierde el precio mayorista lo que se queda?
     a_tot := 0;  a_base := 0;  v_cand := false;  v_desde := NULL;
     IF vl.precio_tipo = 'mayorista' AND NOT v_gar AND vl.precio_normal_centavos IS NOT NULL THEN
+      v_desde := coalesce(vl.mayorista_desde, (SELECT x.cantidad_mayorista FROM public.producto x WHERE x.id = vl.producto_id));
+      -- Líneas de antes de 0.19.0 (sin mayorista_por): cliente mayorista hoy, o vendida con menos que "desde
+      -- cantidad" (solo pudo ser por cliente) = "por cliente" (sin ajuste).
       v_por := coalesce(vl.mayorista_por,
                         CASE WHEN EXISTS (SELECT 1 FROM public.tercero t WHERE t.id = v.cliente_id AND t.es_cliente AND t.es_mayorista)
-                             THEN 'cliente' ELSE 'cantidad' END);
-      v_desde := coalesce(vl.mayorista_desde, (SELECT x.cantidad_mayorista FROM public.producto x WHERE x.id = vl.producto_id));
+                                  OR vl.cantidad < coalesce(v_desde, 0) THEN 'cliente' ELSE 'cantidad' END);
       v_cand := v_por = 'cantidad' AND v_desde IS NOT NULL;
       IF v_cand AND v_k > 0 AND v_k < v_desde THEN
         SELECT * INTO pc FROM public.precio_con_tasa(round(v_k * vl.precio_normal_centavos)::bigint, vl.precio_incluye_isv,
@@ -178,7 +187,14 @@ BEGIN
 
     v_tot := (t_acum - a_tot) - (b0 + i0);                        -- lo que se devuelve en esta devolución
     v_valor := t_acum - round(vl.total_centavos * q0 / vl.cantidad)::bigint;   -- lo que pagó por estas unidades
-    IF v_cand THEN
+    IF v_gar THEN
+      -- Garantía (revisión 0.19.0): solo el valor proporcional de estas unidades; un ajuste mayorista ya cobrado en
+      -- una devolución anterior se mantiene (no se le devuelve al cliente).
+      v_tot := v_valor;
+      v_aj := 0;
+      v_base := least(greatest(b_acum - round(vl.base_centavos * q0 / vl.cantidad)::bigint, 0), greatest(v_tot, 0));
+      v_imp := greatest(v_tot, 0) - v_base;
+    ELSIF v_cand THEN
       v_aj := v_valor - v_tot;
       IF v_tot <= 0 THEN
         RAISE EXCEPTION 'DEVOLUCION_INVALIDA: de "%" se quedaría con % y el precio mayorista es desde %: lo que se queda pasa a precio normal y el ajuste (%) es igual o mayor que lo que se le devolvería (%). No queda nada que devolver: devuelva más unidades (o todas) o no haga la devolución.',
@@ -188,8 +204,10 @@ BEGIN
       v_aj := 0;
       v_valor := greatest(v_tot, 0);
     END IF;
-    v_base := least(greatest((b_acum - a_base) - b0, 0), greatest(v_tot, 0));
-    v_imp := greatest(v_tot, 0) - v_base;
+    IF NOT v_gar THEN
+      v_base := least(greatest((b_acum - a_base) - b0, 0), greatest(v_tot, 0));
+      v_imp := greatest(v_tot, 0) - v_base;
+    END IF;
     v_cost := greatest(round(coalesce(vl.costo_centavos, 0) * v_r / vl.cantidad)::bigint - c0, 0);
     v_cest := greatest(round(coalesce(vl.costo_estimado_centavos, 0) * v_r / vl.cantidad)::bigint - e0, 0);
     v_txt := CASE WHEN v_aj > 0 THEN 'Ajuste por perder precio mayorista: ' || interno.lempiras(v_aj)
@@ -435,6 +453,12 @@ BEGIN
      AND coalesce(d.cambio->'pagos', 'null'::jsonb) IN ('null'::jsonb, '[]'::jsonb) THEN
     v_pag := v_pag || jsonb_build_array(jsonb_build_object('forma', 'credito', 'monto_centavos', d.cxc_centavos));
   END IF;
+  -- Revisión 0.19.0: el crédito "de vuelta" (hasta lo que la devolución rebajó de la deuda) no pide aprobación de
+  -- crédito ni cuenta para el límite, y la venta nueva vence cuando vencía la original (la antigüedad no se reinicia).
+  IF d.cxc_centavos > 0 THEN
+    PERFORM set_config('app.credito_de_cambio', d.cxc_centavos::text, true);
+    PERFORM set_config('app.vence_de_cambio', coalesce(to_char(v.vence_el, 'YYYY-MM-DD'), ''), true);
+  END IF;
   -- 0.9.1: solo aquí se acepta "saldo_favor_id" (el lote de esta devolución).
   PERFORM set_config('app.lote_cambio', coalesce(d.saldo_favor_id::text, ''), true);
   r := interno.registrar_venta_base(d.empresa_id,
@@ -444,6 +468,8 @@ BEGIN
            'nota', 'Cambio de producto (nota de crédito ' || d.numero_documento || ')', 'equipo', d.equipo, 'pagos', v_pag)),
          md5(p_id_operacion::text || ':cambio')::uuid);
   PERFORM set_config('app.lote_cambio', '', true);
+  PERFORM set_config('app.credito_de_cambio', '', true);
+  PERFORM set_config('app.vence_de_cambio', '', true);
   IF r->>'estado' <> 'emitida' THEN
     RAISE EXCEPTION 'APROBACION_REQUERIDA: la venta del cambio necesita aprobación (%); haga el cambio dentro de su tope o que lo haga quien aprueba.',
       r->'requiere_aprobacion';
@@ -451,6 +477,359 @@ BEGIN
   UPDATE public.devolucion SET venta_cambio_id = (r->>'venta_id')::uuid WHERE id = d.id;
   RETURN r;
 END $$;
+
+-- Registrar una venta (reemplaza la de 054; misma firma y el mismo código) con un solo cambio (revisión 0.19.0):
+-- el crédito "de vuelta" de un cambio de producto (app.credito_de_cambio, lo anota interno.venta_de_cambio) no pide
+-- aprobación de crédito ni cuenta para el límite del cliente, porque su deuda no sube.
+CREATE OR REPLACE FUNCTION interno.registrar_venta_base(p_empresa_id uuid, p_datos jsonb, p_id_operacion uuid,
+                                             p_cotizacion_id uuid DEFAULT NULL, p_calculo jsonb DEFAULT NULL,
+                                             p_apartado_id uuid DEFAULT NULL)
+RETURNS jsonb
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = '' AS $$
+DECLARE
+  e        public.empresa;
+  v        public.venta;
+  v_caja   public.caja;
+  v_bod    public.bodega;
+  v_cli    public.tercero;
+  v_tdoc   text;
+  v_fecha  date;
+  v_calc   jsonb;
+  v_total  bigint;
+  pj       jsonb;
+  v_forma  text;
+  v_monto  bigint;
+  v_rec    bigint;
+  v_suma   bigint := 0;
+  v_cred   bigint := 0;
+  v_din    bigint := 0;
+  v_ncred  integer := 0;
+  v_nant   integer := 0;
+  v_norm   jsonb := '[]';
+  v_rol    text := public.mi_rol(p_empresa_id);
+  v_vend   uuid;
+  v_req    text[] := '{}';
+  v_td     record;
+  v_saldo  bigint;
+  v_apr    uuid;
+  v_desc   text := '';
+  d        public.cuenta_dinero;
+  k        integer := 0;
+  v_vale   text;
+  v_lote   uuid;
+  v_sf     bigint;
+  v_prev   text := coalesce(current_setting('app.cliente_venta', true), '');
+BEGIN
+  IF p_id_operacion IS NULL THEN
+    RAISE EXCEPTION 'FALTA_ID_OPERACION: cada operación necesita un id_operacion (uuid) único.';
+  END IF;
+  SELECT * INTO v FROM public.venta x WHERE x.empresa_id = p_empresa_id AND x.id_operacion = p_id_operacion;
+  IF v.id IS NOT NULL THEN
+    RETURN interno.venta_respuesta(v, true);
+  END IF;
+  PERFORM interno.exigir_claves(p_datos, ARRAY['cliente_id', 'caja_id', 'bodega_id', 'fecha', 'tipo_documento', 'lineas',
+                                               'descuento_factura', 'pagos', 'vendedor_id', 'nota', 'equipo']);
+  SELECT * INTO e FROM public.empresa x WHERE x.id = p_empresa_id;
+
+  v_caja := interno.caja_de_venta(p_empresa_id, p_datos->'caja_id');
+  v_fecha := coalesce(interno.json_fecha(p_datos->'fecha', 'fecha'), public.hoy_local(p_empresa_id));
+  PERFORM interno.exigir_fecha_contable(p_empresa_id, v_fecha);
+
+  v_tdoc := interno.json_texto(p_datos->'tipo_documento', 'tipo_documento', 20);
+  IF v_tdoc IS NOT NULL AND v_tdoc NOT IN ('factura', 'ticket') THEN
+    RAISE EXCEPTION 'DATO_INVALIDO: el documento es "factura" o "ticket".';
+  END IF;
+  IF interno.regimen_fiscal(p_empresa_id) IS NULL THEN
+    IF v_tdoc = 'factura' THEN
+      RAISE EXCEPTION 'MODULO_INACTIVO: la empresa no tiene un régimen fiscal activo; la venta sale con ticket interno.';
+    END IF;
+    v_tdoc := 'ticket';
+  ELSE
+    v_tdoc := coalesce(v_tdoc, CASE e.documento_venta_modo WHEN 'solo_ticket' THEN 'ticket' ELSE 'factura' END);
+    IF v_tdoc = 'ticket' AND e.documento_venta_modo = 'solo_factura' THEN
+      RAISE EXCEPTION 'NO_PERMITIDO: la empresa emite factura en todas sus ventas (el dueño puede permitir tickets internos en Ajustes).';
+    END IF;
+    IF v_tdoc = 'factura' AND e.documento_venta_modo = 'solo_ticket' THEN
+      RAISE EXCEPTION 'NO_PERMITIDO: la empresa está configurada para emitir solo tickets internos.';
+    END IF;
+  END IF;
+
+  IF coalesce(p_datos->'cliente_id', 'null'::jsonb) <> 'null'::jsonb THEN
+    SELECT * INTO v_cli FROM public.tercero t
+     WHERE t.id = interno.json_uuid(p_datos->'cliente_id', 'cliente_id') AND t.empresa_id = p_empresa_id;
+    IF v_cli.id IS NULL OR NOT v_cli.es_cliente OR NOT v_cli.activo THEN
+      RAISE EXCEPTION 'TERCERO_INVALIDO: el cliente no existe, no está marcado como cliente o está desactivado.';
+    END IF;
+  END IF;
+  v_vend := coalesce(interno.json_uuid(p_datos->'vendedor_id', 'vendedor_id'), auth.uid());
+  IF p_apartado_id IS NULL AND p_cotizacion_id IS NULL THEN
+    -- 0.9.1: el vendedor ELEGIDO AHORA (a quien se le paga la comisión) es un usuario activo de
+    -- ESTA empresa cuyo puesto vende (permiso ventas.vender).
+    IF NOT EXISTS (SELECT 1 FROM public.usuario_empresa ue WHERE ue.empresa_id = p_empresa_id AND ue.user_id = v_vend
+                     AND ue.activo AND ue.rol NOT IN ('proveedor', 'contador')
+                     AND (v_vend = auth.uid()
+                          OR EXISTS (SELECT 1 FROM public.rol_permiso rp WHERE rp.empresa_id = p_empresa_id AND rp.rol = ue.rol
+                                       AND rp.permiso = 'ventas.vender'))) THEN
+      RAISE EXCEPTION 'DATO_INVALIDO: el vendedor no es un usuario activo de la empresa con un puesto que vende (permiso "ventas.vender").';
+    END IF;
+  -- 0.9.2: al completar un apartado o convertir una cotización el vendedor se HEREDA del documento
+  -- guardado (quien lo hizo) y se respeta aunque hoy esté dado de baja o su puesto solo cotice; la
+  -- comisión sigue yendo a él (comisiones.md). Solo se exige que sea de esta empresa.
+  ELSIF NOT EXISTS (SELECT 1 FROM public.usuario_empresa ue WHERE ue.empresa_id = p_empresa_id AND ue.user_id = v_vend) THEN
+    RAISE EXCEPTION 'DATO_INVALIDO: el vendedor del documento no es usuario de esta empresa.';
+  END IF;
+
+  -- 0.18.0: el cálculo sabe quién es el cliente (precio mayorista por cliente).
+  PERFORM set_config('app.cliente_venta', coalesce(v_cli.id::text, ''), true);
+  v_calc := coalesce(p_calculo, interno.calcular_venta(p_empresa_id, v_fecha, p_datos->'lineas', p_datos->'descuento_factura'));
+  PERFORM set_config('app.cliente_venta', v_prev, true);
+  v_total := (v_calc->>'total_centavos')::bigint;
+  IF v_total <= 0 THEN
+    RAISE EXCEPTION 'DATO_INVALIDO: el total de la venta debe ser mayor que cero.';
+  END IF;
+  IF coalesce((v_calc->>'tiene_bienes')::boolean, true) AND NOT public.modulo_esta_activo(p_empresa_id, 'inventario') THEN
+    RAISE EXCEPTION 'MODULO_INACTIVO: el módulo "inventario" no está activo: esta venta solo puede llevar servicios (quite los productos que son bienes).';
+  END IF;
+  IF coalesce(p_datos->'bodega_id', 'null'::jsonb) <> 'null'::jsonb THEN
+    v_bod := interno.bodega_activa(p_empresa_id, interno.json_uuid(p_datos->'bodega_id', 'bodega_id'));
+  ELSIF coalesce((v_calc->>'tiene_bienes')::boolean, true) THEN
+    SELECT b.* INTO v_bod FROM public.bodega b WHERE b.empresa_id = p_empresa_id AND b.sucursal_id = v_caja.sucursal_id AND b.activa
+     ORDER BY b.codigo LIMIT 1;
+    IF v_bod.id IS NULL THEN
+      RAISE EXCEPTION 'BODEGA_INVALIDA: la sucursal de la caja no tiene bodega activa; cree una o indique "bodega_id".';
+    END IF;
+  END IF;
+
+  IF jsonb_typeof(p_datos->'pagos') IS DISTINCT FROM 'array' OR jsonb_array_length(p_datos->'pagos') = 0 THEN
+    RAISE EXCEPTION 'DATO_INVALIDO: indique cómo paga el cliente ("pagos": efectivo, tarjeta, transferencia, crédito o saldo a favor).';
+  END IF;
+  IF jsonb_array_length(p_datos->'pagos') > 10 THEN
+    RAISE EXCEPTION 'DATO_INVALIDO: máximo 10 formas de pago por venta.';
+  END IF;
+  FOR pj IN SELECT * FROM jsonb_array_elements(p_datos->'pagos') LOOP
+    k := k + 1;
+    IF jsonb_typeof(pj) <> 'object' THEN
+      RAISE EXCEPTION 'DATO_INVALIDO: cada pago es {"forma", "monto_centavos"}.';
+    END IF;
+    PERFORM interno.exigir_claves(pj, ARRAY['forma', 'monto_centavos', 'cuenta_dinero_id', 'referencia', 'recibido_centavos',
+                                            'vale', 'saldo_favor_id']);
+    v_forma := interno.json_texto(pj->'forma', 'forma', 20);
+    IF coalesce(v_forma, '') NOT IN ('efectivo', 'tarjeta', 'transferencia', 'credito', 'saldo_favor', 'anticipo') THEN
+      RAISE EXCEPTION 'DATO_INVALIDO: la forma de pago es efectivo, tarjeta, transferencia, credito o saldo_favor.';
+    END IF;
+    IF v_forma = 'anticipo' AND p_apartado_id IS NULL THEN
+      RAISE EXCEPTION 'DATO_INVALIDO: la forma "anticipo" solo se usa al completar un apartado (completar_apartado).';
+    END IF;
+    IF coalesce(pj->'monto_centavos', 'null'::jsonb) = 'null'::jsonb THEN
+      IF jsonb_array_length(p_datos->'pagos') > 1 THEN
+        RAISE EXCEPTION 'PAGO_NO_CUADRA: con varias formas de pago cada una lleva su monto.';
+      END IF;
+      v_monto := v_total;
+    ELSE
+      v_monto := interno.json_centavos(pj->'monto_centavos', 'monto_centavos');
+    END IF;
+    IF v_monto = 0 THEN
+      RAISE EXCEPTION 'DATO_INVALIDO: cada forma de pago lleva un monto mayor que cero.';
+    END IF;
+    v_rec := NULL;
+    IF coalesce(pj->'recibido_centavos', 'null'::jsonb) <> 'null'::jsonb THEN
+      IF v_forma <> 'efectivo' THEN
+        RAISE EXCEPTION 'DATO_INVALIDO: "recibido_centavos" (para el vuelto) solo va en efectivo.';
+      END IF;
+      v_rec := interno.json_centavos(pj->'recibido_centavos', 'recibido_centavos');
+      IF v_rec < v_monto THEN
+        RAISE EXCEPTION 'DATO_INVALIDO: lo recibido (%) es menos que lo que se cobra en efectivo (%).', interno.lempiras(v_rec), interno.lempiras(v_monto);
+      END IF;
+    END IF;
+    IF v_forma IN ('efectivo', 'credito', 'saldo_favor', 'anticipo') AND coalesce(pj->'cuenta_dinero_id', 'null'::jsonb) <> 'null'::jsonb THEN
+      RAISE EXCEPTION 'DATO_INVALIDO: en % no se indica cuenta (el efectivo entra a la caja de la venta).', v_forma;
+    END IF;
+    IF v_forma <> 'saldo_favor' AND (pj ? 'vale' OR pj ? 'saldo_favor_id') THEN
+      RAISE EXCEPTION 'DATO_INVALIDO: "vale" y "saldo_favor_id" solo van con la forma saldo_favor.';
+    END IF;
+    v_vale := NULL; v_lote := NULL;
+    IF v_forma = 'saldo_favor' THEN
+      v_vale := upper(interno.json_texto(pj->'vale', 'vale', 20));
+      v_lote := interno.json_uuid(pj->'saldo_favor_id', 'saldo_favor_id');
+      IF v_vale IS NOT NULL AND v_lote IS NOT NULL THEN
+        RAISE EXCEPTION 'DATO_INVALIDO: indique "vale" o "saldo_favor_id", no los dos.';
+      END IF;
+      -- 0.9.1: "saldo_favor_id" NO se acepta desde la app: solo el cambio de producto (035) usa
+      -- su propio lote. Y aun así el lote debe ser de esta empresa y de este mismo cliente.
+      IF v_lote IS NOT NULL AND v_lote::text IS DISTINCT FROM nullif(current_setting('app.lote_cambio', true), '') THEN
+        RAISE EXCEPTION 'DATO_INVALIDO: "saldo_favor_id" no se acepta en una venta; pague con el saldo a favor del cliente (sin indicar lote) o con el código del vale ("vale").';
+      END IF;
+      IF v_lote IS NOT NULL AND NOT EXISTS (SELECT 1 FROM public.saldo_favor s WHERE s.id = v_lote AND s.empresa_id = p_empresa_id
+                                              AND s.cliente_id IS NOT DISTINCT FROM v_cli.id) THEN
+        RAISE EXCEPTION 'VALE_INVALIDO: ese saldo a favor no es de este cliente en esta empresa.';
+      END IF;
+      IF v_vale IS NULL AND v_lote IS NULL AND v_cli.id IS NULL THEN
+        RAISE EXCEPTION 'CLIENTE_REQUERIDO: para pagar con saldo a favor indique el cliente o el código del vale ("vale").';
+      END IF;
+      -- Revisión previa (se consume al emitir, con el lote bloqueado).
+      v_sf := CASE WHEN v_lote IS NOT NULL THEN interno.saldo_favor_lote(v_lote)
+                   WHEN v_vale IS NOT NULL THEN (SELECT interno.saldo_favor_lote(s.id) FROM public.saldo_favor s
+                                                  WHERE s.empresa_id = p_empresa_id AND s.codigo = v_vale)
+                   ELSE interno.saldo_favor_cliente(p_empresa_id, v_cli.id) END;
+      IF v_vale IS NOT NULL AND v_sf IS NULL THEN
+        RAISE EXCEPTION 'VALE_INVALIDO: el vale % no existe.', v_vale;
+      END IF;
+      IF coalesce(v_sf, 0) < v_monto THEN
+        RAISE EXCEPTION 'SALDO_FAVOR_INSUFICIENTE: el saldo a favor disponible es % y se quieren usar %.', interno.lempiras(coalesce(v_sf, 0)), interno.lempiras(v_monto);
+      END IF;
+    END IF;
+    IF v_forma = 'credito' THEN
+      v_ncred := v_ncred + 1;
+      v_cred := v_cred + v_monto;
+    ELSIF v_forma = 'anticipo' THEN
+      v_nant := v_nant + 1;
+      IF v_monto <> interno.anticipos_apartado(p_apartado_id) THEN
+        RAISE EXCEPTION 'PAGO_NO_CUADRA: el anticipo (%) no es lo abonado al apartado (%).', interno.lempiras(v_monto),
+          interno.lempiras(interno.anticipos_apartado(p_apartado_id));
+      END IF;
+    ELSIF v_forma IN ('efectivo', 'tarjeta', 'transferencia') THEN
+      v_din := v_din + v_monto;
+    END IF;
+    v_suma := v_suma + v_monto;
+    v_norm := v_norm || jsonb_build_object('linea', k, 'forma', v_forma, 'monto', v_monto, 'recibido', v_rec,
+      'cuenta', interno.json_uuid(pj->'cuenta_dinero_id', 'cuenta_dinero_id'), 'referencia', interno.json_texto(pj->'referencia', 'referencia', 100),
+      'vale', v_vale, 'saldo_favor_id', v_lote);
+  END LOOP;
+  IF v_ncred > 1 OR v_nant > 1 THEN
+    RAISE EXCEPTION 'DATO_INVALIDO: el crédito (o el anticipo) va en una sola forma de pago.';
+  END IF;
+  IF v_suma <> v_total THEN
+    RAISE EXCEPTION 'PAGO_NO_CUADRA: las formas de pago suman % y el total de la venta es % (diferencia %).',
+      interno.lempiras(v_suma), interno.lempiras(v_total), interno.lempiras(v_suma - v_total);
+  END IF;
+  IF v_cred > 0 AND v_cli.id IS NULL THEN
+    RAISE EXCEPTION 'CLIENTE_REQUERIDO: una venta al crédito necesita cliente (no puede ser Consumidor final).';
+  END IF;
+  IF v_suma > v_cred AND NOT interno.puede_cobrar(p_empresa_id) THEN
+    RAISE EXCEPTION 'SIN_PERMISO: su rol no tiene el permiso "ventas.cobrar"; haga una cotización y el cajero la cobra (o el dueño permite que el vendedor cobre).';
+  END IF;
+  IF v_din > 0 AND NOT public.modulo_esta_activo(p_empresa_id, 'dinero') THEN
+    RAISE EXCEPTION 'MODULO_INACTIVO: el módulo "dinero" no está activo para esta empresa (el cobro entra a una cuenta de dinero).';
+  END IF;
+
+  PERFORM interno.reservar_operacion(p_empresa_id, p_id_operacion, 'venta');
+  SELECT * INTO v FROM public.venta x WHERE x.empresa_id = p_empresa_id AND x.id_operacion = p_id_operacion;
+  IF v.id IS NOT NULL THEN
+    RETURN interno.venta_respuesta(v, true);
+  END IF;
+
+  -- ¿Necesita aprobación? (el dueño no tiene topes; el descuento de un apartado ya se revisó al crearlo)
+  IF v_rol <> 'dueno' THEN
+    SELECT * INTO v_td FROM interno.tope_descuento(p_empresa_id, v_rol);
+    IF p_apartado_id IS NULL AND (v_calc->>'descuento_manual_porcentaje')::numeric > v_td.sin_aprobacion THEN
+      v_req := v_req || 'descuento'::text;
+      v_desc := 'descuento de ' || (v_calc->>'descuento_manual_porcentaje') || ' % (su tope: ' || v_td.sin_aprobacion || ' %)';
+    -- 0.9.1: el tope también vale POR LÍNEA (100 % en una línea chica dentro de una factura grande).
+    ELSIF p_apartado_id IS NULL AND interno.descuento_linea_sobre_tope(v_calc->'lineas', v_td.sin_aprobacion) IS NOT NULL THEN
+      v_req := v_req || 'descuento'::text;
+      v_desc := 'descuento de ' || interno.descuento_linea_sobre_tope(v_calc->'lineas', v_td.sin_aprobacion)
+                || ' % en una línea (su tope: ' || v_td.sin_aprobacion || ' %)';
+    END IF;
+    -- 0.19.0: el crédito "de vuelta" de un cambio (la deuda que la devolución rebajó vuelve a la venta nueva) no
+    -- cuenta para la regla de crédito ni para el límite: la deuda del cliente no sube (app.credito_de_cambio).
+    IF v_cred > 0 AND v_cred > coalesce(nullif(current_setting('app.credito_de_cambio', true), '')::bigint, 0) THEN
+      v_saldo := interno.saldo_cxc_cliente(p_empresa_id, v_cli.id);
+      IF e.credito_politica = 'siempre_aprobacion' OR v_cli.limite_credito_centavos = 0
+         OR v_saldo + v_cred > v_cli.limite_credito_centavos THEN
+        v_req := v_req || 'credito'::text;
+        v_desc := v_desc || CASE WHEN v_desc <> '' THEN '; ' ELSE '' END || 'crédito de ' || interno.lempiras(v_cred)
+          || CASE WHEN e.credito_politica = 'siempre_aprobacion' THEN ' (todo crédito pide aprobación)'
+                  WHEN v_cli.limite_credito_centavos = 0 THEN ' (cliente sin límite de crédito)'
+                  ELSE ' (debe ' || interno.lempiras(v_saldo) || ', límite ' || interno.lempiras(v_cli.limite_credito_centavos) || ')' END;
+      END IF;
+    END IF;
+  END IF;
+
+  v.id := gen_random_uuid();
+  v.numero := interno.siguiente_numero(p_empresa_id, 'venta');
+  IF cardinality(v_req) > 0 THEN
+    v_apr := gen_random_uuid();
+    INSERT INTO public.aprobacion (id, empresa_id, numero, tipo, documento_tipo, documento_id, monto_centavos, descripcion,
+                                   solicitado_por, rol_solicitante)
+    VALUES (v_apr, p_empresa_id, interno.siguiente_numero(p_empresa_id, 'aprobacion'), 'venta', 'venta', v.id, v_total,
+            'Venta #' || v.numero || ' a ' || coalesce(v_cli.nombre, 'Consumidor final') || ' por ' || interno.lempiras(v_total) || ': ' || v_desc,
+            auth.uid(), v_rol);
+  END IF;
+
+  INSERT INTO public.venta (id, empresa_id, numero, sucursal_id, caja_id, bodega_id, fecha_contable, tipo_documento,
+    emisor_nombre, emisor_rtn, cliente_id, cliente_nombre, cliente_rtn, vendedor_id, cotizacion_id,
+    condicion, credito_centavos, plazo_dias,
+    descuento_factura_porcentaje, descuento_factura_monto_centavos,
+    subtotal_centavos, descuento_centavos, descuento_promocion_centavos, descuento_manual_centavos, descuento_manual_porcentaje,
+    gravado_centavos, exento_centavos, exonerado_centavos, impuesto_centavos, desglose_impuestos, total_centavos,
+    estado, requiere_aprobacion, aprobacion_id, nota, equipo, id_operacion, creado_por, apartado_id)
+  VALUES (v.id, p_empresa_id, v.numero, v_caja.sucursal_id, v_caja.id, v_bod.id, v_fecha, v_tdoc,
+    e.nombre, e.rtn, v_cli.id, coalesce(v_cli.nombre, 'Consumidor final'), v_cli.rtn, v_vend, p_cotizacion_id,
+    CASE WHEN v_cred > 0 THEN 'credito' ELSE 'contado' END, v_cred, CASE WHEN v_cred > 0 THEN v_cli.plazo_dias END,
+    (v_calc->>'descuento_factura_porcentaje')::numeric, (v_calc->>'descuento_factura_monto_centavos')::bigint,
+    (v_calc->>'subtotal_centavos')::bigint, (v_calc->>'descuento_centavos')::bigint,
+    (v_calc->>'descuento_promocion_centavos')::bigint, (v_calc->>'descuento_manual_centavos')::bigint,
+    (v_calc->>'descuento_manual_porcentaje')::numeric,
+    (v_calc->>'gravado_centavos')::bigint, (v_calc->>'exento_centavos')::bigint, (v_calc->>'exonerado_centavos')::bigint,
+    (v_calc->>'impuesto_centavos')::bigint, v_calc->'desglose_impuestos', v_total,
+    CASE WHEN cardinality(v_req) > 0 THEN 'pendiente_aprobacion' ELSE 'por_emitir' END, v_req, v_apr,
+    interno.json_texto(p_datos->'nota', 'nota', 500), interno.equipo(p_datos), p_id_operacion, auth.uid(), p_apartado_id)
+  RETURNING * INTO v;
+
+  INSERT INTO public.venta_linea (empresa_id, venta_id, linea, producto_id, descripcion, cantidad, precio_unitario_centavos,
+    precio_incluye_isv, tipo_impuesto, impuesto_porcentaje, impuesto_clase, es_servicio, costo_estimado_centavos,
+    promocion_id, descuento_linea_porcentaje, descuento_linea_monto_centavos,
+    bruto_centavos, descuento_promocion_precio_centavos, descuento_linea_centavos, descuento_factura_centavos, neto_centavos,
+    subtotal_centavos, descuento_promocion_centavos, descuento_centavos, base_centavos, impuesto_centavos, total_centavos,
+    precio_tipo, precio_normal_centavos)
+  SELECT p_empresa_id, v.id, x.linea, x.producto_id, x.descripcion, x.cantidad, x.precio_unitario_centavos,
+         x.precio_incluye_isv, x.tipo_impuesto, x.impuesto_porcentaje, x.impuesto_clase, x.es_servicio, x.costo_estimado_centavos,
+         x.promocion_id, x.descuento_linea_porcentaje, x.descuento_linea_monto_centavos,
+         x.bruto_centavos, x.descuento_promocion_precio_centavos, x.descuento_linea_centavos, x.descuento_factura_centavos,
+         x.neto_centavos, x.subtotal_centavos, x.descuento_promocion_centavos, x.descuento_centavos, x.base_centavos,
+         x.impuesto_centavos, x.total_centavos,
+         coalesce(x.precio_tipo, 'normal'), x.precio_normal_centavos
+    FROM jsonb_to_recordset(v_calc->'lineas') AS x(linea smallint, producto_id uuid, descripcion text, cantidad numeric,
+         precio_unitario_centavos bigint, precio_incluye_isv boolean, tipo_impuesto text, impuesto_porcentaje numeric,
+         impuesto_clase text, es_servicio boolean, costo_estimado_centavos bigint, promocion_id uuid,
+         descuento_linea_porcentaje numeric, descuento_linea_monto_centavos bigint, bruto_centavos bigint,
+         descuento_promocion_precio_centavos bigint, descuento_linea_centavos bigint, descuento_factura_centavos bigint,
+         neto_centavos bigint, subtotal_centavos bigint, descuento_promocion_centavos bigint, descuento_centavos bigint,
+         base_centavos bigint, impuesto_centavos bigint, total_centavos bigint, precio_tipo text, precio_normal_centavos bigint);
+
+  FOR pj IN SELECT * FROM jsonb_array_elements(v_norm) LOOP
+    d := NULL;
+    IF pj->>'forma' = 'efectivo' THEN
+      d := interno.cuenta_efectivo_cobro(p_empresa_id, v_caja.id);
+    ELSIF pj->>'forma' IN ('tarjeta', 'transferencia') THEN
+      d := interno.cuenta_cobro_venta(p_empresa_id, pj->>'forma', (pj->>'cuenta')::uuid);
+    END IF;
+    INSERT INTO public.venta_pago (empresa_id, venta_id, linea, forma, monto_centavos, cuenta_dinero_id, turno_id, referencia,
+                                   recibido_centavos, vuelto_centavos, estado_transferencia, vale, saldo_favor_id)
+    VALUES (p_empresa_id, v.id, (pj->>'linea')::smallint, pj->>'forma', (pj->>'monto')::bigint, d.id,
+            CASE WHEN pj->>'forma' = 'efectivo' THEN interno.turno_de_cuenta(d.id) END, pj->>'referencia',
+            (pj->>'recibido')::bigint, (pj->>'recibido')::bigint - (pj->>'monto')::bigint,
+            CASE WHEN pj->>'forma' = 'transferencia' THEN 'por_confirmar' END, pj->>'vale', (pj->>'saldo_favor_id')::uuid);
+  END LOOP;
+
+  IF v.estado = 'por_emitir' THEN
+    v := interno.emitir_venta(v.id, v_fecha, p_id_operacion);
+  END IF;
+  RETURN interno.venta_respuesta(v, false);
+END $$;
+
+-- Revisión 0.19.0: la venta nueva de un cambio con deuda vence cuando vencía la original (app.vence_de_cambio, lo
+-- anota interno.venta_de_cambio): la antigüedad de saldos no se reinicia. "vence_el" es de lo que se llena al emitir.
+CREATE FUNCTION interno.vence_de_cambio() RETURNS trigger
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = '' AS $$
+BEGIN
+  IF OLD.estado IS DISTINCT FROM 'emitida' AND NEW.estado = 'emitida' AND NEW.credito_centavos > 0
+     AND nullif(current_setting('app.vence_de_cambio', true), '') IS NOT NULL THEN
+    NEW.vence_el := current_setting('app.vence_de_cambio', true)::date;
+  END IF;
+  RETURN NEW;
+END $$;
+CREATE TRIGGER a_vence_de_cambio BEFORE UPDATE ON public.venta FOR EACH ROW EXECUTE FUNCTION interno.vence_de_cambio();
 
 -- Respuesta de una devolución (reemplaza la de 035; misma firma): además el ajuste mayorista.
 CREATE OR REPLACE FUNCTION interno.devolucion_respuesta(d public.devolucion, p_duplicado boolean) RETURNS jsonb
@@ -541,6 +920,8 @@ DECLARE
   v_tope  bigint;
   v_opc   jsonb := '[]';
   v_ex    boolean;
+  v_garp  boolean := false;
+  v_res   jsonb;
 BEGIN
   SELECT * INTO v FROM public.venta WHERE id = p_venta_id;
   IF v.id IS NULL THEN
@@ -551,9 +932,19 @@ BEGIN
   IF jsonb_typeof(p_datos) IS DISTINCT FROM 'object' THEN
     RAISE EXCEPTION 'DATO_INVALIDO: faltan los datos del cambio.';
   END IF;
-  PERFORM interno.exigir_claves(p_datos, ARRAY['lineas', 'cambio', 'fecha']);
+  PERFORM interno.exigir_claves(p_datos, ARRAY['lineas', 'cambio', 'fecha', 'reclamo_id']);
   IF v.estado <> 'emitida' THEN
     RAISE EXCEPTION 'DEVOLUCION_INVALIDA: solo se devuelve de una venta emitida (esta está %).', v.estado;
+  END IF;
+  -- Revisión 0.19.0: el cambio por garantía (reclamo de esta venta) se calcula como lo registra
+  -- resolver_reclamo_garantia: sin ajuste mayorista.
+  IF coalesce(p_datos->'reclamo_id', 'null'::jsonb) <> 'null'::jsonb THEN
+    IF NOT EXISTS (SELECT 1 FROM public.garantia_reclamo g WHERE g.id = interno.json_uuid(p_datos->'reclamo_id', 'reclamo_id')
+                    AND g.venta_id = v.id) THEN
+      RAISE EXCEPTION 'GARANTIA_INVALIDA: el reclamo no es de esta venta.';
+    END IF;
+    v_garp := true;
+    PERFORM set_config('app.devolucion_garantia', '1', true);
   END IF;
   SELECT * INTO e FROM public.empresa x WHERE x.id = v.empresa_id;
   IF NOT 'cambio_producto' = ANY (e.devolucion_tipos) THEN
@@ -596,7 +987,10 @@ BEGIN
   IF v_rol <> 'dueno' THEN
     SELECT x.sin_aprobacion INTO v_tope FROM interno.tope_rol(v.empresa_id, v_rol, 'devolucion') x;
   END IF;
-  RETURN jsonb_build_object(
+  IF v_garp THEN
+    PERFORM set_config('app.devolucion_garantia', '', true);
+  END IF;
+  v_res := jsonb_build_object(
     'venta_id', v.id, 'numero_documento', v.numero_documento, 'cliente_id', v.cliente_id, 'cliente_nombre', v.cliente_nombre,
     'fecha', to_char(v_fecha, 'YYYY-MM-DD'),
     'devuelto', jsonb_build_object('lineas', (SELECT coalesce(jsonb_agg(jsonb_build_object('linea_venta', y->'linea_venta',
@@ -621,6 +1015,7 @@ BEGIN
     'nota', CASE WHEN v_ex
               THEN 'Cálculo previo: no se guardó nada. En este negocio el cambio debe valer exactamente lo devuelto; si no, se devuelve todo el dinero.'
               ELSE 'Cálculo previo: no se guardó nada. Lo devuelto primero rebaja lo que la venta todavía debe; lo demás paga el producto nuevo.' END);
+  RETURN v_res || jsonb_build_object('garantia', v_garp);
 END $$;
 
 -- Nota de crédito impresa (reemplaza la de 035; misma firma): por línea "valor_centavos" y
@@ -680,6 +1075,130 @@ END $$;
 -- pasa a interno sin cambios; la pública lo anota (app.devolucion_garantia) y la llama.
 ALTER FUNCTION public.resolver_reclamo_garantia(uuid, jsonb, uuid) SET SCHEMA interno;
 ALTER FUNCTION interno.resolver_reclamo_garantia(uuid, jsonb, uuid) RENAME TO resolver_reclamo_garantia_054;
+-- La de 054, ya en interno, con un solo cambio (revisión 0.19.0): el "precio de garantía" es el valor proporcional
+-- de las unidades del reclamo (un ajuste mayorista ya cobrado no se le devuelve al cliente).
+CREATE OR REPLACE FUNCTION interno.resolver_reclamo_garantia_054(p_reclamo_id uuid, p_datos jsonb, p_id_operacion uuid) RETURNS jsonb
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = '' AS $$
+DECLARE
+  r      public.garantia_reclamo;
+  v_res  text;
+  v_dev  jsonb;
+  v_gas  jsonb;
+  v_c    jsonb;
+  d      jsonb;
+  v_nota text;
+  vl     public.venta_linea;
+  v_mismo boolean;
+  q0 numeric; b0 bigint; i0 bigint;
+  v_gar  bigint;
+  v_deu  bigint;
+BEGIN
+  SELECT * INTO r FROM public.garantia_reclamo WHERE id = p_reclamo_id;
+  IF r.id IS NULL THEN
+    RAISE EXCEPTION 'NO_EXISTE: el reclamo de garantía no existe.';
+  END IF;
+  PERFORM interno.exigir_escritura(r.empresa_id, 'garantias.resolver', 'ventas');
+  PERFORM interno.exigir_sucursal(r.empresa_id, r.sucursal_id);
+  IF p_id_operacion IS NULL THEN
+    RAISE EXCEPTION 'FALTA_ID_OPERACION: cada operación necesita un id_operacion (uuid) único.';
+  END IF;
+  PERFORM interno.exigir_tipo_operacion(r.empresa_id, p_id_operacion, 'resolucion_garantia');
+  IF r.resolucion_id_operacion = p_id_operacion THEN
+    RETURN interno.reclamo_respuesta(r, true);
+  END IF;
+  IF jsonb_typeof(p_datos) IS DISTINCT FROM 'object' THEN
+    RAISE EXCEPTION 'DATO_INVALIDO: los datos deben ser un objeto JSON.';
+  END IF;
+  PERFORM interno.exigir_claves(p_datos, ARRAY['resolucion', 'nota', 'costo_reparacion', 'cambio', 'destino', 'cuenta_dinero_id', 'caja_id']);
+  v_res := interno.json_texto(p_datos->'resolucion', 'resolucion', 20);
+  IF v_res IS NULL OR v_res NOT IN ('reparado', 'cambiado', 'devuelto') THEN
+    RAISE EXCEPTION 'DATO_INVALIDO: la resolución es "reparado", "cambiado" o "devuelto".';
+  END IF;
+  IF v_res <> 'reparado' AND p_datos ? 'costo_reparacion' THEN
+    RAISE EXCEPTION 'DATO_INVALIDO: el costo de reparación solo va con "reparado".';
+  END IF;
+  IF v_res <> 'cambiado' AND p_datos ? 'cambio' THEN
+    RAISE EXCEPTION 'DATO_INVALIDO: "cambio" solo va con "cambiado".';
+  END IF;
+  v_nota := interno.json_texto(p_datos->'nota', 'nota', 500);
+
+  PERFORM interno.reservar_operacion(r.empresa_id, p_id_operacion, 'resolucion_garantia');
+  SELECT * INTO r FROM public.garantia_reclamo WHERE id = p_reclamo_id FOR UPDATE;
+  IF r.resolucion_id_operacion = p_id_operacion THEN
+    RETURN interno.reclamo_respuesta(r, true);
+  END IF;
+  IF r.estado NOT IN ('recibido', 'en_revision') THEN
+    RAISE EXCEPTION 'GARANTIA_INVALIDA: el reclamo #% ya está "%".', r.numero, r.estado;
+  END IF;
+
+  IF v_res = 'reparado' AND coalesce(p_datos->'costo_reparacion', 'null'::jsonb) <> 'null'::jsonb THEN
+    v_c := p_datos->'costo_reparacion';
+    PERFORM interno.exigir_claves(v_c, ARRAY['cuenta_dinero_id', 'categoria_id', 'monto_centavos']);
+    v_gas := public.registrar_gasto(r.empresa_id, jsonb_build_object('cuenta_dinero_id', v_c->'cuenta_dinero_id',
+               'categoria_id', v_c->'categoria_id', 'monto_centavos', v_c->'monto_centavos',
+               'descripcion', 'Reparación por garantía, reclamo #' || r.numero || ' (' || r.descripcion_producto || ')'),
+               md5(p_id_operacion::text || ':gasto_garantia')::uuid);
+    IF (SELECT g.estado FROM public.gasto g WHERE g.id = (v_gas->>'gasto_id')::uuid) IS DISTINCT FROM 'aplicado' THEN
+      RAISE EXCEPTION 'APROBACION_REQUERIDA: el costo de la reparación (%) pasa lo que su puesto registra sin aprobación; el reclamo no se cerró. Que lo resuelva quien aprueba (o registre el reclamo como reparado sin costo y el gasto aparte).',
+        interno.lempiras((v_c->>'monto_centavos')::bigint);
+    END IF;
+  ELSIF v_res IN ('cambiado', 'devuelto') THEN
+    d := jsonb_build_object('lineas', jsonb_build_array(jsonb_build_object('linea', r.linea, 'cantidad', r.cantidad)),
+           'motivo', 'Garantía, reclamo #' || r.numero || ': ' || r.motivo,
+           'destino', CASE v_res WHEN 'cambiado' THEN 'cambio' ELSE coalesce(p_datos->>'destino', 'dinero') END)
+         || CASE WHEN p_datos ? 'cuenta_dinero_id' THEN jsonb_build_object('cuenta_dinero_id', p_datos->'cuenta_dinero_id') ELSE '{}' END
+         || CASE WHEN p_datos ? 'caja_id' THEN jsonb_build_object('caja_id', p_datos->'caja_id') ELSE '{}' END;
+    IF v_res = 'cambiado' THEN
+      d := d || jsonb_build_object('cambio', coalesce(p_datos->'cambio',
+             jsonb_build_object('lineas', jsonb_build_array(jsonb_build_object('producto_id', r.producto_id, 'cantidad', r.cantidad)))));
+      -- ¿Se entrega lo mismo (mismo producto y cantidad, una línea)? Entonces con precio de garantía:
+      -- lo que vale lo devuelto, con la misma cuenta que registrar_devolucion (cantidad acumulada).
+      v_mismo := jsonb_typeof(d->'cambio'->'lineas') = 'array' AND jsonb_array_length(d->'cambio'->'lineas') = 1
+                 AND d->'cambio'->'lineas'->0->>'producto_id' = r.producto_id::text
+                 AND jsonb_typeof(d->'cambio'->'lineas'->0->'cantidad') = 'number'
+                 AND (d->'cambio'->'lineas'->0->>'cantidad')::numeric = r.cantidad;
+      IF v_mismo THEN
+        SELECT * INTO vl FROM public.venta_linea x WHERE x.venta_id = r.venta_id AND x.linea = r.linea;
+        SELECT coalesce(sum(x.cantidad), 0), coalesce(sum(x.base_centavos), 0), coalesce(sum(x.impuesto_centavos), 0)
+          INTO q0, b0, i0
+          FROM public.devolucion_linea x JOIN public.devolucion y ON y.id = x.devolucion_id
+         WHERE x.venta_linea_id = vl.id AND y.estado IN ('aplicada', 'pendiente_aprobacion', 'por_aplicar');
+        -- 0.19.0: el valor proporcional de las unidades de la garantía (lo pagado por ellas). Un ajuste mayorista
+        -- que ya se cobró en una devolución anterior se mantiene (igual que interno.montos_devolucion en garantía).
+        v_gar := round(vl.total_centavos * (q0 + r.cantidad) / vl.cantidad)::bigint - round(vl.total_centavos * q0 / vl.cantidad)::bigint;
+        PERFORM set_config('app.precio_garantia', jsonb_build_object('producto_id', r.producto_id, 'cantidad', r.cantidad,
+                                                                     'total_centavos', v_gar)::text, true);
+        -- Venta al crédito todavía sin pagar: la devolución primero rebaja esa deuda; lo que rebajó se vuelve a
+        -- deber en la venta del cambio (al crédito). El cliente queda debiendo lo mismo que antes.
+        IF NOT (d->'cambio' ? 'pagos') THEN
+          v_deu := least(v_gar, greatest(interno.saldo_documento_cxc(r.venta_id), 0));
+          IF v_deu > 0 THEN
+            d := jsonb_set(d, '{cambio,pagos}', jsonb_build_array(jsonb_build_object('forma', 'credito', 'monto_centavos', v_deu)));
+          END IF;
+        END IF;
+      END IF;
+    END IF;
+    v_dev := public.registrar_devolucion(r.venta_id, d, md5(p_id_operacion::text || ':devolucion_garantia')::uuid);
+    PERFORM set_config('app.precio_garantia', '', true);
+    IF (SELECT x.estado FROM public.devolucion x WHERE x.id = (v_dev->>'devolucion_id')::uuid) IS DISTINCT FROM 'aplicada' THEN
+      RAISE EXCEPTION 'APROBACION_REQUERIDA: la devolución (%) pasa lo que su puesto devuelve sin aprobación; el reclamo no se cerró. Que lo resuelva quien aprueba.',
+        interno.lempiras((v_dev->>'total_centavos')::bigint);
+    END IF;
+  END IF;
+
+  PERFORM set_config('app.motivo', coalesce(v_nota, initcap(v_res)), true);
+  UPDATE public.garantia_reclamo SET estado = 'resuelto', resolucion = v_res, resolucion_nota = v_nota,
+         devolucion_id = (v_dev->>'devolucion_id')::uuid, gasto_id = (v_gas->>'gasto_id')::uuid,
+         costo_reparacion_centavos = CASE WHEN v_gas IS NOT NULL THEN (v_c->>'monto_centavos')::bigint END,
+         resuelto_por = auth.uid(), resuelto_en = now(), resolucion_id_operacion = p_id_operacion
+   WHERE id = r.id;
+  INSERT INTO public.garantia_reclamo_evento (empresa_id, reclamo_id, estado_anterior, estado_nuevo, nota, id_operacion, creado_por)
+  VALUES (r.empresa_id, r.id, r.estado, 'resuelto', coalesce(v_nota, initcap(v_res)), p_id_operacion, auth.uid());
+  PERFORM set_config('app.motivo', '', true);
+  SELECT * INTO r FROM public.garantia_reclamo WHERE id = r.id;
+  RETURN interno.reclamo_respuesta(r, false) || jsonb_strip_nulls(jsonb_build_object('devolucion', v_dev, 'gasto', v_gas));
+END $$;
+
 CREATE FUNCTION public.resolver_reclamo_garantia(p_reclamo_id uuid, p_datos jsonb, p_id_operacion uuid) RETURNS jsonb
 LANGUAGE plpgsql SECURITY DEFINER SET search_path = '' AS $$
 DECLARE
@@ -893,6 +1412,7 @@ CREATE OR REPLACE VIEW public.v_devolucion AS
 -- =====================================================================
 REVOKE EXECUTE ON FUNCTION
   interno.mayorista_de_linea(), interno.montos_devolucion(public.venta, jsonb), interno.movimientos_socio(uuid, uuid),
+  interno.vence_de_cambio(),
   interno.resolver_reclamo_garantia_054(uuid, jsonb, uuid), interno.configurar_empresa_037(uuid, jsonb, text)
 FROM PUBLIC, anon, authenticated, service_role;
 -- Lecturas.

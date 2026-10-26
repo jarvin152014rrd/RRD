@@ -463,5 +463,6 @@ puede cambiarla (regla del dueño: nunca se suman).
   **encendida por defecto** (para la empresa del dueño y para las nuevas); otro cliente que quiera el cambio con
   diferencia de antes la apaga (solo el dueño, con motivo). El cambio por garantía con "precio de garantía" sigue igual.
   Decisión técnica: en una venta al crédito sin pagar, la parte que la devolución rebajó de la deuda se vuelve a deber
-  en la venta nueva (el cliente debe lo mismo que antes). En la app: contador "Falta L X / Sobra L X", el botón se
+  en la venta nueva, sin pedir aprobación de crédito y con el mismo vencimiento (el cliente debe lo mismo que antes).
+  El dueño enciende o apaga la regla en Ajustes > Reglas y topes (con motivo). En la app: contador "Falta L X / Sobra L X", el botón se
   activa solo con la cuenta exacta y al lado "Devolver todo el dinero".

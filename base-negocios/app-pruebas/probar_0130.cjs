@@ -280,6 +280,27 @@ async function abrirDevolucion(p, numero) {
     await p.waitForSelector('#t-fondos');
   });
 
+  await prueba('Ajustes > Reglas y topes: el dueño apaga y enciende "Cambio exacto" con motivo', async () => {
+    const p = usar(dueno.p);
+    const valor = () => sql(DUENO, `(SELECT cambio_exacto FROM public.empresa WHERE id = demo.id('EMPRESA'))`);
+    const esperarValor = async (v) => { for (let i = 0; i < 50 && valor() !== v; i++) await p.waitForTimeout(200); return valor() === v; };
+    await p.goto(URL_APP + '/#/ajustes/reglas');
+    await p.waitForSelector('#regla-cambio-exacto');
+    afirmar(await p.locator('#regla-cambio-exacto').isChecked(), 'debía venir encendido');
+    await p.uncheck('#regla-cambio-exacto');
+    await p.click('#reglas-guardar');
+    await p.fill('dialog textarea[name=motivo]', 'Prueba: cambio con diferencia');
+    await p.click('dialog button[type=submit]');
+    afirmar(await esperarValor('false'), 'no se apagó');
+    await p.waitForTimeout(1000);   // la pantalla se vuelve a pintar después de guardar
+    await p.waitForFunction(() => document.querySelector('#regla-cambio-exacto') && !document.querySelector('#regla-cambio-exacto').checked && !document.querySelector('dialog[open]'));
+    await p.check('#regla-cambio-exacto');
+    await p.click('#reglas-guardar');
+    await p.fill('dialog textarea[name=motivo]', 'Vuelve la regla del dueño');
+    await p.click('dialog button[type=submit]');
+    afirmar(await esperarValor('true'), 'no se encendió');
+  });
+
   await prueba('celular: estado de cuenta del socio y cambio exacto sin salirse de la pantalla', async () => {
     const { ctx, p } = await nueva(celular);
     usar(p);

@@ -6,7 +6,7 @@ Números: MAYOR.MENOR.ARREGLO (ver `docs/CONVENCIONES.md`).
 
 ## 0.19.0 (2026-10-26) — Decisiones del dueño: devolución con mayorista, estado de cuenta del socio y cambio exacto
 
-Migración nueva 055 (las 001-054 no se tocaron). 150 pruebas (nuevas 147 a 150; la 145 queda fija en 0.18.0). Todas
+Migración nueva 055 (las 001-054 no se tocaron). 151 pruebas (nuevas 147 a 151; la 145 queda fija en 0.18.0). Todas
 pasan también con `probar.sh --paquete`. Para quien ya tiene 0.18.0 en Supabase: `dist/actualizar_supabase_0.19.0.sql`
 (una sola pegada; ver `docs/SUPABASE.md`, "Actualizar de 0.18.0 a 0.19.0"). Decisiones en `docs/REQUISITOS.md`,
 "Decisiones del dueño 0.19.0".
@@ -35,8 +35,18 @@ pasan también con `probar.sh --paquete`. Para quien ya tiene 0.18.0 en Supabase
   `sobra_centavos`, `a_credito_centavos` y `puede_devolver_dinero`; ahora calcula la venta nueva con el cliente de la
   venta (antes, con un cliente mayorista, el previo y el registro podían no coincidir). Error nuevo `CAMBIO_NO_EXACTO`.
 - **Mayorista y promociones no se suman:** confirmado por el dueño; ya estaba en 0.18.0 (sin cambios).
-- Pruebas: 147 (devolución con mayorista), 148 (estado de cuenta del socio), 149 (cambio exacto) y 150 (de 0.18.0 a
-  0.19.0 como en Supabase). Las pruebas 97, 99, 136 y 146 prueban el cambio con diferencia: apagan la regla al empezar.
+- **Revisión de 0.19.0 (dentro de la misma 055):**
+  - Una devolución nueva sobre una línea con otra **pendiente de aprobación** se rechaza ("resuélvala primero"): si la
+    pendiente se rechazaba después, la nueva quedaba pagada de más con el ajuste mayorista.
+  - **Garantía** después de una devolución con ajuste: solo el valor proporcional de esas unidades (el ajuste ya cobrado
+    no se le devuelve al cliente); el "precio de garantía" de `resolver_reclamo_garantia` usa la misma cuenta.
+  - `calcular_cambio_previo` acepta `"reclamo_id"`: el previo del cambio por garantía coincide con lo que se guarda.
+  - El crédito "de vuelta" de un cambio (la deuda que la devolución rebajó) no pide aprobación de crédito ni cuenta para
+    el límite (`registrar_venta_base` de 054 reemplazado con ese único cambio), y la venta nueva **vence cuando vencía la
+    original** (la antigüedad no se reinicia).
+  - Línea de antes de 0.19.0 vendida con menos que "desde cantidad": mayorista "por cliente" (sin ajuste).
+- Pruebas: 147 (devolución con mayorista), 148 (estado de cuenta del socio), 149 (cambio exacto), 150 (de 0.18.0 a
+  0.19.0 como en Supabase) y 151 (revisión). Las pruebas 97, 99, 136 y 146 prueban el cambio con diferencia: apagan la regla al empezar.
 
 ## 0.18.0 (2026-10-25) — Precio mayorista, garantías, cheques y antigüedad de saldos
 

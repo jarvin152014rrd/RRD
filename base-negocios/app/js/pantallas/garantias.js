@@ -7,7 +7,7 @@ import { rpc, leer, escribir, nuevoId } from '../api.js';
 import { empresaId, puede } from '../sesion.js';
 import { dinero, fecha, cantidad, aCentavos, aNumero } from '../formato.js';
 import { h, aviso, cajaError, errorSimple, campo, conBoton, titulo, filaIcono, chip, chipEstado, estadoVacio, mensaje, pedirMotivo } from '../ui.js';
-import { cuentasDinero, cuentasQuePagan, categoriasGasto, productos, filtrar } from '../datos.js';
+import { cuentasDinero, cuentasQuePagan, categoriasGasto, productos, filtrar, nucleoAlMenos } from '../datos.js';
 import { nombreForma } from '../comprobante.js';
 import { limpiarImprimible } from '../imprimible.js';
 
@@ -249,7 +249,10 @@ function cambioPorOtro(r, pagan) {
     elegido.textContent = `${cantidad(r.cantidad)} x ${p.nombre}`;
     cifras.replaceChildren(h('p', { class: 'cargando', role: 'status' }, 'Calculando…'));
     try {
-      const x = await rpc('calcular_cambio_previo', { p_venta_id: r.venta_id, p_datos: datosPrevio() });
+      // Núcleo 0.19.0: con el reclamo, el previo se calcula como la garantía (sin ajuste mayorista), igual que al guardar.
+      const datos = datosPrevio();
+      if (await nucleoAlMenos('0.19.0')) datos.reclamo_id = r.reclamo_id;
+      const x = await rpc('calcular_cambio_previo', { p_venta_id: r.venta_id, p_datos: datos });
       if (est.producto !== p) return;
       est.previa = x;
       pintar(x);

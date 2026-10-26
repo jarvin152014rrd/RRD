@@ -2,6 +2,7 @@
 // (configurar_tope_descuento), tope de gasto sin aprobación (configurar_tope_rol), tope de
 // crédito, política de crédito, vendedor que cobra, turnos de caja obligatorios y doble
 // aprobación (configurar_empresa). Todo con motivo y en la bitácora.
+// app 0.13.1 (núcleo 0.19.0): "Cambio exacto" (empresa.cambio_exacto). Con un núcleo 0.18.0 no se muestra.
 import { rpc, leer } from '../api.js';
 import { empresaId } from '../sesion.js';
 import { dinero, aCentavos, paraCampo, aPorcentaje, comaInvalida, MENSAJE_COMA } from '../formato.js';
@@ -26,6 +27,8 @@ export async function mostrar(vista, ctx) {
   const vendedorCobra = chk('regla-vendedor-cobra', emp.vendedor_cobra);
   const turnos = chk('regla-turnos', emp.turnos_obligatorios);
   const doble = chk('regla-doble', emp.doble_aprobacion);
+  const conExacto = Object.prototype.hasOwnProperty.call(emp, 'cambio_exacto');
+  const exacto = chk('regla-cambio-exacto', emp.cambio_exacto);
   const zona1 = h('div', { 'aria-live': 'assertive' });
   const f1 = h('form', { class: 'formulario', novalidate: true },
     campo('Tope de crédito que puede dar el administrador a un cliente (L)', credito),
@@ -33,6 +36,7 @@ export async function mostrar(vista, ctx) {
     h('label', { class: 'opcion-check' }, vendedorCobra, ' El vendedor también cobra (si no, cobra el cajero)'),
     h('label', { class: 'opcion-check' }, turnos, ' Turnos de caja obligatorios (sin turno abierto no entra efectivo)'),
     h('label', { class: 'opcion-check' }, doble, ' Doble aprobación (dos personas aprueban lo grande)'),
+    conExacto ? h('label', { class: 'opcion-check' }, exacto, ' Cambio exacto: un cambio de producto vale exactamente lo devuelto (si no, se devuelve todo el dinero)') : null,
     zona1, h('button', { type: 'submit', class: 'boton boton-principal boton-ancho', id: 'reglas-guardar' }, 'Guardar reglas'));
   f1.addEventListener('submit', async (ev) => {
     ev.preventDefault();
@@ -41,6 +45,7 @@ export async function mostrar(vista, ctx) {
     if (tc === null || tc < 0) { zona1.append(errorSimple('Escriba el tope de crédito (0 o más).')); return; }
     const nuevos = { tope_credito_centavos: tc, credito_politica: politica.value, vendedor_cobra: vendedorCobra.checked,
       turnos_obligatorios: turnos.checked, doble_aprobacion: doble.checked };
+    if (conExacto) nuevos.cambio_exacto = exacto.checked;
     const cambios = Object.fromEntries(Object.entries(nuevos).filter(([k, v]) => v !== emp[k]));
     if (!Object.keys(cambios).length) { zona1.append(errorSimple('No cambió nada.')); return; }
     const ok = await pedirMotivo({ titulo: 'Guardar reglas', textoBoton: 'Guardar', explicacion: `${Object.keys(cambios).length} cambio(s). Valen desde ahora.`,

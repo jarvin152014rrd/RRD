@@ -161,7 +161,7 @@ Queda la carpeta `dist/app-<cliente>/`. Si por error pega la llave secreta, la h
 
 ## Actualizar de 0.18.0 a 0.19.0 (si YA lo tenía instalado) — devolución con mayorista, cambio exacto y estado de cuenta del socio
 
-Si su Supabase ya tiene la 0.18.0, **no** vuelva a pegar las partes. Solo se pega **un archivo** (unos 60 KB).
+Si su Supabase ya tiene la 0.18.0, **no** vuelva a pegar las partes. Solo se pega **un archivo** (unos 95 KB).
 Los datos de su negocio no se tocan.
 
 **¿Todavía no pegó 0.16.0, 0.17.0 y 0.18.0?** Péguelos primero, uno por uno y en ese orden (son los archivos
@@ -176,13 +176,13 @@ la nueva; si no guardó las anteriores, pídalas a su proveedor (o en una copia 
 4. Abra el archivo con el Bloc de notas, **Ctrl+A**, **Ctrl+C**, péguelo en el editor (**Ctrl+V**) y toque **Run**.
    Si pregunta por "operaciones destructivas", toque **Run this query** (es normal).
 5. Abajo debe salir: **ACTUALIZADO A 0.19.0**, **version = 0.19.0** y **migraciones = 55**.
-6. Suba la app nueva (**0.13.0**) a Netlify (pasos 10 y 11). Con la app vieja (0.12.x) todo sigue funcionando, pero un
+6. Suba la app nueva (**0.13.1**) a Netlify (pasos 10 y 11). Con la app vieja (0.12.x) todo sigue funcionando, pero un
    cambio de producto que no dé exacto se rechaza con un mensaje (la app vieja todavía ofrece cobrar o dejar la
    diferencia): por eso conviene subir la app enseguida.
 
 Qué cambia para el negocio (detalle en `docs/REQUISITOS.md`, "Decisiones del dueño 0.19.0"):
 - Desde ya, el **cambio de producto debe ser exacto** (o se devuelve todo el dinero). Si algún día quiere volver al
-  cambio con diferencia, el dueño lo apaga con la regla `cambio_exacto` (pídalo al proveedor).
+  cambio con diferencia, el dueño lo apaga en Ajustes > Reglas y topes ("Cambio exacto").
 - Si un cliente que compró a precio mayorista por cantidad devuelve y se queda con menos de "desde cantidad", se le
   descuenta el "Ajuste por perder precio mayorista".
 - En Dinero > Fondos y socios, cada socio tiene "Estado de cuenta" (con Excel e Imprimir).
