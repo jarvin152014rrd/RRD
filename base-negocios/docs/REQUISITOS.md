@@ -15,6 +15,8 @@ revisar este archivo antes de empezar. Si algo cambia, se actualiza aquí.
 - **Sin emojis en PDFs ni en documentos impresos o descargables.**
 - Sin internet: solo venta rápida y cobro, con cola local, id_operacion y
   rango CAI por caja. Todo lo demás requiere conexión.
+  Diseño (0.19.0, sin programar): `docs/SIN_INTERNET.md`, con las decisiones
+  que debe tomar el dueño.
 
 ## Autoservicio (el cliente no depende del proveedor)
 
