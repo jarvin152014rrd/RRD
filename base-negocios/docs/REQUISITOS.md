@@ -428,3 +428,13 @@ oscuros; celular con forma de pago y cálculo del vuelto; cobrar por WhatsApp a
 quien debe; sello "funciona sin internet"; frase de cierre "Ganaste X,
 cobraste Y, te toca Z"; promoción sugerida automáticamente pero quien vende
 puede cambiarla (regla del dueño: nunca se suman).
+
+## Cheques (decisión del dueño, 0.18.0)
+
+- El cheque NO se acepta en ventas de contado: un cheque puede rebotar el mismo
+  día y el producto ya se habría entregado. Solo sirve para abonar a una deuda
+  que ya existe (venta al crédito).
+- Mientras el banco no confirme el cheque, a ese cliente no se le devuelve
+  dinero ni se le deja saldo a favor por esa venta.
+- Si el cheque rebota, el cobro se revierte y el cliente vuelve a deber; el
+  cargo del banco puede registrarse como gasto.
