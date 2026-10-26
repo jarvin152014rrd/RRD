@@ -1,10 +1,33 @@
-# Pendientes (núcleo 0.18.0, 146 pruebas OK; también con probar.sh --paquete)
+# Pendientes (núcleo 0.19.0, 150 pruebas OK; también con probar.sh --paquete)
 
 Estado: etapa 2 terminada. Las correcciones de la revisión de la etapa 2 están
 HECHAS en la migración 038 (núcleo 0.9.1) y las de la revisión de 0.9.1 en la
 migración 039 (núcleo 0.9.2), cada una con su prueba (falla contra la versión
 anterior y pasa con la nueva). Falta que el revisor las confirme antes de la
 etapa 3.
+
+## Decisiones del dueño 0.19.0 (HECHO en 0.19.0, migración 055, pruebas 147-150; app 0.13.0)
+
+- HECHO y CONFIRMADO (dueño) [DINERO]: devolución parcial con precio mayorista por cantidad: lo que se queda baja de
+  "desde cantidad" -> se recalcula a precio normal y se descuenta ("Ajuste por perder precio mayorista"); si da
+  negativo, se rechaza. Sobre lo devuelto acumulado.
+- CONFIRMADO (dueño): mayorista y promociones no se suman (ya estaba en 0.18.0).
+- CONFIRMADO (dueño) [DINERO]: una sola cuenta "Aportes de socios" con el detalle por socio. HECHO: estado de cuenta del
+  socio (núcleo y app, con Excel e Imprimir).
+- HECHO y CONFIRMADO (dueño) [DINERO]: cambio de producto exacto (o devolución completa del dinero); regla
+  `cambio_exacto` encendida por defecto.
+- A CONFIRMAR (dueño) [DINERO]: en una garantía no se cobra el ajuste mayorista; el precio normal del ajuste es el de
+  la venta, sin promociones; en un cambio exacto de una venta al crédito sin pagar, la parte de la deuda se vuelve a
+  deber en la venta nueva (con plazo nuevo desde hoy).
+- FALTA (dueño): pegar en orden `actualizar_supabase_0.16.0.sql`, `0.17.0`, `0.18.0` y `0.19.0` en su Supabase real
+  (`docs/SUPABASE.md`). **NO PROBADO en un Supabase real** (solo en el mini Supabase de la prueba 150).
+- FALTA (menor): la regla `cambio_exacto` no está en Ajustes de la app ni en la ficha/Armador (hoy: `configurar_empresa`
+  por el proveedor). Si el precio de una sucursal tenía otra marca de "incluye ISV" que el mayorista, el ajuste usa la
+  del mayorista (caso raro).
+- NOTA: un cambio exacto de una venta al crédito puede pedir aprobación de crédito si el cliente no tiene límite
+  (`APROBACION_REQUERIDA`; lo hace quien aprueba), igual que el cambio por garantía.
+- FALTA: que el revisor revise 0.19.0.
+- Diseño (sin programar) de "vender sin internet": `docs/SIN_INTERNET.md`.
 
 ## Mayorista, garantías, cheques y antigüedad (HECHO en 0.18.0, migración 054, pruebas 141-145; app 0.12.0)
 
@@ -14,7 +37,7 @@ etapa 3.
   (solo en el mini Supabase de la prueba 145).
 - CONFIRMADO por el dueño (ver REQUISITOS, Cheques) [DINERO]: las ventas al contado NO aceptan cheque (solo abonos de clientes). Si lo quiere en
   ventas, es otra parte.
-- A CONFIRMAR (dueño): con precio mayorista no se suma ninguna promoción ni descuento en esa línea (DESCUENTO_DOBLE);
+- CONFIRMADO (dueño, 0.19.0): con precio mayorista no se suma ninguna promoción ni descuento en esa línea (DESCUENTO_DOBLE);
   si hay una promoción, gana lo más barato para el cliente.
 - FALTA (menor): `resumen_hoy` no cuenta los cheques recibidos hoy aparte (van en cobros); un producto devuelto por
   garantía vuelve al inventario como cualquier devolución (no hay bodega de "dañados"); el Excel no deja BORRAR el
@@ -22,8 +45,8 @@ etapa 3.
 - NOTA: si el cheque rebota después de confirmar el depósito, el sistema hace solo un traslado del banco a "Cheques
   por depositar" y luego anula el cobro (la deuda vuelve).
 - HECHO: el revisor revisó 0.18.0 (nada grave); sus puntos medios y menores quedaron dentro de la misma 054 (prueba 146).
-- A DECIDIR (dueño) [DINERO]: ¿la devolución parcial de una venta con precio mayorista por cantidad debe recalcular el
-  precio? Hoy NO: si compró 12 a precio mayorista y devuelve 6, se le devuelve a precio mayorista (lo que pagó).
+- DECIDIDO (dueño, HECHO en 0.19.0) [DINERO]: la devolución parcial de una venta con precio mayorista por cantidad
+  recalcula a precio normal lo que se queda si baja de "desde cantidad" (ajuste por perder precio mayorista).
 - FALTA (menor): con la app vieja (0.11.x) y el núcleo 0.18.0, cobrar a un cliente mayorista falla (la previa no
   manda el cliente). Por eso se sube la app 0.12.1 enseguida (dicho en docs/SUPABASE.md).
 
@@ -75,10 +98,9 @@ etapa 3.
 - FALTA (menor): activar `fondos` con saldo manual previo en 3.1.01.04 no avisa `MODULO_CON_SALDO`; un comprobante
   (foto) del aporte; anular una comisión de un vendedor dado de baja sigue igual.
 - FALTA (dueño): pegar `dist/actualizar_supabase_0.16.0.sql` (ya trae todo esto) en su Supabase real.
-- A CONFIRMAR (dueño) [DINERO]: los aportes van a una sola cuenta 3.1.01.04 "Aportes de socios" con el detalle por
-  socio en el sistema (no una cuenta por socio); que un contador valide el nombre y si se reclasifica a capital social.
-- A CONFIRMAR (dueño): en un cambio que vale menos, la pantalla ofrece primero devolver el dinero si está permitido
-  (el cajero elige); ¿prefiere que el saldo a favor sea la opción de siempre?
+- CONFIRMADO (dueño, 0.19.0) [DINERO]: los aportes van a una sola cuenta 3.1.01.04 "Aportes de socios" con el detalle por
+  socio en el sistema (no una cuenta por socio); falta que un contador valide el nombre y si se reclasifica a capital social.
+- DECIDIDO (dueño, 0.19.0): un cambio ya no tiene diferencia (cambio exacto o devolución completa del dinero).
 
 ## Etapa 6: subir a Supabase real (PREPARADA en 0.15.0, migración 051, prueba 132)
 

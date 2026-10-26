@@ -7,12 +7,15 @@
 // app 0.10.0: anular un reparto (anular_distribucion, solo el dueño) y un pago a un socio
 // (anular_pago_dividendos), y los aportes de capital de los socios (núcleo 0.16.0: registrar_aporte_socio,
 // anular_aporte_socio, aportes_socios). Con un núcleo 0.15.0 la parte de aportes no se muestra.
+// app 0.13.0 (núcleo 0.19.0): "Estado de cuenta del socio" (estado_cuenta_socio): aportes, repartos, pagos, total
+// invertido y saldo por pagar, con fechas, cuadre con los libros, Excel e Imprimir. Con un núcleo 0.18.0 no se muestra.
 import { leer, rpc, rpcSiExiste, escribir, nuevoId, subirComprobante, config } from '../api.js';
 import { empresaId, puede } from '../sesion.js';
 import { dinero, fecha, aCentavos } from '../formato.js';
 import { h, icono, aviso, cajaError, errorSimple, campo, conBoton, confirmar, titulo, filaIcono, chip, chipEstado, monto,
-  estadoVacio, mensaje, pedirMotivo } from '../ui.js';
-import { cuentasDinero, cuentasQuePagan, categoriasGasto, alcance, olvidarDatos } from '../datos.js';
+  estadoVacio, mensaje, pedirMotivo, tabla } from '../ui.js';
+import { cuentasDinero, cuentasQuePagan, categoriasGasto, alcance, olvidarDatos, nucleoAlMenos } from '../datos.js';
+import { botonesReporte } from '../reportes.js';
 import { hoy, selectCuentas, inputMonto, inputFecha, cifraChica, textoMonto } from '../formularios.js';
 
 const TIPO_FONDO = { reinversion: 'Reinversión', emergencias: 'Emergencias', otro: 'Otro' };
@@ -21,13 +24,13 @@ const MESES = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', '
 const pct = (n) => `${Number(n).toLocaleString('en-US', { maximumFractionDigits: 2 })} %`;
 
 export async function mostrar(vista, ctx) {
-  const [e, movs, cuentas, al, repartos, pagos, aportes] = await Promise.all([rpc('estado_fondos', { p_empresa_id: empresaId() }),
+  const [e, movs, cuentas, al, repartos, pagos, aportes, con019] = await Promise.all([rpc('estado_fondos', { p_empresa_id: empresaId() }),
     leer('v_fondo_movimiento', { empresa_id: empresaId() }, { orden: 'registrado_en.desc', limite: 30 }),
     puede('dinero.ver') ? cuentasDinero(true) : [], alcance(),
     leer('v_distribucion', { empresa_id: empresaId() }, { orden: 'registrado_en.desc', limite: 12 }).catch(() => []),
     leer('dividendo_pago', { empresa_id: empresaId() }, { orden: 'registrado_en.desc', limite: 30 }).catch(() => []),
     // Núcleo 0.16.0: aportes de capital (null = núcleo viejo, sin esa parte).
-    rpcSiExiste('aportes_socios', { p_empresa_id: empresaId() }).catch(() => null)]);
+    rpcSiExiste('aportes_socios', { p_empresa_id: empresaId() }).catch(() => null), nucleoAlMenos('0.19.0')]);
   if (!ctx.sigueVigente()) return;
   // Los fondos son de toda la empresa (patrimonio). A un usuario limitado no se le muestra el saldo de una
   // cuenta de dinero que no ve (de otra sucursal).
@@ -38,6 +41,8 @@ export async function mostrar(vista, ctx) {
     ...(e.regla.socios_porcentaje ? [`socios ${pct(e.regla.socios_porcentaje)} (según su participación)`] : []),
     ...((e.regla.socios || []).map((x) => `${(socios.find((s) => s.socio_id === x.socio_id) || {}).nombre || 'Socio'} ${pct(x.porcentaje)}`))].join(', ') : null;
   const pendienteSocios = socios.reduce((s, x) => s + Number(x.dividendos_pendientes_centavos || 0), 0);
+  // Estado de cuenta del socio (núcleo 0.19.0): es de toda la empresa (un usuario limitado a su sucursal no lo ve).
+  const verEstado = con019 && !al.limitado;
 
   const filasFondos = fondos.map((f) => filaIcono({
     icono: 'capas', color: f.activo ? 'verde' : 'neutro',
@@ -55,9 +60,11 @@ export async function mostrar(vista, ctx) {
     detalle: `Participación ${pct(s.porcentaje)}`,
     derecha: [monto(dinero(s.dividendos_pendientes_centavos), { sentido: Number(s.dividendos_pendientes_centavos) ? 'sale' : null, dato: 'pendiente-socio' }),
       Number(s.dividendos_pendientes_centavos) ? chip('Se le debe', 'dorado') : chip('Al día', 'verde')],
-    abajo: puede('fondos.pagar_dividendos') && Number(s.dividendos_pendientes_centavos) > 0 ? h('div', { class: 'botones' },
-      h('button', { type: 'button', class: 'boton boton-principal', 'aria-label': `Pagar a ${s.nombre}`, onclick: () => formularioDividendos(vista, ctx, s) },
-        icono('billetes'), 'Pagar su parte')) : null,
+    abajo: (puede('fondos.pagar_dividendos') && Number(s.dividendos_pendientes_centavos) > 0) || verEstado ? h('div', { class: 'botones' },
+      puede('fondos.pagar_dividendos') && Number(s.dividendos_pendientes_centavos) > 0 ? h('button', { type: 'button', class: 'boton boton-principal',
+        'aria-label': `Pagar a ${s.nombre}`, onclick: () => formularioDividendos(vista, ctx, s) }, icono('billetes'), 'Pagar su parte') : null,
+      verEstado ? h('button', { type: 'button', class: 'boton', 'aria-label': `Estado de cuenta de ${s.nombre}`, dataset: { accion: 'estado-socio' },
+        onclick: () => estadoCuentaSocio(vista, ctx, s) }, icono('documento'), 'Estado de cuenta') : null) : null,
     props: { dataset: { socio: s.socio_id } },
   }));
   const filasMov = movs.map((m) => filaIcono({
@@ -98,6 +105,86 @@ export async function mostrar(vista, ctx) {
         : estadoVacio({ icono: 'movimientos', chico: true, texto: 'Todavía no hay movimientos en los fondos.' })),
     tarjetaRepartos(repartos, pagos, socios, recargar),
     aportes ? tarjetaAportes(aportes, recargar) : null);
+}
+
+// ---------------- Estado de cuenta del socio (núcleo 0.19.0) ----------------
+// Lo calcula el servidor (estado_cuenta_socio): la app no suma dinero. Fechas: "desde" vacío = desde el inicio.
+const TIPO_MOV_SOCIO = { aporte: 'Aporte', aporte_anulado: 'Aporte anulado', reparto: 'Reparto de utilidad', reparto_anulado: 'Reparto anulado',
+  pago: 'Pago recibido', pago_anulado: 'Pago anulado' };
+const filtroSocio = { desde: '', hasta: '' };
+
+async function estadoCuentaSocio(vista, ctx, s) {
+  const volver = () => { vista.replaceChildren(); mostrar(vista, ctx); };
+  const desde = h('input', { id: 'socio-desde', type: 'date', value: filtroSocio.desde, max: hoy() });
+  const hasta = inputFecha('socio-hasta', filtroSocio.hasta || hoy(), { max: hoy() });
+  const zona = h('div', { class: 'lista', 'aria-live': 'polite' });
+  let r = null;
+  vista.replaceChildren(h('section', { class: 'tarjeta', 'aria-labelledby': 't-estado-socio' },
+    titulo('h1', 'documento', `Estado de cuenta de ${s.nombre}`, { id: 't-estado-socio' }),
+    h('p', { class: 'ayuda' }, 'Lo que el socio ha metido al negocio (aportes), su parte de las utilidades repartidas y lo que ya se le pagó. Deje "Desde" vacío para ver todo.'),
+    h('div', { class: 'dos-columnas filtros' }, campo('Desde', desde), campo('Hasta', hasta)),
+    botonesReporte('estado-socio', () => documentoSocio(r)), zona,
+    h('div', { class: 'botones' }, h('button', { type: 'button', class: 'boton', id: 'estado-socio-volver', onclick: volver }, 'Volver a fondos y socios'))));
+  let vez = 0;
+  async function cargar() {
+    const mia = ++vez;
+    zona.replaceChildren(h('p', { class: 'cargando', role: 'status' }, 'Cargando…'));
+    if (desde.value && hasta.value && desde.value > hasta.value) { zona.replaceChildren(errorSimple('"Desde" va antes que "Hasta".')); return; }
+    try {
+      const x = await rpc('estado_cuenta_socio', { p_empresa_id: empresaId(), p_socio_id: s.socio_id, p_desde: desde.value || null, p_hasta: hasta.value || null });
+      if (mia !== vez || !ctx.sigueVigente()) return;
+      r = x;
+      pintar();
+    } catch (err) { if (mia === vez) zona.replaceChildren(await cajaError(err)); }
+  }
+  function pintar() {
+    const t = r.totales || {};
+    const filas = (r.movimientos || []).map((m) => [fecha(m.fecha),
+      h('span', {}, h('strong', {}, m.texto), m.detalle ? h('span', { class: 'detalle' }, ' · ' + m.detalle) : null),
+      Number(m.invertido_centavos) ? monto(dinero(Math.abs(m.invertido_centavos)), { sentido: m.invertido_centavos > 0 ? 'entra' : 'sale', signo: m.invertido_centavos > 0 ? '+' : '-' }) : '',
+      Number(m.por_pagar_centavos) ? monto(dinero(Math.abs(m.por_pagar_centavos)), { signo: m.por_pagar_centavos > 0 ? '+' : '-' }) : '',
+      dinero(m.saldo_invertido_centavos), dinero(m.saldo_por_pagar_centavos)]);
+    zona.replaceChildren(...[
+      h('div', { class: 'cifras' },
+        cifraChica('Total invertido', dinero(r.total_invertido_centavos), { dato: 'socio-invertido' }),
+        cifraChica('Saldo por pagar', dinero(r.saldo_por_pagar_centavos), { dato: 'socio-por-pagar', clase: Number(r.saldo_por_pagar_centavos) ? 'monto-sale' : '' }),
+        cifraChica('Repartos en las fechas', dinero(t.repartos_centavos), { dato: 'socio-repartos' }),
+        cifraChica('Pagos recibidos', dinero(t.pagos_centavos), { dato: 'socio-pagos' })),
+      r.cuadre && r.cuadre.cuadra ? h('p', { class: 'ayuda', dataset: { info: 'socio-cuadra' } },
+        `Cuadra con la contabilidad al ${fecha(r.hasta)}: aportes de todos los socios = cuenta ${r.cuadre.cuenta_aportes}; lo que se les debe = cuenta ${r.cuadre.cuenta_dividendos}.`)
+        : mensaje('error', 'No cuadra con la contabilidad.', 'Avise a su contador o al proveedor del programa.', { dataset: { info: 'socio-no-cuadra' } }),
+      r.desde ? h('p', { class: 'detalle', dataset: { dato: 'socio-saldo-inicial' } },
+        `Al empezar (${fecha(r.desde)}): invertido ${dinero(r.saldo_inicial.invertido_centavos)} · por pagar ${dinero(r.saldo_inicial.por_pagar_centavos)}`) : null,
+      filas.length ? tabla({ props: { id: 'tabla-estado-socio' },
+        columnas: [{ titulo: 'Fecha' }, { titulo: 'Movimiento' }, { titulo: 'Invertido', num: true }, { titulo: 'Por pagar', num: true },
+          { titulo: 'Saldo invertido', num: true }, { titulo: 'Saldo por pagar', num: true }], filas })
+        : estadoVacio({ icono: 'documento', chico: true, texto: 'No hay movimientos en esas fechas.' }),
+    ].filter(Boolean));
+  }
+  desde.addEventListener('change', () => { filtroSocio.desde = desde.value; cargar(); });
+  hasta.addEventListener('change', () => { filtroSocio.hasta = hasta.value; cargar(); });
+  await cargar();
+}
+
+// Documento para Excel e Imprimir (sin íconos ni colores).
+function documentoSocio(r) {
+  if (!r) return null;
+  const t = r.totales || {};
+  const periodo = r.desde ? `del ${fecha(r.desde)} al ${fecha(r.hasta)}` : `hasta el ${fecha(r.hasta)}`;
+  return { titulo: `Estado de cuenta del socio ${r.socio.nombre}`, periodo,
+    notas: [r.nota, r.cuadre && r.cuadre.cuadra ? `Cuadra con la contabilidad (cuentas ${r.cuadre.cuenta_aportes} y ${r.cuadre.cuenta_dividendos}).` : 'No cuadra con la contabilidad.'],
+    secciones: [
+      { titulo: 'Resumen', columnas: [{ titulo: 'Concepto', tipo: 'texto' }, { titulo: 'Monto (L)', tipo: 'dinero' }],
+        filas: [
+          ...(r.desde ? [['Invertido al empezar', r.saldo_inicial.invertido_centavos], ['Por pagar al empezar', r.saldo_inicial.por_pagar_centavos]] : []),
+          ['Aportes', t.aportes_centavos], ['Aportes anulados', t.aportes_anulados_centavos], ['Repartos de utilidad asignados', t.repartos_centavos],
+          ['Repartos anulados', t.repartos_anulados_centavos], ['Pagos recibidos', t.pagos_centavos], ['Pagos anulados', t.pagos_anulados_centavos],
+          ['Total invertido', r.total_invertido_centavos], ['Saldo por pagar', r.saldo_por_pagar_centavos]] },
+      { titulo: 'Movimientos', columnas: [{ titulo: 'Fecha', tipo: 'texto' }, { titulo: 'Movimiento', tipo: 'texto' }, { titulo: 'Detalle', tipo: 'texto' },
+        { titulo: 'Invertido', tipo: 'dinero' }, { titulo: 'Por pagar', tipo: 'dinero' }, { titulo: 'Saldo invertido', tipo: 'dinero' },
+        { titulo: 'Saldo por pagar', tipo: 'dinero' }],
+        filas: (r.movimientos || []).map((m) => [fecha(m.fecha), `${TIPO_MOV_SOCIO[m.tipo] || m.tipo}: ${m.texto}`, m.detalle || '',
+          Number(m.invertido_centavos) || null, Number(m.por_pagar_centavos) || null, m.saldo_invertido_centavos, m.saldo_por_pagar_centavos]) }] };
 }
 
 // Repartos de utilidad (con "Anular reparto", solo el dueño) y pagos a socios (con "Anular pago").

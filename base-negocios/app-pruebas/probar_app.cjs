@@ -544,6 +544,9 @@ const textoDe = (pagina, sel) => pagina.locator(sel).first().innerText();
     await p.click(`#zona-cambio .resultado-producto[data-producto="${id(codigo)}"]`);
   }
 
+  // Núcleo 0.19.0: estas tres pruebas son del cambio con diferencia: se apaga la regla del dueño "cambio exacto"
+  // (la app 0.13.0 la prueba encendida en probar_0130.cjs) y se vuelve a encender al final.
+  sqlEscribir('dueno@demo.hn', `SELECT public.configurar_empresa(demo.id('EMPRESA'), '{"cambio_exacto": false}', 'Pruebas del cambio con diferencia')`);
   await prueba('cambio de producto que vale MENOS: el servidor calcula, la diferencia queda como saldo a favor y sale el comprobante sin emojis', async () => {
     const p = adm.p;
     const v = ventaParaCambio(`demo.l('CEM', 1)`, 'CLI3');
@@ -617,6 +620,7 @@ const textoDe = (pagina, sel) => pagina.locator(sel).first().innerText();
     afirmar(sql('dueno@demo.hn', `(SELECT count(*) FROM public.devolucion WHERE venta_id = '${v.venta_id}')`) === '0', 'no guardó nada');
     await ctx.close();
   });
+  sqlEscribir('dueno@demo.hn', `SELECT public.configurar_empresa(demo.id('EMPRESA'), '{"cambio_exacto": true}', 'Vuelve la regla del dueño')`);
 
   await prueba('depósito al banco con referencia', async () => {
     const p = adm.p;

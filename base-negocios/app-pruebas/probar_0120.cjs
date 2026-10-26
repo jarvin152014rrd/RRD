@@ -388,6 +388,9 @@ async function venderCon(p, codigos) {
   // ===================== Revisión 0.12.1 =====================
   await prueba('0.12.1 garantía: cambiar por OTRO producto más barato; la diferencia queda a favor del cliente', async () => {
     const p = usar(dueno.p);
+    // Núcleo 0.19.0: esta prueba es del cambio con diferencia: sin la regla del dueño "cambio exacto" (se enciende al final).
+    const conRegla = sql('dueno@demo.hn', `(SELECT to_jsonb(e) ? 'cambio_exacto' FROM public.empresa e WHERE e.id = demo.id('EMPRESA'))`) === 'true';
+    if (conRegla) sqlEscribir('dueno@demo.hn', `SELECT public.configurar_empresa(demo.id('EMPRESA'), '{"cambio_exacto": false}', 'Prueba del cambio con diferencia')`);
     await p.goto(URL_APP + '/#/vender/nueva');
     await p.waitForSelector('#buscar-producto');
     await p.goto(URL_APP + '/#/vender/garantias');
@@ -409,6 +412,7 @@ async function venderCon(p, codigos) {
       FROM public.garantia_reclamo r JOIN public.devolucion d ON d.id = r.devolucion_id WHERE r.motivo = 'El cable viene pelado') x)`));
     afirmar(r.estado === 'resuelto' && r.resolucion === 'cambiado' && r.dinero_centavos === 0 && lempiras(r.saldo_favor_centavos) === aFavor,
       'base: ' + JSON.stringify(r) + ' pantalla: ' + aFavor);
+    if (conRegla) sqlEscribir('dueno@demo.hn', `SELECT public.configurar_empresa(demo.id('EMPRESA'), '{"cambio_exacto": true}', 'Vuelve la regla del dueño')`);
   });
 
   await prueba('0.12.1 ficha: bajar el precio por debajo del mayorista pide el mayorista nuevo y baja los dos', async () => {

@@ -461,7 +461,7 @@ const existencia = (prod, bod = 'B1') => num('dueno@demo.hn', `(SELECT coalesce(
     afirmar(partes === base, `las partes (${partes}) no suman la base (${base})`);
     const socio = e.socios.find((x) => x.nombre === 'Carlos Mejía');
     const atl = saldoCuenta('ATL');
-    await p.locator(`[data-socio="${socio.socio_id}"] button`).click();
+    await p.locator(`[data-socio="${socio.socio_id}"] button[aria-label^="Pagar a"]`).click();
     await p.fill('#socio-monto', '100');
     await p.selectOption('#socio-cuenta', id('ATL'));
     await p.click('#socio-pagar');

@@ -5,12 +5,25 @@
 // (lo devuelto, el total nuevo y la diferencia) las calcula el servidor con calcular_cambio_previo; la app no
 // suma dinero. Si el nuevo vale más se cobra la diferencia; si vale menos, la diferencia va a donde el dueño
 // permite (dinero o saldo a favor / vale). Con un núcleo 0.15.0 la opción de cambio no se ofrece.
+// app 0.13.0 (núcleo 0.19.0):
+//  - Antes de guardar se ve lo que se devuelve (calcular_devolucion_previa), con el "Ajuste por perder precio
+//    mayorista" si lo que se queda el cliente baja de "desde cantidad". Después, el comprobante de la devolución.
+//  - Regla del dueño "cambio exacto" (empresa.cambio_exacto): el cambio es por uno o varios productos que sumen
+//    EXACTAMENTE lo devuelto. Contador "Falta L X / Sobra L X"; el botón se activa solo si da exacto; al lado,
+//    "Devolver todo el dinero". Sin la regla (o con un núcleo 0.18.0), el cambio con diferencia de siempre.
 import { leer, escribir, rpcSiExiste, nuevoId } from '../api.js';
 import { empresaId, puede } from '../sesion.js';
 import { dinero, cantidad as fCantidad, aCantidad } from '../formato.js';
 import { h, cajaError, errorSimple, campo, conBoton, titulo, mensaje, monto, aviso } from '../ui.js';
 import { cuentasDinero, miTurno, productos, filtrar, versionNucleo, versionAlMenos } from '../datos.js';
-import { vistaComprobante, nombreForma } from '../comprobante.js';
+import { vistaComprobante, nombreForma, vistaNotaCredito } from '../comprobante.js';
+import { traducir } from '../errores.js';
+
+// Error con la explicación del servidor (ej. el ajuste mayorista se come todo, o cuánto falta para un cambio exacto).
+async function errorConDetalle(err) {
+  const t = await traducir(err);
+  return errorSimple(t.mensaje, t.detalle || t.queHacer);
+}
 
 let ventaElegida = null;
 export function prepararDevolucion(ventaId) { ventaElegida = ventaId; }
@@ -50,7 +63,12 @@ async function formulario(vista, ctx, ventaId) {
   const tipos = (empresas[0] && empresas[0].devolucion_tipos) || ['devolver_dinero', 'nota_credito'];
   // El cambio de producto en pantalla necesita el núcleo 0.16.0 (calcular_cambio_previo).
   const conCambio = versionAlMenos(version, '0.16.0');
-  const destinos = Object.entries(DESTINO).filter(([k]) => tipos.includes(k) && (k !== 'cambio_producto' || conCambio));
+  // Núcleo 0.19.0: vista previa con el ajuste mayorista y la regla "cambio exacto" del dueño.
+  const con019 = versionAlMenos(version, '0.19.0');
+  const exacto = con019 && Boolean(empresas[0] && empresas[0].cambio_exacto);
+  const destinos = Object.entries(DESTINO).filter(([k]) => tipos.includes(k) && (k !== 'cambio_producto' || conCambio))
+    .map(([k, [val, texto]]) => [k, [val, k === 'cambio_producto' && exacto ? 'Cambiarlo por otro(s) producto(s)' : texto]]);
+  const puedeDinero = destinos.some(([k]) => k === 'devolver_dinero');
 
   // Cuentas de donde puede salir el dinero: la caja de su turno y las que puede ver.
   const cuentas = [];
@@ -78,17 +96,60 @@ async function formulario(vista, ctx, ventaId) {
   const selCuenta = h('select', { id: 'dev-cuenta' }, cuentas.map((c) => h('option', { value: c.id }, c.nombre)));
   const zonaCuenta = campo('¿De dónde sale el dinero?', selCuenta);
   const cambio = zonaCambio();
+  const zonaPrevia = h('div', { id: 'dev-previa', 'aria-live': 'polite' });
   const pintarDestino = () => {
     const esCambio = selDestino.value === 'cambio';
     cambio.nodo.hidden = !esCambio;
     zonaCuenta.hidden = !(selDestino.value === 'dinero' || (esCambio && cambio.diferencia() === 'dinero'));
+    // Cambio exacto: "Devolver todo el dinero" al lado del botón; el botón espera a que la cuenta dé exacta.
+    botonTodo.hidden = !(esCambio && exacto && puedeDinero);
+    boton.disabled = esCambio && exacto;
     if (esCambio) cambio.calcular();
     else cambio.cancelar();   // un cálculo que llegue tarde ya no toca la pantalla
+    pedirPrevia();
   };
   selDestino.addEventListener('change', pintarDestino);
-  filas.forEach(({ x }) => x.addEventListener('change', () => { if (selDestino.value === 'cambio') cambio.calcular(); }));
+  filas.forEach(({ x }) => {
+    x.addEventListener('change', () => { if (selDestino.value === 'cambio') cambio.calcular(); pedirPrevia(); });
+    x.addEventListener('input', () => pedirPrevia());
+  });
   const zonaError = h('div', { 'aria-live': 'assertive' });
   const boton = h('button', { type: 'submit', class: 'boton boton-principal boton-ancho', id: 'dev-guardar' }, 'Registrar devolución');
+  const botonTodo = h('button', { type: 'button', class: 'boton boton-ancho', id: 'dev-devolver-todo', hidden: true,
+    onclick: () => { selDestino.value = 'dinero'; pintarDestino(); selCuenta.focus(); } }, 'Devolver todo el dinero');
+
+  // Vista previa de lo que se devuelve (núcleo 0.19.0; en el cambio la da calcular_cambio_previo).
+  let vezPrevia = 0, relojPrevia = null;
+  function pedirPrevia() {
+    clearTimeout(relojPrevia);
+    vezPrevia++;
+    if (!con019 || selDestino.value === 'cambio') { zonaPrevia.replaceChildren(); return; }
+    const yo = vezPrevia;
+    relojPrevia = setTimeout(async () => {
+      const lineas = elegidas();
+      if (!lineas.length) { zonaPrevia.replaceChildren(); return; }
+      zonaPrevia.replaceChildren(h('p', { class: 'cargando', role: 'status' }, 'Calculando…'));
+      try {
+        const r = await rpcSiExiste('calcular_devolucion_previa', { p_venta_id: ventaId, p_datos: { lineas } });
+        if (yo !== vezPrevia) return;
+        zonaPrevia.replaceChildren(...(r ? cifrasDevolucion(r) : []));
+      } catch (err) { if (yo === vezPrevia) zonaPrevia.replaceChildren(await errorConDetalle(err)); }
+    }, 300);
+  }
+  function cifrasDevolucion(r) {
+    const aj = Number(r.ajuste_mayorista_centavos || 0);
+    return [
+      aj ? h('div', { class: 'fila' }, h('span', {}, 'Lo que devuelve vale'), monto(dinero(r.valor_centavos), { dato: 'dev-valor' })) : null,
+      ...(r.lineas || []).filter((l) => l.ajuste_texto && Number(l.ajuste_mayorista_centavos) > 0).map((l) =>
+        mensaje('info', `${l.descripcion}: se queda con ${fCantidad(l.conserva)} y el precio mayorista es desde ${fCantidad(l.mayorista_desde)}.`,
+          'Lo que se queda pasa a precio normal; esa diferencia se descuenta de lo que se le devuelve.', { dataset: { info: 'ajuste-mayorista' } })),
+      aj > 0 ? h('div', { class: 'fila' }, h('span', {}, 'Ajuste por perder precio mayorista'), monto('-' + dinero(aj), { sentido: 'sale', dato: 'dev-ajuste' })) : null,
+      aj < 0 ? h('div', { class: 'fila' }, h('span', {}, 'Se devuelve el ajuste por precio mayorista'), monto(dinero(-aj), { dato: 'dev-ajuste' })) : null,
+      Number(r.rebaja_deuda_centavos) ? h('div', { class: 'fila' }, h('span', {}, 'Primero rebaja lo que debe de esa venta'), monto(dinero(r.rebaja_deuda_centavos))) : null,
+      h('div', { class: 'fila fila-total' }, h('span', {}, Number(r.rebaja_deuda_centavos) ? 'Para el cliente' : 'Se le devuelve'),
+        monto(dinero(r.para_el_cliente_centavos), { dato: 'dev-a-devolver' })),
+    ].filter(Boolean);
+  }
   const form = h('form', { class: 'formulario', novalidate: true },
     h('div', { class: 'lista' }, filas.map(({ l, x }) => h('div', { class: 'linea-devolver' },
       h('span', {}, h('strong', {}, l.descripcion), h('span', { class: 'detalle' }, `Vendido: ${fCantidad(l.cantidad)} · ${dinero(l.total_centavos)}`)),
@@ -96,7 +157,7 @@ async function formulario(vista, ctx, ventaId) {
     campo('Motivo', motivo, 'Mínimo 5 letras. Queda en la bitácora.'),
     destinos.length ? campo('¿Qué recibe el cliente?', selDestino,
       v.condicion === 'credito' ? 'Si la venta tiene saldo por cobrar, primero se rebaja lo que debe.' : null) : null,
-    cambio.nodo, zonaCuenta, zonaError, boton);
+    cambio.nodo, zonaPrevia, zonaCuenta, zonaError, h('div', { class: 'botones' }, boton, botonTodo));
   pintarDestino();
 
   // Lo que se devuelve (líneas con cantidad).
@@ -111,7 +172,9 @@ async function formulario(vista, ctx, ventaId) {
     const zonaLineas = h('div', { class: 'lista', id: 'cambio-lineas' });
     const zonaCifras = h('div', { id: 'cambio-cifras', 'aria-live': 'polite' });
     const nodo = h('fieldset', { class: 'tarjeta-interna', id: 'zona-cambio', hidden: true },
-      h('legend', {}, 'Producto que se lleva'),
+      h('legend', {}, exacto ? 'Productos que se lleva' : 'Producto que se lleva'),
+      exacto ? h('p', { class: 'ayuda', dataset: { info: 'regla-exacto' } },
+        'Regla del negocio: el cambio debe valer exactamente lo mismo que lo que devuelve. Puede agregar varios productos. Si no da exacto, devuelva todo el dinero.') : null,
       campo('Buscar el producto nuevo', buscar), resultados, zonaLineas, zonaCifras);
     // Una sola carga de la lista (el foco y la primera tecla esperan la misma promesa).
     let carga = null;
@@ -161,6 +224,8 @@ async function formulario(vista, ctx, ventaId) {
     function calcular() {
       clearTimeout(est.reloj);
       est.previa = null;
+      // El botón NO se apaga aquí: al tocarlo, el campo de cantidad pierde el foco y vuelve a calcular; si se apagara,
+      // el clic se perdería. Al guardar, listo() vuelve a pedir el cálculo y exige que dé exacto.
       est.reloj = setTimeout(pedir, 300);
     }
     async function pedir() {
@@ -189,7 +254,34 @@ async function formulario(vista, ctx, ventaId) {
       pintarCifras(r);
       return r;
     }
+    // Regla "cambio exacto": contador Falta / Sobra y el botón solo con la cuenta exacta.
+    function pintarExacto(r) {
+      const aj = Number(r.ajuste_mayorista_centavos || 0);
+      const falta = Number(r.falta_centavos), sobra = Number(r.sobra_centavos);
+      const estado = r.exacto ? 'exacto' : falta > 0 ? 'falta' : 'sobra';
+      const partes = [
+        aj > 0 ? h('div', { class: 'fila' }, h('span', {}, 'Ajuste por perder precio mayorista'), monto('-' + dinero(aj), { sentido: 'sale', dato: 'cambio-ajuste' })) : null,
+        h('div', { class: 'fila' }, h('span', {}, 'Lo que devuelve vale'), monto(dinero(r.devuelto.total_centavos), { dato: 'cambio-devuelto' })),
+        h('div', { class: 'fila' }, h('span', {}, 'Los productos nuevos suman'), monto(dinero(r.total_nuevo_centavos), { dato: 'cambio-nuevo' })),
+        h('div', { class: 'fila fila-total', id: 'cambio-contador', dataset: { estado } },
+          h('span', {}, r.exacto ? 'Exacto' : falta > 0 ? 'Falta' : 'Sobra'),
+          monto(dinero(r.exacto ? 0 : falta || sobra), { sentido: r.exacto ? null : 'sale', dato: 'cambio-contador' })),
+        r.exacto ? mensaje('ok', 'La cuenta da exacta: no se cobra ni se devuelve nada.', null, { dataset: { info: 'cambio-exacto' } })
+          : falta > 0 ? h('p', { class: 'ayuda' }, `Agregue productos por ${dinero(falta)} más, o devuelva todo el dinero.`)
+          : h('p', { class: 'ayuda' }, `Quite un producto o baje una cantidad: sobran ${dinero(sobra)}. En este negocio no se cobra diferencia.`),
+        Number(r.a_credito_centavos) > 0 ? mensaje('info', `La venta debía ${dinero(r.a_credito_centavos)}: esa parte vuelve a quedar al crédito en el producto nuevo.`,
+          'El cliente queda debiendo lo mismo que antes.', { dataset: { info: 'cambio-credito' } }) : null,
+      ];
+      if (r.pasa_tope) {
+        partes.push(mensaje('error', `Este cambio (${dinero(r.devuelto.total_centavos)}) pasa lo que su puesto puede devolver sin aprobación.`,
+          'Pídale al administrador o al dueño que lo haga.', { dataset: { info: 'cambio-tope' } }));
+      }
+      zonaCuenta.hidden = true;
+      boton.disabled = !(r.exacto && !r.pasa_tope);
+      zonaCifras.replaceChildren(...partes.filter(Boolean));
+    }
     function pintarCifras(r) {
+      if (r.cambio_exacto) { pintarExacto(r); return; }
       const partes = [
         h('div', { class: 'fila' }, h('span', {}, 'Lo que devuelve vale'), monto(dinero(r.devuelto.total_centavos), { dato: 'cambio-devuelto' })),
         Number(r.rebaja_deuda_centavos) ? h('div', { class: 'fila' }, h('span', {}, 'Primero rebaja lo que debe de esa venta'), monto(dinero(r.rebaja_deuda_centavos))) : null,
@@ -246,12 +338,17 @@ async function formulario(vista, ctx, ventaId) {
         if (!r || est.clave !== JSON.stringify(datos)) { clearTimeout(est.reloj); r = await pedir(); }
         if (!r) throw errorSimple('No se pudo calcular el cambio.', 'Revise los datos de arriba.');
         if (r.pasa_tope) throw errorSimple('Este cambio pasa su tope.', 'Que lo haga el administrador o el dueño.');
+        if (r.cambio_exacto && !r.exacto) {
+          throw errorSimple(Number(r.falta_centavos) > 0 ? `Falta ${dinero(r.falta_centavos)} para que el cambio quede exacto.`
+            : `Sobra ${dinero(r.sobra_centavos)}: el cambio debe quedar exacto.`, 'Agregue o quite productos, o devuelva todo el dinero.');
+        }
         // Con varias promociones en un producto, la venta exige elegir una: va la sugerida (la que más descuenta),
         // la misma con la que el servidor calculó el total de arriba.
         const c = { lineas: datos.cambio.lineas.map((l, i) => {
           const pl = (r.nuevo && r.nuevo.lineas && r.nuevo.lineas[i]) || {};
           return pl.promocion_sugerida_id ? { ...l, promocion_id: pl.promocion_sugerida_id } : l;
         }) };
+        if (r.cambio_exacto) return { cambio: c, previa: r };   // exacto: sin pagos ni diferencia
         if (Number(r.a_cobrar_centavos) > 0) {
           const p = { forma: est.forma, monto_centavos: Number(r.a_cobrar_centavos) };
           if (est.forma !== 'efectivo' && est.referencia.trim()) p.referencia = est.referencia.trim();
@@ -286,7 +383,9 @@ async function formulario(vista, ctx, ventaId) {
       if (!selCuenta.value) { zonaError.append(errorSimple('No hay una caja o cuenta de donde sacar el dinero.', 'Abra su turno de caja o elija nota de crédito.')); return; }
       datos.cuenta_dinero_id = selCuenta.value;
     }
-    const r = await conBoton(boton, zonaError, () => escribir('registrar_devolucion', { p_venta_id: ventaId, p_datos: datos, p_id_operacion: idOperacion }));
+    const r = await conBoton(boton, null, async () => {
+      try { return await escribir('registrar_devolucion', { p_venta_id: ventaId, p_datos: datos, p_id_operacion: idOperacion }); } catch (err) { zonaError.append(await errorConDetalle(err)); return null; }
+    });
     if (r) listo(r, previa);
   });
 
@@ -313,6 +412,8 @@ async function formulario(vista, ctx, ventaId) {
       r.numero_documento && esCambio ? h('div', { class: 'fila' }, h('span', {}, 'Nota de crédito'), h('span', {}, r.numero_documento)) : null,
       r.cxc_centavos ? h('div', { class: 'fila' }, h('span', {}, 'Rebaja de lo que debe'), monto(dinero(r.cxc_centavos))) : null,
       r.cambio_centavos ? h('div', { class: 'fila' }, h('span', {}, 'Usado para el producto nuevo'), monto(dinero(r.cambio_centavos), { dato: 'cambio-usado' })) : null,
+      Number(r.ajuste_mayorista_centavos) ? h('div', { class: 'fila' }, h('span', {}, 'Lo devuelto valía'), monto(dinero(r.valor_centavos))) : null,
+      Number(r.ajuste_mayorista_centavos) ? h('p', { class: 'detalle', dataset: { dato: 'ajuste-mayorista' } }, r.ajuste_mayorista_texto) : null,
       previa && Number(previa.a_cobrar_centavos) ? h('div', { class: 'fila' }, h('span', {}, 'Diferencia que pagó el cliente'),
         monto(dinero(previa.a_cobrar_centavos), { sentido: 'entra', dato: 'cambio-pagado' })) : null,
       r.dinero_centavos ? h('div', { class: 'fila' }, h('span', {}, 'Dinero devuelto (sale)'), monto(dinero(r.dinero_centavos), { sentido: 'sale', dato: 'dinero-devuelto' })) : null,
@@ -325,6 +426,11 @@ async function formulario(vista, ctx, ventaId) {
     if (esCambio && !pend) {
       try {
         vista.append(h('h2', { class: 'titulo-chico' }, 'Comprobante del producto nuevo'), await vistaComprobante(r.venta_cambio_id));
+      } catch (err) { vista.append(await cajaError(err)); }
+    } else if (!pend && con019 && r.devolucion_id) {
+      // Núcleo 0.19.0: el comprobante de la devolución (nota de crédito) con el ajuste mayorista explicado.
+      try {
+        vista.append(h('h2', { class: 'titulo-chico' }, 'Comprobante de la devolución'), await vistaNotaCredito(r.devolucion_id));
       } catch (err) { vista.append(await cajaError(err)); }
     }
   }

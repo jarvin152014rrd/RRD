@@ -1,4 +1,10 @@
-# Pendientes de la app (0.12.1)
+# Pendientes de la app (0.13.0)
+
+- HECHO (0.13.0, núcleo 0.19.0): ajuste por perder precio mayorista en Devoluciones (vista previa y comprobante), cambio
+  exacto con varios productos y "Devolver todo el dinero", garantía por otro producto exacta y estado de cuenta del
+  socio con Excel e Imprimir. Falta: probarlo contra un Supabase REAL; un interruptor de la regla "cambio exacto" en
+  Ajustes (hoy la cambia el proveedor); el comprobante de la devolución no se manda por WhatsApp (solo Imprimir).
+- Vender sin internet: diseño en `docs/SIN_INTERNET.md` (sin programar todavía).
 
 - HECHO (0.12.0, núcleo 0.18.0): precio mayorista, garantías, abonos con cheque y antigüedad de saldos. Falta:
   probarlo contra un Supabase REAL; vender al contado con cheque (el núcleo no lo acepta, decisión); la antigüedad

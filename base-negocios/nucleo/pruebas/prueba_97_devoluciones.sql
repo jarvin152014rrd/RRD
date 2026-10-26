@@ -9,6 +9,8 @@ DECLARE
   isv0 bigint;
 BEGIN
   PERFORM pruebas.preparar_ventas(true);
+  -- 0.19.0: esta prueba es del cambio con diferencia (0.16.0): se apaga la regla del dueño "cambio exacto".
+  PERFORM public.configurar_empresa(e, '{"cambio_exacto": false}', 'Prueba del cambio con diferencia');
   PERFORM public.configurar_empresa(e, '{"turnos_obligatorios": false}', 'Prueba de devoluciones');
   PERFORM public.registrar_cai(e, jsonb_build_object('caja_id', pruebas.id('CAJA001'), 'tipo_documento', 'nota_credito',
     'cai', 'A1B2C3-D4E5F6-A7B8C9-D0E1F2-A3B4C5-D7', 'rango_desde', '001-001-03-00000001', 'rango_hasta', '001-001-03-00000100',

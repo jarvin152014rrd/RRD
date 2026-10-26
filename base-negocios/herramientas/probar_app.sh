@@ -13,6 +13,8 @@
 #    la misma base y el mismo servidor; después app-pruebas/probar_reportes.cjs (app 0.8.0).
 # 3e. Corre app-pruebas/probar_0120.cjs: lo nuevo de la app 0.12.0 (núcleo 0.18.0), y probar_0120_nucleo_viejo.cjs:
 #    la misma app con una demo de núcleo 0.17.0 (lo nuevo se oculta).
+# 3f. Corre app-pruebas/probar_0130.cjs: lo nuevo de la app 0.13.0 (núcleo 0.19.0), y probar_0130_nucleo_viejo.cjs:
+#    la misma app con una demo de núcleo 0.18.0 (lo nuevo se oculta).
 # 3d. Corre app-pruebas/probar_fotos.cjs: fotos de productos (app 0.11.0) con el Storage mínimo del
 #    servidor (al final: enciende las fotos y sube una).
 # 4. Corre app-pruebas/probar_funciones.mjs: las Edge Functions reales de
@@ -89,7 +91,25 @@ if [ -z "${codigo_viejo:-}" ]; then
 fi
 dropdb --if-exists "$BASE_VIEJA" >/dev/null 2>&1
 echo
+# 4d. App 0.13.0 (núcleo 0.19.0): devolución con ajuste mayorista, cambio exacto y estado de cuenta del socio.
+URL_APP="http://127.0.0.1:$PUERTO_PRUEBA" node "$RAIZ/app-pruebas/probar_0130.cjs"
+codigo_0130=$?
+echo
+# 4e. La app 0.13.0 con un núcleo 0.18.0 (base de demo hasta la 054): lo nuevo se oculta y nada se rompe.
+BASE_VIEJA18="${BASE_DEMO}_018"
+SOLO_PREPARAR=1 BASE_DEMO="$BASE_VIEJA18" NUCLEO_HASTA=054 NUCLEO_VERSION=0.18.0 bash "$RAIZ/herramientas/demo_app.sh" >/dev/null \
+  || { echo "FALLA: no se pudo preparar la demo con el núcleo 0.18.0."; codigo_viejo18=1; }
+if [ -z "${codigo_viejo18:-}" ]; then
+  BASE="$BASE_VIEJA18" PUERTO=$((PUERTO_PRUEBA + 2)) node "$RAIZ/herramientas/servidor_app.js" > "$CAPTURAS/servidor_018.log" 2>&1 &
+  PID_VIEJO18=$!
+  for _ in $(seq 1 50); do curl -s -o /dev/null "http://127.0.0.1:$((PUERTO_PRUEBA + 2))/" && break; sleep 0.2; done
+  URL_APP="http://127.0.0.1:$((PUERTO_PRUEBA + 2))" BASE_DEMO="$BASE_VIEJA18" node "$RAIZ/app-pruebas/probar_0130_nucleo_viejo.cjs"
+  codigo_viejo18=$?
+  kill "$PID_VIEJO18" 2>/dev/null
+fi
+dropdb --if-exists "$BASE_VIEJA18" >/dev/null 2>&1
+echo
 # 5. Fotos de productos (app 0.11.0): al final, porque enciende las fotos y sube archivos.
 URL_APP="http://127.0.0.1:$PUERTO_PRUEBA" node "$RAIZ/app-pruebas/probar_fotos.cjs"
 codigo_fotos=$?
-[ "$codigo_app" = "0" ] && [ "$codigo_dinero" = "0" ] && [ "$codigo_reportes" = "0" ] && [ "$codigo_funciones" = "0" ] && [ "$codigo_fotos" = "0" ] && [ "$codigo_0120" = "0" ] && [ "$codigo_viejo" = "0" ]
+[ "$codigo_app" = "0" ] && [ "$codigo_dinero" = "0" ] && [ "$codigo_reportes" = "0" ] && [ "$codigo_funciones" = "0" ] && [ "$codigo_fotos" = "0" ] && [ "$codigo_0120" = "0" ] && [ "$codigo_viejo" = "0" ] && [ "$codigo_0130" = "0" ] && [ "$codigo_viejo18" = "0" ]

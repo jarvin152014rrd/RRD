@@ -21,6 +21,8 @@ DECLARE
   m    text;
 BEGIN
   PERFORM pruebas.preparar_ventas(false);
+  -- 0.19.0: esta prueba es del cambio con diferencia (0.16.0): se apaga la regla del dueño "cambio exacto".
+  PERFORM public.configurar_empresa(e, '{"cambio_exacto": false}', 'Prueba del cambio con diferencia');
   PERFORM public.configurar_empresa(e, '{"turnos_obligatorios": false}', 'Prueba sin turnos');
   PERFORM pruebas.como('superusuario');
   INSERT INTO public.modulo_activo (empresa_id, modulo) VALUES (e, 'apartados') ON CONFLICT (empresa_id, modulo) DO UPDATE SET activo = true;

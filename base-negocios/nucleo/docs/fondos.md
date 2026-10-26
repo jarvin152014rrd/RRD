@@ -113,3 +113,29 @@ siguen sin asientos manuales. Activar con saldo en 2.1.01.03 que no explica: `MO
 
 `estado_fondos` a un usuario limitado a su sucursal: el saldo de la cuenta de dinero de un fondo que está en
 otra sucursal llega en `null` (`solo_mis_sucursales: true`). Los fondos, socios y reservas se ven igual.
+
+## Estado de cuenta del socio (0.19.0, migración 055)
+
+Decisión del dueño (confirmada): **una sola cuenta contable** "Aportes de socios" (3.1.01.04) y una de "Dividendos por
+pagar" (2.1.01.03); el detalle por socio vive en el sistema.
+
+`estado_cuenta_socio(empresa, socio, desde?, hasta?)` (`fondos.ver`: dueño, admin y contador). Cada movimiento en SU
+fecha (una anulación cuenta en la fecha de la anulación, como en los libros):
+
+| tipo | invertido | por pagar |
+|---|---|---|
+| `aporte` | + | |
+| `aporte_anulado` | − | |
+| `reparto` (su parte de la utilidad cobrada) | | + |
+| `reparto_anulado` | | − |
+| `pago` (pago recibido) | | − |
+| `pago_anulado` | | + |
+
+Devuelve `saldo_inicial` (antes de "desde"), `movimientos` (con saldo corrido), `totales` del rango (aportes, aportes
+anulados, repartos, repartos anulados, pagos, pagos anulados), `saldo_final`, `total_invertido_centavos` y
+`saldo_por_pagar_centavos` al "hasta" (por defecto hoy) y `cuadre`: la suma de TODOS los socios contra las dos cuentas
+a esa fecha (`cuadra`). Sin "desde": todo el historial. Usuario limitado a su sucursal: `SUCURSAL_NO_PERMITIDA` (es de
+toda la empresa). Fechas al revés: `FECHA_INVALIDA`.
+
+Ejemplo (prueba 148): Ana aporta 500,000 y 100,000 (este anulado), recibe 4,219 del reparto de enero y le pagan 2,000
+(y 1,000 que se anula): invertido 500,000; por pagar 2,219. Todos: aportes 700,000 = 3.1.01.04; por pagar 8,548 = 2.1.01.03.

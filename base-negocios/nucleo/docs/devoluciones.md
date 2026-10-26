@@ -140,3 +140,65 @@ cambia nada. Queda en la bitácora con el motivo. Prueba 117.
 - `v_devolucion` (con `ventas.ver` todas; si no, las que uno registró; costo solo con
   `inventario.costos`). La tabla `devolucion` la leen quienes ven ventas y costos.
 - Permiso `ventas.devolver`: dueño, admin y cajero (el vendedor no).
+
+## 0.19.0 (migración 055): ajuste por perder el precio mayorista (decisión del dueño)
+
+Caso: un cliente que **no es mayorista** compró con precio mayorista porque llegó a "desde cantidad" y después devuelve
+unidades. Si lo que **se queda** (vendido − devuelto acumulado) es mayor que cero y **menor** que "desde cantidad", lo
+que conserva vale a **precio normal**, y esa diferencia se descuenta de lo que se le devuelve.
+
+- Cuenta (en `interno.montos_devolucion`, la misma para registrar, `calcular_devolucion_previa` y `calcular_cambio_previo`):
+  con R = devuelto acumulado y K = vendido − R,
+  ajuste acumulado = `precio_con_tasa(round(K × precio normal))` − (total de la línea − round(total × R / vendido)), con
+  ISV (la base igual, sin ISV). Lo que corresponde devolver en total es round(total × R / vendido) − ese ajuste; esta
+  devolución = eso − lo ya devuelto. Así varias devoluciones seguidas dan lo mismo que una sola y, si al final devuelve
+  todo (K = 0), el ajuste anterior vuelve al cliente (los ajustes suman cero).
+- Si el ajuste se come todo lo que se le devolvería (≤ 0): `DEVOLUCION_INVALIDA` con la explicación ("se quedaría con K y
+  el precio mayorista es desde D ... devuelva más unidades (o todas) o no haga la devolución"). No se guarda nada.
+- Contabilidad: la nota de crédito lleva el **neto** (base e ISV ya rebajados); el asiento es el de siempre. ISV por
+  pagar = ISV de ventas − ISV de notas de crédito (al devolver todo, las notas suman exactamente la venta).
+- Sin ajuste: cliente mayorista (la línea fue mayorista "por cliente"), líneas sin precio mayorista y **garantías**
+  (`resolver_reclamo_garantia` lo anota con `app.devolucion_garantia`: el producto vino malo; A CONFIRMAR con el dueño).
+- La línea vendida guarda por qué fue mayorista: `venta_linea.mayorista_por` (`cliente` | `cantidad`) y
+  `mayorista_desde` (el "desde cantidad" de ese momento). Líneas de antes de 0.19.0 (en null): se usa si el cliente es
+  mayorista hoy y el "desde cantidad" del producto hoy.
+- El precio normal es el de la venta (`venta_linea.precio_normal_centavos`), sin promociones (decisión: mayorista y
+  promociones no se suman).
+- Se guarda en `devolucion.ajuste_mayorista_centavos` y `devolucion_linea.ajuste_mayorista_centavos` (positivo: se
+  descontó; negativo: se devolvió un ajuste anterior). La respuesta de `registrar_devolucion` trae
+  `ajuste_mayorista_centavos`, `valor_centavos` (lo que pagó por esas unidades) y `ajuste_mayorista_texto`
+  ("Ajuste por perder precio mayorista: L 18.00"); igual `documento_nota_credito` (por línea y arriba) y `v_devolucion`.
+- Registrar vuelve a calcular los montos con el candado puesto: si otra devolución de la misma venta entró mientras
+  tanto, `DEVOLUCION_INVALIDA` ("revise las cantidades").
+
+Ejemplo (prueba 147): tornillo L 15.00 con ISV, mayorista L 12.00 desde 12; venta de 12 = 14,400 (base 12,522, ISV
+1,878). Devolver 2: el ajuste (3,000) pasa lo devuelto (2,400): rechazo. Devolver 6: se queda 6 a 15.00 = 9,000; se le
+devuelve 14,400 − 9,000 = 5,400 (lo devuelto valía 7,200; ajuste 1,800; base 4,696, ISV 704). Después 3 más: 4,500
+(vuelven 900 del ajuste); las últimas 3: 4,500. Total 14,400, base 12,522, ISV 1,878.
+
+`calcular_devolucion_previa(venta, {"lineas"})` (`ventas.devolver`): no guarda nada; `valor_centavos`,
+`ajuste_mayorista_centavos`, `total_centavos` (base e ISV), `rebaja_deuda_centavos`, `para_el_cliente_centavos`, por
+línea `conserva` y `mayorista_desde`, y el texto. Sin costos. Usuario de otra sucursal: `SUCURSAL_NO_PERMITIDA`.
+
+## 0.19.0 (migración 055): cambio exacto (regla del dueño)
+
+Regla de la empresa `empresa.cambio_exacto` (**encendida por defecto**: para las empresas que ya existían y las
+nuevas). Con la regla:
+
+- Un cambio de producto se hace por **uno o varios** productos cuyo total sea **exactamente** lo devuelto (después del
+  ajuste mayorista, si hay). Si no: `CAMBIO_NO_EXACTO` con "falta L X" o "sobra L X". La otra salida es devolver todo el
+  dinero (`"destino": "dinero"`).
+- Nunca hay diferencia: un cambio no lleva `"pagos"`, `"diferencia"` ni `"cuenta_dinero_id"` (`CAMBIO_NO_EXACTO`).
+- Venta al crédito todavía sin pagar: la devolución primero rebaja la deuda (como siempre) y esa parte se vuelve a
+  deber en la venta nueva (pago `credito`); el cliente debe lo mismo que antes (como el cambio por garantía). La venta
+  nueva vence con el plazo del cliente desde hoy.
+- El cambio por garantía con "precio de garantía" (mismo producto y cantidad) sigue igual: ya vale lo pagado. Por otro
+  producto, también debe dar exacto (si no, se resuelve como "devuelto").
+- `calcular_cambio_previo` trae `cambio_exacto`, `exacto`, `falta_centavos`, `sobra_centavos` (contra lo devuelto),
+  `a_credito_centavos`, `puede_devolver_dinero` y `opciones_diferencia` vacía. Desde 0.19.0 calcula la venta nueva con
+  el cliente de la venta (así un cliente mayorista ve lo mismo que se registra).
+
+Apagarla (solo el dueño, `empresa.configurar`, con motivo y bitácora):
+`configurar_empresa(empresa, '{"cambio_exacto": false}', 'motivo')`. Apagada, el cambio funciona como en 0.16.0 (con
+diferencia a cobrar o a favor). `configurar_empresa` devuelve siempre `cambio_exacto`. Ejemplo (prueba 149): galón
+L 450.00 por 8 tornillos (L 120.00) + 15 lb de arroz (L 330.00) = exacto; por 2 tornillos: "falta L 420.00".

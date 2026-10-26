@@ -225,6 +225,7 @@ async function formularioResolver(vista, ctx, r) {
 
 // Cambio por OTRO producto (núcleo 0.18.0): el servidor calcula la diferencia (calcular_cambio_previo, la misma
 // regla del cambio de siempre) y la pantalla pide cómo la paga el cliente o qué se hace con lo que queda a su favor.
+// App 0.13.0 (núcleo 0.19.0): con la regla "cambio exacto" solo vale si da exacto (si no, se resuelve como "Devuelto").
 function cambioPorOtro(r, pagan) {
   const est = { producto: null, previa: null, forma: 'efectivo', diferencia: '', cuenta: '' };
   let lista = null;
@@ -257,6 +258,20 @@ function cambioPorOtro(r, pagan) {
   function pintar(x) {
     const partes = [h('div', { class: 'fila' }, h('span', {}, 'Lo que devuelve vale'), h('span', { class: 'monto' }, dinero(x.devuelto.total_centavos))),
       h('div', { class: 'fila' }, h('span', {}, 'El producto nuevo vale'), h('span', { class: 'monto' }, dinero(x.total_nuevo_centavos)))];
+    // Núcleo 0.19.0, regla del dueño "cambio exacto": solo si vale exactamente lo mismo; si no, "Devuelto".
+    if (x.cambio_exacto) {
+      if (x.exacto) partes.push(mensaje('ok', 'La cuenta da exacta: no se cobra ni se devuelve nada.', null, { dataset: { info: 'cambio-otro-exacto' } }));
+      else {
+        partes.push(h('div', { class: 'fila fila-total', id: 'cambio-otro-contador' },
+          h('span', {}, Number(x.falta_centavos) > 0 ? 'Falta' : 'Sobra'),
+          h('span', { class: 'monto', dataset: { dato: 'cambio-otro-contador' } }, dinero(Number(x.falta_centavos) || Number(x.sobra_centavos)))),
+        mensaje('error', 'En este negocio el cambio debe valer exactamente lo mismo.', 'Elija otro producto o resuelva como "Devuelto" (se le devuelve el dinero).',
+          { dataset: { info: 'cambio-otro-no-exacto' } }));
+      }
+      if (x.pasa_tope) partes.push(mensaje('error', 'Este cambio pasa lo que su puesto puede devolver sin aprobación.', 'Que lo resuelva el dueño o quien aprueba.'));
+      cifras.replaceChildren(...partes);
+      return;
+    }
     if (Number(x.a_cobrar_centavos) > 0) {
       const sel = h('select', { id: 'cambio-otro-forma' }, ['efectivo', 'tarjeta', 'transferencia'].map((f) => h('option', { value: f }, nombreForma(f))));
       sel.value = est.forma;
@@ -292,11 +307,13 @@ function cambioPorOtro(r, pagan) {
       const x = est.previa;
       if (!est.producto || !x) throw errorSimple('Busque y elija el producto que se lleva el cliente.');
       if (x.pasa_tope) throw errorSimple('Este cambio pasa su tope.', 'Que lo resuelva el dueño o quien aprueba.');
+      if (x.cambio_exacto && !x.exacto) throw errorSimple('El cambio no da exacto.', 'Elija otro producto o resuelva como "Devuelto".');
       const pl = (x.nuevo && x.nuevo.lineas && x.nuevo.lineas[0]) || {};
       const linea = { producto_id: est.producto.producto_id, cantidad: Number(r.cantidad) };
       if (pl.promocion_sugerida_id) linea.promocion_id = pl.promocion_sugerida_id;
       const cambio = { lineas: [linea] };
       const extra = {};
+      if (x.cambio_exacto) return { cambio };   // exacto: sin pagos ni diferencia
       if (Number(x.a_cobrar_centavos) > 0) cambio.pagos = [{ forma: est.forma, monto_centavos: Number(x.a_cobrar_centavos) }];
       if (Number(x.a_favor_cliente_centavos) > 0) {
         if (!est.diferencia) throw errorSimple('El dueño no permite devolver dinero ni dejar saldo a favor.', 'Elija un producto de igual o mayor valor.');

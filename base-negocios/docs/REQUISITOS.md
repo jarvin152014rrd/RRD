@@ -189,6 +189,7 @@ Un contador hondureño debe validar los formatos. Ver nucleo/docs/cierres.md y e
   (de la caja o banco elegido), cambio por otro producto (se cobra o devuelve
   la diferencia) y nota de crédito. Nota de crédito sin cliente = vale con
   código para una próxima compra.
+  (0.19.0, decisión del dueño: el cambio ya NO lleva diferencia; ver "Decisiones del dueño 0.19.0".)
 - Extras incluidos: cotizaciones (no mueven inventario ni dinero; se
   convierten en venta) y apartados con anticipo (reservan mercadería).
 - Descuentos de tres tipos: por categoría (promociones con fecha de inicio y
@@ -438,3 +439,27 @@ puede cambiarla (regla del dueño: nunca se suman).
   dinero ni se le deja saldo a favor por esa venta.
 - Si el cheque rebota, el cobro se revierte y el cliente vuelve a deber; el
   cargo del banco puede registrarse como gasto.
+
+## Decisiones del dueño 0.19.0 (hechas en la migración 055, núcleo 0.19.0; app 0.13.0)
+
+- **A1. Devolución parcial con precio mayorista por cantidad.** Si un cliente que NO es mayorista compró a precio
+  mayorista por llegar a "desde cantidad" y después devuelve unidades, y lo que se queda baja de esa cantidad, lo que
+  conserva se recalcula a precio normal: la diferencia (precio normal − precio mayorista, por las unidades que se queda)
+  se descuenta de lo que se le devuelve. Nunca da negativo: si el ajuste se come todo, se rechaza con un mensaje claro.
+  La pantalla y el comprobante lo explican: "Ajuste por perder precio mayorista: L X". Con varias devoluciones seguidas
+  se calcula sobre lo devuelto acumulado (si al final devuelve todo, el ajuste vuelve). Asientos e ISV netos.
+  Decisiones técnicas (A CONFIRMAR con el dueño): el precio normal es el de la venta, sin promociones; en una
+  **garantía** no hay ajuste (el producto vino malo); el cliente mayorista (por cliente) nunca tiene ajuste.
+- **A2. Mayorista y promociones no se suman.** CONFIRMADO. Ya estaba así desde 0.18.0.
+- **A3. Cuentas de socios.** CONFIRMADO: una sola cuenta contable "Aportes de socios" (3.1.01.04), con el detalle por
+  socio en el sistema. Nuevo: estado de cuenta por socio (aportes, aportes anulados, repartos de utilidad asignados,
+  pagos recibidos, saldo por pagar y total invertido) con rango de fechas, que cuadra con la contabilidad; en la app,
+  Dinero > Fondos y socios > "Estado de cuenta", con Excel e Imprimir.
+- **A4. Cambio de producto.** Regla del dueño: solo se cambia por UNO O VARIOS productos cuyo total sea EXACTAMENTE
+  igual al valor devuelto, o se hace la DEVOLUCIÓN COMPLETA DEL DINERO. No hay diferencia en dinero ni saldo a favor en
+  un cambio, ni cambios por mayor valor pagando la diferencia. Hecho como regla de la empresa `cambio_exacto`,
+  **encendida por defecto** (para la empresa del dueño y para las nuevas); otro cliente que quiera el cambio con
+  diferencia de antes la apaga (solo el dueño, con motivo). El cambio por garantía con "precio de garantía" sigue igual.
+  Decisión técnica: en una venta al crédito sin pagar, la parte que la devolución rebajó de la deuda se vuelve a deber
+  en la venta nueva (el cliente debe lo mismo que antes). En la app: contador "Falta L X / Sobra L X", el botón se
+  activa solo con la cuenta exacta y al lado "Devolver todo el dinero".

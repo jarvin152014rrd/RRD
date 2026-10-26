@@ -1,5 +1,25 @@
 # Cambios de la app
 
+## app 0.13.0 (núcleo 0.19.0; también funciona con 0.18.0, sin lo nuevo) — Decisiones del dueño
+
+- **Devoluciones, ajuste mayorista:** antes de guardar se ve lo que se devuelve (`calcular_devolucion_previa`): lo que
+  valía, el "Ajuste por perder precio mayorista" (con la explicación: se queda con N y el mayorista es desde M) y lo que
+  se le devuelve. Si el ajuste se come todo, el mensaje lo explica. Después de guardar sale el **comprobante de la
+  devolución** (nota de crédito, sin íconos ni emojis) con el ajuste.
+- **Cambio exacto** (regla del dueño, `empresa.cambio_exacto`): "Cambiarlo por otro(s) producto(s)" deja agregar
+  varios productos; contador **"Falta L X / Sobra L X"** (o "Exacto"); el botón se activa solo con la cuenta exacta; al
+  lado, **"Devolver todo el dinero"**. Si la venta debía, explica que esa parte vuelve a quedar al crédito. Sin la
+  regla (o con núcleo 0.18.0), el cambio con diferencia de siempre.
+- **Garantías:** "Cambiado por otro producto" con la regla: si no da exacto lo dice ("resuelva como Devuelto") y no deja
+  resolver.
+- **Dinero > Fondos y socios:** botón **"Estado de cuenta"** en cada socio (`estado_cuenta_socio`): total invertido,
+  saldo por pagar, repartos y pagos, tabla con saldo corrido, fechas "desde / hasta", si cuadra con la contabilidad,
+  **Excel e Imprimir**. Oculto con núcleo 0.18.0 y para un usuario limitado a su sucursal.
+- Arreglo: `rep_antiguedad.js` y `garantias.js` no estaban en el cascarón del service worker (sin internet no abrían).
+  Cascarón `cascaron-0.13.0`.
+- Pruebas: `probar_0130.cjs` (7) y `probar_0130_nucleo_viejo.cjs` (3, demo con núcleo 0.18.0). Las pruebas del cambio
+  con diferencia (`probar_app.cjs`, `probar_0120.cjs`) apagan la regla mientras corren.
+
 ## app 0.12.1 (núcleo 0.18.0) — Arreglos de la revisión
 
 - **Garantías:** "Cambiado" ofrece "otro igual" (con precio de garantía: no se cobra ni se devuelve nada) u "otro

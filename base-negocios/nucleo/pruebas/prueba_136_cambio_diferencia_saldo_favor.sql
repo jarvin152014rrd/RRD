@@ -15,6 +15,8 @@ DECLARE
   isv  text;
 BEGIN
   PERFORM pruebas.preparar_ventas(false);
+  -- 0.19.0: esta prueba es del cambio con diferencia (0.16.0): se apaga la regla del dueño "cambio exacto".
+  PERFORM public.configurar_empresa(e, '{"cambio_exacto": false}', 'Prueba del cambio con diferencia');
   PERFORM public.configurar_empresa(e, '{"turnos_obligatorios": false}', 'Prueba de cambio de producto');
   -- Precios: tornillo P1 L 15.00 con ISV (1,500); galón P3 L 450.00 (45,000).
 

@@ -82,3 +82,47 @@ export async function vistaComprobante(ventaId, { telefono = '', extra = [] } = 
         dataset: { accion: 'whatsapp' }, title: `Enviar el comprobante de ${empresa}` }, 'Enviar por WhatsApp'),
       ...extra));
 }
+
+// ---------------- Nota de crédito (app 0.13.0) ----------------
+// Lo que da documento_nota_credito(devolución). Con el núcleo 0.19.0 trae el "Ajuste por perder precio mayorista".
+// Sin íconos, sin emojis y sin colores: solo texto y líneas.
+export function notaCredito(doc) {
+  const t = doc.totales || {};
+  const fiscal = doc.fiscal || {};
+  const ajuste = Number(doc.ajuste_mayorista_centavos || 0);
+  return limpiarImprimible(h('article', { class: 'comprobante', 'aria-label': 'Comprobante de la devolución' },
+    h('p', { class: 'comp-centro comp-negrita' }, doc.emisor.nombre),
+    doc.emisor.rtn ? h('p', { class: 'comp-centro' }, 'RTN ' + doc.emisor.rtn) : null,
+    fiscal.cai ? h('p', { class: 'comp-centro' }, 'CAI ' + fiscal.cai) : null,
+    h('p', { class: 'comp-centro comp-negrita', dataset: { dato: 'numero_nota' } }, `${doc.tipo || 'NOTA DE CRÉDITO'} ${doc.numero_documento || ''}`),
+    h('p', {}, 'Fecha: ' + doc.fecha),
+    h('p', {}, 'Cliente: ' + (doc.cliente && doc.cliente.nombre ? doc.cliente.nombre : 'Consumidor final'),
+      doc.cliente && doc.cliente.rtn ? ' · RTN ' + doc.cliente.rtn : ''),
+    h('p', {}, 'Modifica: ' + (doc.documento_que_modifica || '')),
+    doc.motivo ? h('p', {}, 'Motivo: ' + doc.motivo) : null,
+    h('hr'),
+    (doc.lineas || []).map((l) => h('div', { class: 'comp-linea' },
+      h('p', {}, `${cantidad(l.cantidad)} x ${l.descripcion}`),
+      Number(l.ajuste_mayorista_centavos || 0) ? fila('Valor', dinero(l.valor_centavos)) : null,
+      Number(l.ajuste_mayorista_centavos || 0) > 0 ? fila('Ajuste por perder precio mayorista', '-' + dinero(l.ajuste_mayorista_centavos)) : null,
+      Number(l.ajuste_mayorista_centavos || 0) < 0 ? fila('Se devuelve el ajuste por precio mayorista', dinero(-l.ajuste_mayorista_centavos)) : null,
+      fila('Se devuelve', dinero(l.total_centavos)))),
+    h('hr'),
+    ajuste ? fila('Valor de lo devuelto', dinero(doc.valor_devuelto_centavos)) : null,
+    ajuste ? h('p', { class: 'comp-negrita', dataset: { dato: 'ajuste-mayorista' } }, doc.ajuste_mayorista_texto) : null,
+    fila('Subtotal sin ISV', dinero(t.subtotal_centavos)),
+    (t.impuestos || []).filter((i) => i.impuesto_centavos).map((i) => fila(i.nombre, dinero(i.impuesto_centavos))),
+    fila('TOTAL', dinero(t.total_centavos), 'comp-total'),
+    t.total_en_letras ? h('p', { class: 'comp-chico' }, t.total_en_letras) : null,
+    fiscal.rango_autorizado ? h('p', { class: 'comp-chico' }, 'Rango autorizado del ' + fiscal.rango_autorizado) : null,
+    fiscal.fecha_limite_emision ? h('p', { class: 'comp-chico' }, 'Fecha límite de emisión: ' + fiscal.fecha_limite_emision) : null,
+    (fiscal.leyendas || []).map((x) => h('p', { class: 'comp-chico comp-centro' }, x))));
+}
+
+export async function vistaNotaCredito(devolucionId) {
+  const doc = await rpc('documento_nota_credito', { p_devolucion_id: devolucionId });
+  return h('section', { class: 'tarjeta comprobante-tarjeta', 'aria-label': 'Comprobante de la devolución' },
+    notaCredito(doc),
+    h('div', { class: 'botones no-imprimir' },
+      h('button', { type: 'button', class: 'boton boton-principal', onclick: () => window.print() }, 'Imprimir')));
+}

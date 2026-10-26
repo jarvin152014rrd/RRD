@@ -4,6 +4,40 @@ Formato: versión (fecha) y lista de cambios. La versión vive en `VERSION_NUCLE
 y queda guardada en cada base al migrar (vista `version_esquema`).
 Números: MAYOR.MENOR.ARREGLO (ver `docs/CONVENCIONES.md`).
 
+## 0.19.0 (2026-10-26) — Decisiones del dueño: devolución con mayorista, estado de cuenta del socio y cambio exacto
+
+Migración nueva 055 (las 001-054 no se tocaron). 150 pruebas (nuevas 147 a 150; la 145 queda fija en 0.18.0). Todas
+pasan también con `probar.sh --paquete`. Para quien ya tiene 0.18.0 en Supabase: `dist/actualizar_supabase_0.19.0.sql`
+(una sola pegada; ver `docs/SUPABASE.md`, "Actualizar de 0.18.0 a 0.19.0"). Decisiones en `docs/REQUISITOS.md`,
+"Decisiones del dueño 0.19.0".
+
+- **Devolución parcial con precio mayorista por cantidad** (`nucleo/docs/devoluciones.md`): si un cliente que NO es
+  mayorista compró con precio mayorista por llegar a "desde cantidad" y lo que se QUEDA baja de esa cantidad, lo que
+  conserva pasa a precio normal y la diferencia se descuenta de lo que se le devuelve ("Ajuste por perder precio
+  mayorista: L X"). Sobre lo devuelto acumulado (varias devoluciones = una sola; al devolver todo, el ajuste vuelve).
+  Si el ajuste se come todo, `DEVOLUCION_INVALIDA` con la explicación. La nota de crédito lleva el neto (base e ISV):
+  ISV por pagar = ventas - notas, como siempre. Sin ajuste: cliente mayorista, garantías. La línea vendida guarda por
+  qué fue mayorista (`venta_linea.mayorista_por`, `mayorista_desde`); `devolucion` y `devolucion_linea` guardan el ajuste
+  (`ajuste_mayorista_centavos`). Lectura nueva `calcular_devolucion_previa`; `calcular_cambio_previo`,
+  `documento_nota_credito`, la respuesta de `registrar_devolucion` y `v_devolucion` traen el ajuste. Una sola cuenta
+  para todo: `interno.montos_devolucion` (registrar la vuelve a calcular con el candado puesto).
+- **Estado de cuenta del socio** (`nucleo/docs/fondos.md`): `estado_cuenta_socio(empresa, socio, desde?, hasta?)`
+  (`fondos.ver`): aportes, aportes anulados, repartos asignados, pagos recibidos (y anulados), saldo al empezar, saldo
+  corrido, total invertido y saldo por pagar; cuadra con 3.1.01.04 y 2.1.01.03 a la fecha de corte (todos los socios).
+  Usuario limitado a su sucursal: `SUCURSAL_NO_PERMITIDA`. Confirmado: una sola cuenta "Aportes de socios".
+- **Cambio exacto** (`nucleo/docs/devoluciones.md`): regla de la empresa `empresa.cambio_exacto`, encendida por defecto
+  (las empresas que ya existen y las nuevas). Un cambio de producto solo se hace por uno o varios productos que sumen
+  EXACTAMENTE lo devuelto; si no, `CAMBIO_NO_EXACTO` (dice cuánto falta o sobra) y se devuelve todo el dinero. Sin
+  pagos, diferencia ni cuenta de dinero en un cambio. En una venta al crédito, lo que la devolución rebajó de la deuda se
+  vuelve a deber en la venta nueva (el cliente debe lo mismo). El cambio por garantía con "precio de garantía" sigue
+  igual. La cambia solo el dueño: `configurar_empresa(empresa, '{"cambio_exacto": false}', motivo)` (vuelve el cambio
+  con diferencia de 0.16.0). `calcular_cambio_previo` trae `cambio_exacto`, `exacto`, `falta_centavos`,
+  `sobra_centavos`, `a_credito_centavos` y `puede_devolver_dinero`; ahora calcula la venta nueva con el cliente de la
+  venta (antes, con un cliente mayorista, el previo y el registro podían no coincidir). Error nuevo `CAMBIO_NO_EXACTO`.
+- **Mayorista y promociones no se suman:** confirmado por el dueño; ya estaba en 0.18.0 (sin cambios).
+- Pruebas: 147 (devolución con mayorista), 148 (estado de cuenta del socio), 149 (cambio exacto) y 150 (de 0.18.0 a
+  0.19.0 como en Supabase). Las pruebas 97, 99, 136 y 146 prueban el cambio con diferencia: apagan la regla al empezar.
+
 ## 0.18.0 (2026-10-25) — Precio mayorista, garantías, cheques y antigüedad de saldos
 
 Migración nueva 054 (las 001-053 no se tocaron). 146 pruebas (nuevas 141 a 146; la 140 queda fija en 0.17.0). Todas

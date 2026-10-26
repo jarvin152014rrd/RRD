@@ -3,7 +3,8 @@
 set -euo pipefail
 BASE="$1"
 RAIZ="${RAIZ:-$(cd "$(dirname "$0")/../.." && pwd)}"
-VERSION="$(tr -d '[:space:]' < "$RAIZ/VERSION_NUCLEO")"
+# Fija en 0.18.0 (desde 0.19.0 el paquete actual trae más; la 150 prueba 0.18.0 -> 0.19.0).
+VERSION="0.18.0"
 VIEJA="${BASE}_017"
 OTRA="${BASE}_sin053"
 TMP="$(mktemp -d)"
@@ -14,13 +15,18 @@ q() { psql -X -q -tA -v ON_ERROR_STOP=1 -d "$1" -c "$2"; }
 una() { python3 "$RAIZ/herramientas/sql_una_peticion.py" "$PGHOST" "$PGPORT" supa_postgres "$1" "$2"; }
 
 # 1) Paquete 0.17.0 (migraciones 001-053) y el paquete actual (con la actualización a 0.18.0).
-mkdir -p "$TMP/v017/herramientas" "$TMP/v017/nucleo/sql/migraciones" "$TMP/dist017" "$TMP/dist"
+mkdir -p "$TMP/v017/herramientas" "$TMP/v017/nucleo/sql/migraciones" "$TMP/dist017" "$TMP/dist" \
+  "$TMP/v018/herramientas" "$TMP/v018/nucleo/sql/migraciones"
 cp "$RAIZ/herramientas/armar_instalacion.sh" "$TMP/v017/herramientas/"
 cp "$RAIZ/CHANGELOG.md" "$TMP/v017/"
 for f in "$RAIZ"/nucleo/sql/migraciones/0[0-4][0-9]_*.sql "$RAIZ"/nucleo/sql/migraciones/05[0-3]_*.sql; do cp "$f" "$TMP/v017/nucleo/sql/migraciones/"; done
 echo "0.17.0" > "$TMP/v017/VERSION_NUCLEO"
 bash "$TMP/v017/herramientas/armar_instalacion.sh" "$TMP/dist017" >/dev/null || falla "no se armó el paquete 0.17.0"
-bash "$RAIZ/herramientas/armar_instalacion.sh" "$TMP/dist" >/dev/null || falla "no se armó el paquete actual"
+cp "$RAIZ/herramientas/armar_instalacion.sh" "$TMP/v018/herramientas/"
+cp "$RAIZ/CHANGELOG.md" "$TMP/v018/"
+for f in "$RAIZ"/nucleo/sql/migraciones/0[0-4][0-9]_*.sql "$RAIZ"/nucleo/sql/migraciones/05[0-4]_*.sql; do cp "$f" "$TMP/v018/nucleo/sql/migraciones/"; done
+echo "0.18.0" > "$TMP/v018/VERSION_NUCLEO"
+bash "$TMP/v018/herramientas/armar_instalacion.sh" "$TMP/dist" >/dev/null || falla "no se armó el paquete 0.18.0"
 ACT="$TMP/dist/actualizar_supabase_${VERSION}.sql"
 [ -f "$ACT" ] || falla "no hay $ACT"
 [ "$(ls "$TMP"/dist/actualizar_supabase_* | wc -l)" = "1" ] || falla "la actualización debía ser un solo archivo"
@@ -124,5 +130,7 @@ END $$;
 ROLLBACK;
 SQL
 PEND="$(PGDATABASE="$VIEJA" SIN_PREGUNTAR=1 SIN_RESPALDO=1 bash "$RAIZ/herramientas/migrar.sh" --solo-mostrar)" || falla "migrar.sh"
-echo "$PEND" | grep -q "No hay migraciones pendientes" || falla "migrar.sh no reconoce la base actualizada: $PEND"
+# migrar.sh reconoce lo instalado (misma huella): solo quedan pendientes las migraciones posteriores a la 054.
+{ echo "$PEND" | grep -q "No hay migraciones pendientes" || echo "$PEND" | grep -q "^  - 055_"; } \
+  && ! echo "$PEND" | grep -E "^  - 0([0-4][0-9]|5[0-4])_" >/dev/null || falla "migrar.sh no reconoce la base actualizada: $PEND"
 echo "ok"

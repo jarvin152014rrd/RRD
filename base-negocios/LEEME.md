@@ -6,7 +6,7 @@ La app será una PWA (página web instalable) y los datos vivirán en Supabase
 funciones SQL que guardan todo o nada. El navegador solo muestra y llama
 esas funciones.
 
-Versión del núcleo: ver `VERSION_NUCLEO` (hoy 0.16.0). Cambios: `CHANGELOG.md`.
+Versión del núcleo: ver `VERSION_NUCLEO` (hoy 0.19.0). Cambios: `CHANGELOG.md`.
 Subir a un proyecto real de Supabase + Netlify, paso a paso: `docs/SUPABASE.md`.
 
 ## Carpetas
@@ -212,6 +212,8 @@ Si algo falla, termina con error (código distinto de 0).
 | `distribuir_utilidades` / `anular_distribucion` / `usar_fondo` / `pagar_dividendos` / `anular_pago_dividendos` / `estado_fondos` (0.10.0) | reparto de utilidades, fondos y dividendos | fondos.distribuir / fondos.usar / fondos.pagar_dividendos / fondos.ver |
 | `proyeccion_flujo(empresa, dias, 'semana')` (0.10.0) | proyección de flujo (`proyecciones.md`) | contabilidad.ver |
 | `totales_compras` / `totales_gastos` / `mas_vendido` (0.16.0) | totales de un rango, por sucursal si el usuario es limitado (`totales.md`) | compras.ver / dinero.ver / ventas.ver |
+| `estado_cuenta_socio(empresa, socio, desde?, hasta?)` (0.19.0) | estado de cuenta de un socio con cuadre (`fondos.md`) | fondos.ver |
+| `calcular_devolucion_previa(venta, datos)` (0.19.0) | lo que se devuelve, con el ajuste por perder precio mayorista (`devoluciones.md`) | ventas.devolver |
 
 Vistas: `v_existencia` (inventario.ver; costos solo con inventario.costos),
 `v_kardex` (inventario.costos), `v_cxp_documento` y `v_cxp_proveedor` (compras.ver),
