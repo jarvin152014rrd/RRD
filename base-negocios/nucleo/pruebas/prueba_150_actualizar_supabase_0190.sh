@@ -3,7 +3,8 @@
 set -euo pipefail
 BASE="$1"
 RAIZ="${RAIZ:-$(cd "$(dirname "$0")/../.." && pwd)}"
-VERSION="$(tr -d '[:space:]' < "$RAIZ/VERSION_NUCLEO")"
+# Fija en 0.19.0 (desde 0.20.0 el paquete actual trae más; la 157 prueba 0.19.0 -> 0.20.0).
+VERSION="0.19.0"
 VIEJA="${BASE}_018"
 OTRA="${BASE}_sin054"
 TMP="$(mktemp -d)"
@@ -20,7 +21,12 @@ cp "$RAIZ/CHANGELOG.md" "$TMP/v018/"
 for f in "$RAIZ"/nucleo/sql/migraciones/0[0-4][0-9]_*.sql "$RAIZ"/nucleo/sql/migraciones/05[0-4]_*.sql; do cp "$f" "$TMP/v018/nucleo/sql/migraciones/"; done
 echo "0.18.0" > "$TMP/v018/VERSION_NUCLEO"
 bash "$TMP/v018/herramientas/armar_instalacion.sh" "$TMP/dist018" >/dev/null || falla "no se armó el paquete 0.18.0"
-bash "$RAIZ/herramientas/armar_instalacion.sh" "$TMP/dist" >/dev/null || falla "no se armó el paquete actual"
+mkdir -p "$TMP/v019/herramientas" "$TMP/v019/nucleo/sql/migraciones"
+cp "$RAIZ/herramientas/armar_instalacion.sh" "$TMP/v019/herramientas/"
+cp "$RAIZ/CHANGELOG.md" "$TMP/v019/"
+for f in "$RAIZ"/nucleo/sql/migraciones/0[0-4][0-9]_*.sql "$RAIZ"/nucleo/sql/migraciones/05[0-5]_*.sql; do cp "$f" "$TMP/v019/nucleo/sql/migraciones/"; done
+echo "0.19.0" > "$TMP/v019/VERSION_NUCLEO"
+bash "$TMP/v019/herramientas/armar_instalacion.sh" "$TMP/dist" >/dev/null || falla "no se armó el paquete 0.19.0"
 ACT="$TMP/dist/actualizar_supabase_${VERSION}.sql"
 [ -f "$ACT" ] || falla "no hay $ACT"
 [ "$(ls "$TMP"/dist/actualizar_supabase_* | wc -l)" = "1" ] || falla "la actualización debía ser un solo archivo"
@@ -134,6 +140,6 @@ ROLLBACK;
 SQL
 PEND="$(PGDATABASE="$VIEJA" SIN_PREGUNTAR=1 SIN_RESPALDO=1 bash "$RAIZ/herramientas/migrar.sh" --solo-mostrar)" || falla "migrar.sh"
 # migrar.sh reconoce lo instalado (misma huella): solo quedan pendientes las migraciones posteriores a la 054.
-{ echo "$PEND" | grep -q "No hay migraciones pendientes" || echo "$PEND" | grep -q "^  - 055_"; } \
+{ echo "$PEND" | grep -q "No hay migraciones pendientes" || echo "$PEND" | grep -qE "^  - 05[5-9]_"; } \
   && ! echo "$PEND" | grep -E "^  - 0([0-4][0-9]|5[0-4])_" >/dev/null || falla "migrar.sh no reconoce la base actualizada: $PEND"
 echo "ok"

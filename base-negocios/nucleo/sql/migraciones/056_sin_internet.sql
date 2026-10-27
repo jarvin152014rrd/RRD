@@ -62,8 +62,6 @@ ALTER TABLE public.empresa
     CHECK (sin_internet_tope_venta_centavos BETWEEN 1 AND 9007199254740991),
   ADD COLUMN sin_internet_tope_turno_centavos bigint NOT NULL DEFAULT 5000000
     CHECK (sin_internet_tope_turno_centavos BETWEEN 1 AND 9007199254740991),
-  -- Tarjeta sin internet: solo si el POS del banco funciona sin conexión. Apagado por defecto.
-  ADD COLUMN sin_internet_tarjeta boolean NOT NULL DEFAULT false,
   -- Tamaño del bloque de números; NULL = el sugerido (1.5 veces las ventas de un día de esa caja).
   ADD COLUMN sin_internet_bloque integer CHECK (sin_internet_bloque BETWEEN 10 AND 5000);
 
@@ -833,8 +831,9 @@ LANGUAGE sql IMMUTABLE SET search_path = '' AS $$
     WHEN 'reloj'                THEN 'La hora del equipo no cuadra (reloj mal puesto).'
     WHEN 'tope_venta'           THEN 'La venta pasa el tope de una venta sin internet.'
     WHEN 'tope_turno'           THEN 'Lo vendido sin internet en el turno pasa su tope.'
-    WHEN 'tarjeta'              THEN 'Se cobró con tarjeta sin internet y la empresa no lo permite.'
-    WHEN 'forma_pago'           THEN 'Sin internet solo se cobra en efectivo (o tarjeta, si el dueño lo permite).'
+    WHEN 'tarjeta'              THEN 'Sin internet no se cobra con tarjeta (el POS necesita conexión).'
+    WHEN 'forma_pago'           THEN 'Sin internet solo se cobra en efectivo o con transferencia bancaria.'
+    WHEN 'referencia'           THEN 'Una transferencia sin internet necesita su número de referencia.'
     WHEN 'mes_cerrado'          THEN 'El mes de la venta ya está cerrado: el dueño lo reabre, se registra con su fecha y se cierra otra vez.'
     WHEN 'sucursal'             THEN 'El usuario no trabaja en la sucursal de esa caja.'
     WHEN 'turno'                THEN 'El turno de caja donde se hizo la venta ya no está abierto.'
@@ -983,13 +982,16 @@ BEGIN
       v_rec := greatest(CASE WHEN coalesce(pj->'recibido_centavos', 'null'::jsonb) <> 'null'::jsonb
                               THEN interno.json_centavos(pj->'recibido_centavos', 'recibido_centavos') END, v_mon);
     ELSE
-      d := interno.cuenta_cobro_venta(e.id, 'tarjeta', NULL);
+      -- Tarjeta (solo con internet) al POS por liquidar; transferencia a "Transferencias por confirmar" (no es dinero
+      -- disponible hasta que alguien la ve en el banco y la confirma).
+      d := interno.cuenta_cobro_venta(e.id, pj->>'forma', NULL);
     END IF;
     INSERT INTO public.venta_pago (empresa_id, venta_id, linea, forma, monto_centavos, cuenta_dinero_id, turno_id, referencia,
-                                   recibido_centavos, vuelto_centavos)
+                                   recibido_centavos, vuelto_centavos, estado_transferencia)
     VALUES (e.id, v.id, k, pj->>'forma', v_mon, d.id,
             CASE WHEN pj->>'forma' = 'efectivo' THEN interno.turno_de_cuenta(d.id) END,
-            interno.json_texto(pj->'referencia', 'referencia', 100), v_rec, v_rec - v_mon);
+            nullif(concat_ws(' · ', interno.json_texto(pj->'referencia', 'referencia', 60), interno.json_texto(pj->'banco', 'banco', 38)), ''),
+            v_rec, v_rec - v_mon, CASE WHEN pj->>'forma' = 'transferencia' THEN 'por_confirmar' END);
   END LOOP;
 
   PERFORM set_config('app.numero_bloque', jsonb_build_object('bloque_id', p_vsi.bloque_id, 'numero', p_vsi.numero)::text, true);
@@ -1005,7 +1007,7 @@ END $$;
 
 -- Revisa UNA venta sin internet y, si todo está bien, la registra. Devuelve {problema, texto, venta_id, numero_documento, negativo}.
 --   p_modo 'subir': todas las revisiones del punto 8.
---   p_modo 'resolver': quien resuelve ya decidió (sin revisar reloj, topes, tarjeta, permiso ni usuario); si el precio no
+--   p_modo 'resolver': quien resuelve ya decidió (sin revisar reloj, topes, tarjeta sin internet, permiso ni usuario); si el precio no
 --      es el de la foto ni el de hoy, se registra con el precio que cobró el equipo (si su cuenta cuadra).
 --   p_a_mi_turno: el efectivo entra al turno de quien resuelve (el turno de la venta ya se cerró).
 CREATE FUNCTION interno.vsi_revisar(p_vsi public.venta_sin_internet, p_modo text, p_a_mi_turno boolean DEFAULT false) RETURNS jsonb
@@ -1041,8 +1043,12 @@ BEGIN
 
   IF ue.id IS NULL THEN
     v_prob := 'usuario_desactivado';
-  ELSIF NOT EXISTS (SELECT 1 FROM unnest(v_formas) x WHERE x IS NOT NULL) OR EXISTS (SELECT 1 FROM unnest(v_formas) x WHERE x NOT IN ('efectivo', 'tarjeta') OR x IS NULL) THEN
+  ELSIF NOT EXISTS (SELECT 1 FROM unnest(v_formas) x WHERE x IS NOT NULL)
+        OR EXISTS (SELECT 1 FROM unnest(v_formas) x WHERE x NOT IN ('efectivo', 'transferencia', 'tarjeta') OR x IS NULL) THEN
     v_prob := 'forma_pago';
+  ELSIF EXISTS (SELECT 1 FROM jsonb_array_elements(p_vsi.payload->'pagos') pg
+                 WHERE pg->>'forma' = 'transferencia' AND length(trim(coalesce(pg->>'referencia', ''))) < 3) THEN
+    v_prob := 'referencia';
   END IF;
   IF v_prob IS NULL AND p_modo = 'subir' THEN
     IF NOT ue.activo THEN
@@ -1054,7 +1060,7 @@ BEGIN
         v_prob := 'usuario_desactivado';
       END IF;
     END IF;
-    IF v_prob IS NULL AND NOT p_vsi.en_linea AND 'tarjeta' = ANY (v_formas) AND NOT e.sin_internet_tarjeta THEN
+    IF v_prob IS NULL AND NOT p_vsi.en_linea AND 'tarjeta' = ANY (v_formas) THEN
       v_prob := 'tarjeta';
     END IF;
     IF v_prob IS NULL AND NOT p_vsi.en_linea AND p_vsi.total_centavos > e.sin_internet_tope_venta_centavos THEN
@@ -1510,7 +1516,7 @@ BEGIN
     'reglas', jsonb_build_object('regimen_fiscal', interno.regimen_fiscal(p_empresa_id), 'documento_venta_modo', e.documento_venta_modo,
        'turnos_obligatorios', e.turnos_obligatorios, 'vendedor_cobra', e.vendedor_cobra, 'horas', e.sin_internet_horas,
        'tope_venta_centavos', e.sin_internet_tope_venta_centavos, 'tope_turno_centavos', e.sin_internet_tope_turno_centavos,
-       'tarjeta', e.sin_internet_tarjeta, 'moneda', e.moneda, 'zona_horaria', e.zona_horaria),
+       'formas_pago', jsonb_build_array('efectivo', 'transferencia'), 'moneda', e.moneda, 'zona_horaria', e.zona_horaria),
     'emisor', jsonb_build_object('nombre', e.nombre, 'rtn', e.rtn, 'leyenda_factura', e.leyenda_factura),
     'perfil', jsonb_build_object('usuario_id', auth.uid(), 'empresa_id', p_empresa_id, 'rol', public.mi_rol(p_empresa_id),
        'nombre', public.nombre_usuario(p_empresa_id, auth.uid()),
@@ -1525,6 +1531,19 @@ BEGIN
     'hora_servidor', public.iso(now()),
     'valido_hasta', public.iso(now() + make_interval(hours => e.sin_internet_horas)));
 END $$;
+
+-- Aviso (no impide): una transferencia con la misma referencia que otra venta ya registrada.
+CREATE FUNCTION interno.avisos_referencia(p_empresa_id uuid, p_pagos jsonb, p_venta_id uuid) RETURNS jsonb
+LANGUAGE sql STABLE SECURITY DEFINER SET search_path = '' AS $$
+  SELECT coalesce(jsonb_agg(DISTINCT 'La referencia de transferencia ' || (pg->>'referencia') || ' ya aparece en la venta '
+                            || coalesce(v.numero_documento, '#' || v.numero) || '; revísela antes de confirmarla.'), '[]')
+    FROM jsonb_array_elements(coalesce(p_pagos, '[]')) pg
+    JOIN public.venta_pago x ON x.empresa_id = p_empresa_id AND x.forma = 'transferencia'
+     AND upper(trim(split_part(x.referencia, ' · ', 1))) = upper(trim(pg->>'referencia'))
+     AND x.venta_id IS DISTINCT FROM p_venta_id
+    JOIN public.venta v ON v.id = x.venta_id
+   WHERE pg->>'forma' = 'transferencia' AND length(trim(coalesce(pg->>'referencia', ''))) >= 3
+$$;
 
 -- Una venta del equipo: revisar, guardar (siempre) y registrar o dejar por resolver.
 CREATE FUNCTION interno.vsi_subir_una(p_empresa_id uuid, p_equipo public.equipo, x jsonb, p_motivo text) RETURNS jsonb
@@ -1661,7 +1680,8 @@ BEGIN
   END IF;
   PERFORM set_config('app.motivo', '', true);
   RETURN jsonb_build_object('id_operacion', v_id, 'estado', vsi.estado, 'venta_id', vsi.venta_id, 'numero_documento', v_doc,
-    'problema', v_prob, 'problema_texto', vsi.problema_texto, 'grave', v_grave, 'inventario_negativo', vsi.negativo);
+    'problema', v_prob, 'problema_texto', vsi.problema_texto, 'grave', v_grave, 'inventario_negativo', vsi.negativo,
+    'avisos', interno.avisos_referencia(p_empresa_id, x->'pagos', vsi.venta_id));
 END $$;
 
 -- subir_ventas_sin_internet(empresa, equipo, ventas jsonb (1 a 20), motivo?)
@@ -1871,7 +1891,7 @@ BEGIN
   SELECT * INTO e FROM public.empresa x WHERE x.id = p_empresa_id;
   RETURN jsonb_build_object(
     'reglas', jsonb_build_object('horas', e.sin_internet_horas, 'tope_venta_centavos', e.sin_internet_tope_venta_centavos,
-      'tope_turno_centavos', e.sin_internet_tope_turno_centavos, 'tarjeta', e.sin_internet_tarjeta, 'bloque', e.sin_internet_bloque),
+      'tope_turno_centavos', e.sin_internet_tope_turno_centavos, 'bloque', e.sin_internet_bloque),
     'equipos', coalesce((SELECT jsonb_agg(jsonb_build_object('equipo_id', q.id, 'nombre', q.nombre, 'activo', q.activo,
         'registrado_en', public.iso(q.registrado_en), 'ultima_noticia', public.iso(s.ultima_en), 'foto_version', s.foto_version,
         'sin_noticias_48h', coalesce(s.ultima_en, q.registrado_en) < now() - interval '48 hours',
@@ -1901,7 +1921,7 @@ DECLARE
   r       jsonb;
   v_nue   jsonb;
   v_claves text[] := ARRAY['sin_internet_horas', 'sin_internet_tope_venta_centavos', 'sin_internet_tope_turno_centavos',
-                           'sin_internet_tarjeta', 'sin_internet_bloque'];
+                           'sin_internet_bloque'];
   e       public.empresa;
 BEGIN
   IF jsonb_typeof(p_datos) IS DISTINCT FROM 'object' OR NOT (p_datos ?| v_claves) THEN
@@ -1915,9 +1935,6 @@ BEGIN
   IF (p_datos - v_claves) <> '{}'::jsonb THEN
     r := interno.configurar_empresa_055(p_empresa_id, p_datos - v_claves, p_motivo);
   END IF;
-  IF v_nue ? 'sin_internet_tarjeta' AND jsonb_typeof(v_nue->'sin_internet_tarjeta') IS DISTINCT FROM 'boolean' THEN
-    RAISE EXCEPTION 'DATO_INVALIDO: "sin_internet_tarjeta" debe ser true o false.';
-  END IF;
   SELECT * INTO e FROM public.empresa x WHERE x.id = p_empresa_id FOR UPDATE;
   IF v_nue ? 'sin_internet_horas' THEN
     e.sin_internet_horas := interno.json_entero(v_nue->'sin_internet_horas', 'sin_internet_horas')::integer;
@@ -1927,9 +1944,6 @@ BEGIN
   END IF;
   IF v_nue ? 'sin_internet_tope_turno_centavos' THEN
     e.sin_internet_tope_turno_centavos := interno.json_centavos(v_nue->'sin_internet_tope_turno_centavos', 'sin_internet_tope_turno_centavos');
-  END IF;
-  IF v_nue ? 'sin_internet_tarjeta' THEN
-    e.sin_internet_tarjeta := (v_nue->>'sin_internet_tarjeta')::boolean;
   END IF;
   IF v_nue ? 'sin_internet_bloque' THEN
     e.sin_internet_bloque := CASE WHEN v_nue->'sin_internet_bloque' = 'null'::jsonb THEN NULL
@@ -1946,16 +1960,16 @@ BEGIN
   END IF;
   PERFORM set_config('app.motivo', trim(p_motivo), true);
   UPDATE public.empresa SET sin_internet_horas = e.sin_internet_horas, sin_internet_tope_venta_centavos = e.sin_internet_tope_venta_centavos,
-         sin_internet_tope_turno_centavos = e.sin_internet_tope_turno_centavos, sin_internet_tarjeta = e.sin_internet_tarjeta,
+         sin_internet_tope_turno_centavos = e.sin_internet_tope_turno_centavos,
          sin_internet_bloque = e.sin_internet_bloque
    WHERE id = p_empresa_id
-     AND (sin_internet_horas, sin_internet_tope_venta_centavos, sin_internet_tope_turno_centavos, sin_internet_tarjeta, sin_internet_bloque)
+     AND (sin_internet_horas, sin_internet_tope_venta_centavos, sin_internet_tope_turno_centavos, sin_internet_bloque)
          IS DISTINCT FROM (e.sin_internet_horas, e.sin_internet_tope_venta_centavos, e.sin_internet_tope_turno_centavos,
-                           e.sin_internet_tarjeta, e.sin_internet_bloque);
+                           e.sin_internet_bloque);
   PERFORM set_config('app.motivo', '', true);
   RETURN coalesce(r, '{}'::jsonb) || jsonb_build_object('sin_internet_horas', e.sin_internet_horas,
     'sin_internet_tope_venta_centavos', e.sin_internet_tope_venta_centavos, 'sin_internet_tope_turno_centavos', e.sin_internet_tope_turno_centavos,
-    'sin_internet_tarjeta', e.sin_internet_tarjeta, 'sin_internet_bloque', e.sin_internet_bloque);
+    'sin_internet_bloque', e.sin_internet_bloque);
 END $$;
 
 -- ---------------------------------------------------------------------
@@ -2028,8 +2042,197 @@ BEGIN
   RETURN v_a;
 END $$;
 
+
 -- ---------------------------------------------------------------------
--- 11) Seguridad de las funciones
+-- 11) Transferencias por confirmar (decisión del dueño, 0.20.0): una transferencia (también sin internet) entra a
+--     "Transferencias por confirmar" (no es dinero disponible). Quien tiene dinero.trasladar la confirma al verla en el
+--     banco (confirmar_transferencia_venta, como siempre: Dr banco / Cr por confirmar, con rastro; la conciliación
+--     bancaria la empareja con el movimiento del banco) o marca que NO LLEGÓ: la venta queda como deuda del cliente
+--     (una cuenta por cobrar que se cobra como cualquier otra) o, sin cliente, del cajero (Cuentas por cobrar a
+--     empleados), con motivo y bitácora.
+-- ---------------------------------------------------------------------
+ALTER TABLE public.venta_pago
+  ADD COLUMN no_llego_en               timestamptz,
+  ADD COLUMN no_llego_por              uuid,
+  ADD COLUMN motivo_no_llego           text,
+  ADD COLUMN fecha_no_llego            date,
+  ADD COLUMN deuda_de                  text CHECK (deuda_de IN ('cliente', 'cajero')),
+  ADD COLUMN deudor_id                 uuid,
+  ADD COLUMN asiento_no_llego_id       uuid,
+  ADD COLUMN cxc_saldo_inicial_id      uuid,
+  ADD COLUMN no_llego_id_operacion     uuid;
+DO $$
+DECLARE c text;
+BEGIN
+  SELECT con.conname INTO c FROM pg_constraint con
+   WHERE con.conrelid = 'public.venta_pago'::regclass AND con.contype = 'c'
+     AND pg_get_constraintdef(con.oid) LIKE '%estado_transferencia = ANY%';
+  EXECUTE format('ALTER TABLE public.venta_pago DROP CONSTRAINT %I', c);
+END $$;
+ALTER TABLE public.venta_pago ADD CONSTRAINT venta_pago_estado_transferencia_056
+  CHECK (estado_transferencia IN ('por_confirmar', 'confirmada', 'no_llego'));
+ALTER TABLE public.venta_pago ADD CONSTRAINT venta_pago_no_llego
+  CHECK ((estado_transferencia = 'no_llego') = (asiento_no_llego_id IS NOT NULL AND deuda_de IS NOT NULL
+                                                AND length(trim(motivo_no_llego)) >= 5));
+CREATE UNIQUE INDEX venta_pago_no_llego_id_operacion ON public.venta_pago (empresa_id, no_llego_id_operacion)
+  WHERE no_llego_id_operacion IS NOT NULL;
+INSERT INTO interno.id_operacion_uso (tabla, columna, tipo, orden) VALUES
+  ('venta_pago', 'no_llego_id_operacion', 'transferencia_no_llego', 104);
+
+-- El pago solo cambia una vez: confirmar (como antes) o "no llegó".
+CREATE OR REPLACE FUNCTION interno.proteger_venta_pago() RETURNS trigger
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = '' AS $$
+DECLARE
+  c_conf constant text[] := ARRAY['estado_transferencia', 'banco_id', 'referencia_confirmacion', 'fecha_confirmacion',
+                                  'asiento_confirmacion_id', 'confirmacion_id_operacion', 'confirmada_por', 'confirmada_en'];
+  c_nol  constant text[] := ARRAY['estado_transferencia', 'no_llego_en', 'no_llego_por', 'motivo_no_llego', 'fecha_no_llego',
+                                  'deuda_de', 'deudor_id', 'asiento_no_llego_id', 'cxc_saldo_inicial_id', 'no_llego_id_operacion'];
+BEGIN
+  IF OLD.estado_transferencia = 'por_confirmar' AND NEW.estado_transferencia = 'confirmada'
+     AND (to_jsonb(NEW) - c_conf) = (to_jsonb(OLD) - c_conf) THEN
+    RETURN NEW;
+  END IF;
+  IF OLD.estado_transferencia = 'por_confirmar' AND NEW.estado_transferencia = 'no_llego'
+     AND (to_jsonb(NEW) - c_nol) = (to_jsonb(OLD) - c_nol) THEN
+    RETURN NEW;
+  END IF;
+  RAISE EXCEPTION 'PROHIBIDO: un pago no se edita; la transferencia se confirma (o se marca que no llegó) una sola vez.';
+END $$;
+
+-- Una venta con una transferencia que no llegó no se anula completa (la deuda ya se registró): se corrige con una devolución.
+CREATE FUNCTION interno.anulacion_sin_no_llego() RETURNS trigger
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = '' AS $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM public.venta_pago p WHERE p.venta_id = NEW.venta_id AND p.estado_transferencia = 'no_llego') THEN
+    RAISE EXCEPTION 'NO_PERMITIDO: la transferencia de esa venta se marcó "no llegó" (ya es una deuda); corrija con una devolución.';
+  END IF;
+  RETURN NEW;
+END $$;
+CREATE TRIGGER sin_no_llego BEFORE INSERT ON public.venta_anulacion FOR EACH ROW EXECUTE FUNCTION interno.anulacion_sin_no_llego();
+
+-- transferencias_por_confirmar(empresa)   dinero.ver o dinero.trasladar
+CREATE FUNCTION public.transferencias_por_confirmar(p_empresa_id uuid, p_todas boolean DEFAULT false) RETURNS jsonb
+LANGUAGE plpgsql STABLE SECURITY DEFINER SET search_path = '' AS $$
+BEGIN
+  IF public.tiene_permiso('dinero.trasladar', p_empresa_id) THEN
+    PERFORM interno.exigir_lectura(p_empresa_id, 'dinero.trasladar');
+  ELSE
+    PERFORM interno.exigir_lectura(p_empresa_id, 'dinero.ver');
+  END IF;
+  RETURN jsonb_build_object('transferencias', coalesce((SELECT jsonb_agg(jsonb_build_object(
+      'venta_pago_id', p.id, 'venta_id', v.id, 'numero_documento', v.numero_documento, 'fecha', to_char(v.fecha_contable, 'YYYY-MM-DD'),
+      'cliente_id', v.cliente_id, 'cliente', v.cliente_nombre, 'monto_centavos', p.monto_centavos, 'referencia', p.referencia,
+      'estado', p.estado_transferencia, 'cajero', public.nombre_usuario(v.empresa_id, v.creado_por),
+      'sin_internet', EXISTS (SELECT 1 FROM public.venta_sin_internet z WHERE z.venta_id = v.id AND NOT z.en_linea),
+      'referencia_repetida', EXISTS (SELECT 1 FROM public.venta_pago y WHERE y.empresa_id = p.empresa_id AND y.id <> p.id
+                                       AND y.forma = 'transferencia'
+                                       AND upper(trim(split_part(y.referencia, ' · ', 1))) = upper(trim(split_part(p.referencia, ' · ', 1)))),
+      'dias', public.hoy_local(v.empresa_id) - v.fecha_contable,
+      'confirmacion', CASE WHEN p.estado_transferencia = 'confirmada' THEN jsonb_build_object('banco_id', p.banco_id,
+                         'referencia', p.referencia_confirmacion, 'fecha', to_char(p.fecha_confirmacion, 'YYYY-MM-DD')) END,
+      'no_llego', CASE WHEN p.estado_transferencia = 'no_llego' THEN jsonb_build_object('deuda_de', p.deuda_de,
+                         'motivo', p.motivo_no_llego, 'fecha', to_char(p.fecha_no_llego, 'YYYY-MM-DD')) END)
+      ORDER BY v.fecha_contable, v.numero)
+    FROM public.venta_pago p JOIN public.venta v ON v.id = p.venta_id
+   WHERE p.empresa_id = p_empresa_id AND p.forma = 'transferencia' AND v.estado = 'emitida'
+     AND (p.estado_transferencia = 'por_confirmar' OR (p_todas AND v.fecha_contable >= public.hoy_local(p_empresa_id) - 60))
+     AND interno.sucursal_permitida(p_empresa_id, v.sucursal_id)), '[]'));
+END $$;
+
+-- marcar_transferencia_no_llego(pago, motivo, id_operacion, {"fecha"?})   dinero.trasladar
+-- La venta queda como deuda: del cliente (cuenta por cobrar "TRF-<factura>", se cobra con registrar_cobro) o, si fue a
+-- Consumidor final, del cajero que la registró (Cuentas por cobrar a empleados). Asiento: Dr CxC / Cr Transferencias por confirmar.
+CREATE FUNCTION public.marcar_transferencia_no_llego(p_venta_pago_id uuid, p_motivo text, p_id_operacion uuid,
+                                                     p_datos jsonb DEFAULT '{}') RETURNS jsonb
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = '' AS $$
+DECLARE
+  pg      public.venta_pago;
+  v       public.venta;
+  v_fecha date;
+  v_asto  uuid;
+  v_cta   text;
+  v_si    uuid;
+  v_num   bigint;
+  v_de    text;
+  v_datos jsonb := coalesce(p_datos, '{}');
+BEGIN
+  SELECT * INTO pg FROM public.venta_pago WHERE id = p_venta_pago_id;
+  IF pg.id IS NULL THEN
+    RAISE EXCEPTION 'NO_EXISTE: el pago no existe.';
+  END IF;
+  SELECT * INTO v FROM public.venta WHERE id = pg.venta_id;
+  PERFORM interno.exigir_escritura(v.empresa_id, 'dinero.trasladar', 'dinero');
+  PERFORM interno.exigir_sucursal(v.empresa_id, v.sucursal_id);
+  IF p_id_operacion IS NULL THEN
+    RAISE EXCEPTION 'FALTA_ID_OPERACION: cada operación necesita un id_operacion (uuid) único.';
+  END IF;
+  PERFORM interno.exigir_tipo_operacion(v.empresa_id, p_id_operacion, 'transferencia_no_llego');
+  IF pg.no_llego_id_operacion = p_id_operacion THEN
+    RETURN jsonb_build_object('venta_pago_id', pg.id, 'estado_transferencia', pg.estado_transferencia, 'deuda_de', pg.deuda_de,
+                              'duplicado', true);
+  END IF;
+  PERFORM interno.exigir_claves(v_datos, ARRAY['fecha']);
+  IF length(trim(coalesce(p_motivo, ''))) < 5 THEN
+    RAISE EXCEPTION 'FALTA_MOTIVO: escriba qué pasó con la transferencia (mínimo 5 letras).';
+  END IF;
+  IF pg.forma <> 'transferencia' THEN
+    RAISE EXCEPTION 'NO_PERMITIDO: solo un pago por transferencia se marca "no llegó".';
+  END IF;
+  v_fecha := coalesce(interno.json_fecha(v_datos->'fecha', 'fecha'), greatest(public.hoy_local(v.empresa_id), v.fecha_contable));
+  IF v_fecha < v.fecha_contable THEN
+    RAISE EXCEPTION 'FECHA_INVALIDA: no puede ser antes de la venta (%).', to_char(v.fecha_contable, 'DD/MM/YYYY');
+  END IF;
+  PERFORM interno.reservar_operacion(v.empresa_id, p_id_operacion, 'transferencia_no_llego');
+  SELECT * INTO pg FROM public.venta_pago WHERE id = p_venta_pago_id FOR UPDATE;
+  SELECT * INTO v FROM public.venta WHERE id = pg.venta_id FOR UPDATE;
+  IF pg.no_llego_id_operacion = p_id_operacion THEN
+    RETURN jsonb_build_object('venta_pago_id', pg.id, 'estado_transferencia', pg.estado_transferencia, 'deuda_de', pg.deuda_de,
+                              'duplicado', true);
+  END IF;
+  IF v.estado <> 'emitida' THEN
+    RAISE EXCEPTION 'NO_PERMITIDO: la venta no está emitida (está %).', v.estado;
+  END IF;
+  IF pg.estado_transferencia <> 'por_confirmar' THEN
+    RAISE EXCEPTION 'YA_RESUELTO: esa transferencia ya está %.', replace(pg.estado_transferencia, '_', ' ');
+  END IF;
+  PERFORM interno.exigir_periodo_abierto(v.empresa_id, v_fecha);
+  v_cta := (SELECT c.codigo FROM public.cuenta_dinero d JOIN public.cuenta c ON c.id = d.cuenta_id WHERE d.id = pg.cuenta_dinero_id);
+  v_de := CASE WHEN v.cliente_id IS NOT NULL THEN 'cliente' ELSE 'cajero' END;
+  PERFORM set_config('app.motivo', trim(p_motivo), true);
+  IF v_de = 'cliente' THEN
+    v_num := interno.siguiente_numero(v.empresa_id, 'cxc_saldo_inicial');
+    v_asto := interno.asiento_sistema(v.empresa_id, interno.sucursal_activa(v.sucursal_id), v_fecha,
+      'Transferencia que no llegó: venta ' || v.numero_documento || ' (ref. ' || coalesce(pg.referencia, 's/r') || '); la debe ' || v.cliente_nombre,
+      'transferencia_no_llego', p_id_operacion,
+      jsonb_build_array(jsonb_build_object('uso', 'cxc', 'debe', pg.monto_centavos, 'descripcion', 'Deuda del cliente por transferencia que no llegó'),
+                        jsonb_build_object('cuenta', v_cta, 'haber', pg.monto_centavos, 'descripcion', 'Transferencia que no llegó')));
+    INSERT INTO public.cxc_saldo_inicial (empresa_id, numero, cliente_id, numero_documento, fecha_documento, fecha_contable,
+      fecha_vencimiento, monto_centavos, sucursal_id, notas, asiento_id, id_operacion, creado_por)
+    VALUES (v.empresa_id, v_num, v.cliente_id, 'TRF-' || v.numero_documento, v.fecha_contable, v_fecha, v_fecha, pg.monto_centavos,
+            v.sucursal_id, 'Transferencia que no llegó (ref. ' || coalesce(pg.referencia, 's/r') || '): ' || trim(p_motivo), v_asto,
+            p_id_operacion, auth.uid())
+    RETURNING id INTO v_si;
+  ELSE
+    v_asto := interno.asiento_sistema(v.empresa_id, interno.sucursal_activa(v.sucursal_id), v_fecha,
+      'Transferencia que no llegó: venta ' || v.numero_documento || ' (ref. ' || coalesce(pg.referencia, 's/r') || '); la debe el cajero '
+        || coalesce(public.nombre_usuario(v.empresa_id, v.creado_por), ''),
+      'transferencia_no_llego', p_id_operacion,
+      jsonb_build_array(jsonb_build_object('uso', 'cxc_empleados', 'debe', pg.monto_centavos, 'descripcion', 'Transferencia que no llegó (venta a Consumidor final)'),
+                        jsonb_build_object('cuenta', v_cta, 'haber', pg.monto_centavos, 'descripcion', 'Transferencia que no llegó')));
+  END IF;
+  UPDATE public.venta_pago SET estado_transferencia = 'no_llego', no_llego_en = now(), no_llego_por = auth.uid(),
+         motivo_no_llego = trim(p_motivo), fecha_no_llego = v_fecha, deuda_de = v_de,
+         deudor_id = CASE WHEN v_de = 'cliente' THEN v.cliente_id ELSE v.creado_por END,
+         asiento_no_llego_id = v_asto, cxc_saldo_inicial_id = v_si, no_llego_id_operacion = p_id_operacion
+   WHERE id = pg.id RETURNING * INTO pg;
+  PERFORM interno.rastrear_dinero(v_asto, 'transferencia_no_llego', 'venta', v.id, pg.referencia, NULL);
+  PERFORM set_config('app.motivo', '', true);
+  RETURN jsonb_build_object('venta_pago_id', pg.id, 'estado_transferencia', pg.estado_transferencia, 'deuda_de', v_de,
+    'deudor_id', pg.deudor_id, 'cxc_saldo_inicial_id', v_si, 'asiento_id', v_asto, 'duplicado', false);
+END $$;
+
+-- ---------------------------------------------------------------------
+-- 12) Seguridad de las funciones
 -- ---------------------------------------------------------------------
 REVOKE EXECUTE ON FUNCTION
   interno.proteger_equipo(), interno.proteger_numero_bloque(), interno.proteger_numero_emitido(),
@@ -2040,7 +2243,8 @@ REVOKE EXECUTE ON FUNCTION
   interno.vsi_problema_texto(text), interno.vsi_problema_de_error(text), interno.json_entero(jsonb, text), interno.vsi_cuadra(jsonb, jsonb), interno.vsi_lineas(jsonb),
   interno.vsi_registrar(public.venta_sin_internet, jsonb, jsonb), interno.vsi_revisar(public.venta_sin_internet, text, boolean),
   interno.tamano_bloque(uuid, uuid), interno.vsi_subir_una(uuid, public.equipo, jsonb, text),
-  interno.configurar_empresa_055(uuid, jsonb, text), interno.puede_ver_alerta(uuid, text), interno.alertas_de(uuid, text)
+  interno.configurar_empresa_055(uuid, jsonb, text), interno.puede_ver_alerta(uuid, text), interno.alertas_de(uuid, text),
+  interno.avisos_referencia(uuid, jsonb, uuid), interno.anulacion_sin_no_llego()
 FROM PUBLIC, anon, authenticated, service_role;
 REVOKE EXECUTE ON FUNCTION
   public.registrar_equipo(uuid, jsonb, uuid), public.desactivar_equipo(uuid, uuid, text),
@@ -2048,7 +2252,8 @@ REVOKE EXECUTE ON FUNCTION
   public.devolver_bloque(uuid, uuid, uuid, bigint, uuid), public.preparar_sin_internet(uuid, uuid, jsonb),
   public.subir_ventas_sin_internet(uuid, uuid, jsonb, text), public.ventas_sin_internet_por_resolver(uuid, boolean),
   public.resolver_venta_sin_internet(uuid, text, text, uuid, jsonb), public.conciliar_bloque(uuid, uuid, text, uuid),
-  public.bloques_sin_internet(uuid), public.configurar_empresa(uuid, jsonb, text)
+  public.bloques_sin_internet(uuid), public.configurar_empresa(uuid, jsonb, text),
+  public.transferencias_por_confirmar(uuid, boolean), public.marcar_transferencia_no_llego(uuid, text, uuid, jsonb)
 FROM PUBLIC, anon, service_role;
 GRANT EXECUTE ON FUNCTION
   public.registrar_equipo(uuid, jsonb, uuid), public.desactivar_equipo(uuid, uuid, text),
@@ -2056,5 +2261,6 @@ GRANT EXECUTE ON FUNCTION
   public.devolver_bloque(uuid, uuid, uuid, bigint, uuid), public.preparar_sin_internet(uuid, uuid, jsonb),
   public.subir_ventas_sin_internet(uuid, uuid, jsonb, text), public.ventas_sin_internet_por_resolver(uuid, boolean),
   public.resolver_venta_sin_internet(uuid, text, text, uuid, jsonb), public.conciliar_bloque(uuid, uuid, text, uuid),
-  public.bloques_sin_internet(uuid), public.configurar_empresa(uuid, jsonb, text)
+  public.bloques_sin_internet(uuid), public.configurar_empresa(uuid, jsonb, text),
+  public.transferencias_por_confirmar(uuid, boolean), public.marcar_transferencia_no_llego(uuid, text, uuid, jsonb)
 TO authenticated;

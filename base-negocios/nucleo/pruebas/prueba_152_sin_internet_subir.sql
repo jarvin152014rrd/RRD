@@ -1,4 +1,4 @@
--- PRUEBA: (0.20.0) vender sin internet, subir: registrar el equipo; reservar un bloque de facturas CAI por caja y equipo (ultimo_numero del rango salta al final del bloque SOLO con la marca; la caja ya no numera en línea: BLOQUE_ACTIVO; otro equipo no reserva esa caja); la foto versionada del catálogo (G5: "sin cambios" con la misma versión, versión nueva al cambiar un precio); subir: precio de la foto, precio de hoy y precio manipulado (por resolver, el número igual se gasta), la misma venta dos veces y una que entró por registrar_venta (G2: "ya estaba"), número repetido o fuera del bloque (grave), reloj adelantado, tarjeta con el interruptor apagado y encendido, tope por venta, existencia negativa (se registra y avisa), fuera del horario (M7) y las ventas de un usuario desactivado (antes: se registran, subidas por el dueño con motivo; después: por resolver); cifras a mano y libros que cuadran
+-- PRUEBA: (0.20.0) vender sin internet, subir (pagos: efectivo y transferencia con referencia; tarjeta solo con internet): registrar el equipo; reservar un bloque de facturas CAI por caja y equipo (ultimo_numero del rango salta al final del bloque SOLO con la marca; la caja ya no numera en línea: BLOQUE_ACTIVO; otro equipo no reserva esa caja); la foto versionada del catálogo (G5: "sin cambios" con la misma versión, versión nueva al cambiar un precio); subir: precio de la foto, precio de hoy y precio manipulado (por resolver, el número igual se gasta), la misma venta dos veces y una que entró por registrar_venta (G2: "ya estaba"), número repetido o fuera del bloque (grave), reloj adelantado, tarjeta sin internet (no), transferencia sin internet (por confirmar; sin referencia: por resolver; referencia repetida: aviso), crédito sin internet (no), tope por venta, existencia negativa (se registra y avisa), fuera del horario (M7) y las ventas de un usuario desactivado (antes: se registran, subidas por el dueño con motivo; después: por resolver); cifras a mano y libros que cuadran
 CREATE FUNCTION pruebas.vsi(p_bloque jsonb, p_numero bigint, p_foto integer, p_lineas jsonb, p_total bigint,
                             p_pagos jsonb DEFAULT NULL, p_hora timestamptz DEFAULT now(), p_usuario text DEFAULT 'cajero_a',
                             p_en_linea boolean DEFAULT false, p_id uuid DEFAULT gen_random_uuid()) RETURNS jsonb
@@ -83,7 +83,7 @@ BEGIN
   v1 := (p->>'version')::int;
   PERFORM pruebas.afirmar(p->'catalogo'->'productos'->(pruebas.id('P1')::text)->>'precio_venta_centavos' = '1500'
     AND p->'perfil'->'permisos' ? 'ventas.sin_internet' AND p->>'valido_hasta' IS NOT NULL AND (p->'reglas'->>'horas')::int = 24
-    AND NOT (p->'reglas'->>'tarjeta')::boolean AND (p->'reglas'->>'tope_venta_centavos')::bigint = 1000000
+    AND (p->'reglas'->>'tope_venta_centavos')::bigint = 1000000
     AND jsonb_array_length(p->'bloques') = 1, 'preparar: ' || (p - 'catalogo' - 'clientes' - 'existencias')::text);
   r := public.preparar_sin_internet(e, eq, jsonb_build_object('version', v1));
   PERFORM pruebas.afirmar((r->>'sin_cambios')::boolean AND r->'catalogo' = 'null'::jsonb, 'misma versión: sin cambios');
@@ -117,7 +117,7 @@ BEGIN
     pruebas.vsi(bf, 60, v1, jsonb_build_array(pruebas.linea('P1', 1, 1500, 1500)), 1500),
     -- F: reloj una hora adelantado
     pruebas.vsi(bf, 5, v1, jsonb_build_array(pruebas.linea('P1', 1, 1500, 1500)), 1500, NULL, now() + interval '1 hour'),
-    -- G: tarjeta sin internet con el interruptor apagado
+    -- G: tarjeta sin internet: no (el POS necesita conexión)
     pruebas.vsi(bf, 6, v1, jsonb_build_array(pruebas.linea('P1', 1, 1500, 1500)), 1500, '[{"forma":"tarjeta","monto_centavos":1500,"referencia":"V-1"}]'),
     -- H: tarjeta con internet (la cola de una caja con bloque): se registra
     pruebas.vsi(bf, 7, v2, jsonb_build_array(pruebas.linea('P1', 1, 1600, 1600)), 1600, '[{"forma":"tarjeta","monto_centavos":1600}]',
@@ -152,6 +152,7 @@ BEGIN
   PERFORM pruebas.afirmar(pruebas.dinero('CAJA1') - caja0 = 544600, 'caja: ' || (pruebas.dinero('CAJA1') - caja0));
   -- El bloque: siguiente 9 (8 era el último), números gastados 2..8 (D y E no gastan otro).
   PERFORM pruebas.afirmar((SELECT siguiente FROM public.numero_bloque WHERE id = (bf->>'bloque_id')::uuid) = 9, 'siguiente 9');
+  PERFORM pruebas.afirmar(NOT (p->'reglas'->'formas_pago') ? 'tarjeta' AND (p->'reglas'->'formas_pago') ? 'transferencia', 'formas sin internet');
   PERFORM pruebas.afirmar((SELECT string_agg(numero || ':' || estado, ',' ORDER BY numero) FROM public.numero_emitido
                             WHERE bloque_id = (bf->>'bloque_id')::uuid)
     = '2:registrado,3:registrado,4:por_resolver,5:por_resolver,6:por_resolver,7:registrado,8:registrado', 'números emitidos');
@@ -171,33 +172,67 @@ BEGIN
   PERFORM pruebas.afirmar((SELECT count(*) FROM public.venta WHERE empresa_id = e) = n, 'no se duplicó ninguna venta');
   PERFORM pruebas.afirmar((SELECT count(*) FROM public.venta_sin_internet WHERE empresa_id = e) = 9, '9 guardadas (I ya estaba)');
 
-  -- 4) Interruptor de tarjeta encendido (solo el dueño) y tope por venta de L 50.00.
+  -- 4) Tope por venta de L 50.00 (solo el dueño) y transferencia sin internet (exige referencia; queda por confirmar).
   PERFORM pruebas.como('dueno_a');
   PERFORM public.configurar_horario_acceso(e, 'cajero', NULL, 'Fin de la prueba M7');
   PERFORM pruebas.como('cajero_a');
-  PERFORM pruebas.debe_fallar(format('SELECT public.configurar_empresa(%L, %L, %L)', e, '{"sin_internet_tarjeta": true}', 'POS sin conexión'),
+  PERFORM pruebas.debe_fallar(format('SELECT public.configurar_empresa(%L, %L, %L)', e, '{"sin_internet_tope_venta_centavos": 5000}', 'Tope más bajo'),
     'SIN_PERMISO', 'el cajero no cambia la regla');
   PERFORM pruebas.como('dueno_a');
-  r := public.configurar_empresa(e, '{"sin_internet_tarjeta": true, "sin_internet_tope_venta_centavos": 5000}', 'POS que funciona sin conexión');
-  PERFORM pruebas.afirmar((r->>'sin_internet_tarjeta')::boolean AND (r->>'sin_internet_tope_venta_centavos')::bigint = 5000, 'reglas: ' || r::text);
+  r := public.configurar_empresa(e, '{"sin_internet_tope_venta_centavos": 5000}', 'Tope de prueba');
+  PERFORM pruebas.afirmar((r->>'sin_internet_tope_venta_centavos')::bigint = 5000, 'reglas: ' || r::text);
   PERFORM pruebas.debe_fallar(format('SELECT public.configurar_empresa(%L, %L, %L)', e, '{"sin_internet_horas": 0}', 'Horas cero'),
     'DATO_INVALIDO', 'horas fuera de rango');
   PERFORM pruebas.como('cajero_a');
   r := public.subir_ventas_sin_internet(e, eq, jsonb_build_array(
-    pruebas.vsi(bf, 9, v1, jsonb_build_array(pruebas.linea('P1', 1, 1500, 1500)), 1500, '[{"forma":"tarjeta","monto_centavos":1500}]'),
+    pruebas.vsi(bf, 9, v1, jsonb_build_array(pruebas.linea('P1', 1, 1500, 1500)), 1500,
+                '[{"forma":"transferencia","monto_centavos":1500,"referencia":"TR-7781","banco":"BAC"}]'),
     pruebas.vsi(bf, 10, v1, jsonb_build_array(pruebas.linea('P1', 4, 1500, 6000)), 6000),
-    pruebas.vsi(bf, 11, v1, jsonb_build_array(pruebas.linea('P1', 1, 1500, 1500)), 1500, '[{"forma":"credito","monto_centavos":1500}]')));
-  PERFORM pruebas.afirmar(r->'resultados'->0->>'estado' = 'registrada', 'tarjeta encendida: ' || (r->'resultados'->0)::text);
+    pruebas.vsi(bf, 11, v1, jsonb_build_array(pruebas.linea('P1', 1, 1500, 1500)), 1500, '[{"forma":"credito","monto_centavos":1500}]'),
+    pruebas.vsi(bf, 14, v1, jsonb_build_array(pruebas.linea('P1', 1, 1500, 1500)), 1500, '[{"forma":"transferencia","monto_centavos":1500}]'),
+    pruebas.vsi(bf, 15, v1, jsonb_build_array(pruebas.linea('P1', 1, 1500, 1500)), 1500, '[{"forma":"transferencia","monto_centavos":1500,"referencia":"tr-7781"}]')));
+  PERFORM pruebas.afirmar(r->'resultados'->0->>'estado' = 'registrada' AND jsonb_array_length(r->'resultados'->0->'avisos') = 0,
+    'transferencia: ' || (r->'resultados'->0)::text);
   PERFORM pruebas.afirmar(r->'resultados'->1->>'problema' = 'tope_venta', 'tope: ' || (r->'resultados'->1)::text);
   PERFORM pruebas.afirmar(r->'resultados'->2->>'problema' = 'forma_pago', 'crédito sin internet: ' || (r->'resultados'->2)::text);
+  PERFORM pruebas.afirmar(r->'resultados'->3->>'problema' = 'referencia', 'transferencia sin referencia: ' || (r->'resultados'->3)::text);
+  PERFORM pruebas.afirmar(r->'resultados'->4->>'estado' = 'registrada' AND r->'resultados'->4->'avisos'->>0 LIKE '%ya aparece en la venta 001-001-01-00000009%',
+    'referencia repetida: se registra con aviso: ' || (r->'resultados'->4)::text);
+  PERFORM pruebas.como('superusuario');
+  PERFORM pruebas.afirmar((SELECT p.estado_transferencia = 'por_confirmar' AND p.referencia = 'TR-7781 · BAC' AND d.tipo = 'transferencia_por_confirmar'
+                             FROM public.venta_pago p JOIN public.cuenta_dinero d ON d.id = p.cuenta_dinero_id
+                            WHERE p.venta_id = (r->'resultados'->0->>'venta_id')::uuid), 'la transferencia queda por confirmar');
+  PERFORM pruebas.como('cajero_a');
+  PERFORM pruebas.como('superusuario');
+  PERFORM pruebas.guardar('EQ', eq);
+  PERFORM pruebas.guardar('BLOQUE', (bf->>'bloque_id')::uuid);
+  PERFORM pruebas.guardar('FOTO', (SELECT id FROM public.catalogo_foto WHERE empresa_id = e AND version = v1));
+END $$;
 
-  -- 5) Usuario desactivado (M2): la venta 12 es de ANTES; la 13, de después. Las sube el dueño, con motivo.
+-- 5) Usuario desactivado (M2), en otra transacción (otra hora): la venta 12 es de ANTES; la 13, de después.
+DO $$
+DECLARE e uuid := pruebas.empresa('A');
+BEGIN
   PERFORM pruebas.como('dueno_a');
   PERFORM public.configurar_empresa(e, '{"sin_internet_tope_venta_centavos": 1000000}', 'Tope normal');
-  x := jsonb_build_array(
-    pruebas.vsi(bf, 12, v1, jsonb_build_array(pruebas.linea('P1', 1, 1500, 1500)), 1500, NULL, now() - interval '1 minute'),
-    pruebas.vsi(bf, 13, v1, jsonb_build_array(pruebas.linea('P1', 1, 1500, 1500)), 1500, NULL, now() + interval '2 minutes'));
   PERFORM public.desactivar_usuario_empresa(e, pruebas.usuario('cajero_a'), 'Ya no trabaja aquí');
+END $$;
+
+DO $$
+DECLARE
+  e     uuid := pruebas.empresa('A');
+  eq    uuid := pruebas.id('EQ');
+  bf    jsonb;
+  v1    integer := (SELECT version FROM public.catalogo_foto WHERE id = pruebas.id('FOTO'));
+  t1    timestamptz := (SELECT max(hora_equipo) FROM public.venta_sin_internet WHERE bloque_id = pruebas.id('BLOQUE') AND problema IS DISTINCT FROM 'reloj');
+  x     jsonb;
+  r     jsonb;
+BEGIN
+  PERFORM pruebas.como('dueno_a');
+  bf := public.bloques_del_equipo(e, eq)->'bloques'->0;
+  x := jsonb_build_array(
+    pruebas.vsi(bf, 13, v1, jsonb_build_array(pruebas.linea('P1', 1, 1500, 1500)), 1500, NULL, t1),
+    pruebas.vsi(bf, 16, v1, jsonb_build_array(pruebas.linea('P1', 1, 1500, 1500)), 1500, NULL, now() + interval '2 minutes'));
   r := public.subir_ventas_sin_internet(e, eq, x);
   PERFORM pruebas.afirmar(r->'resultados'->0->>'estado' = 'rechazada' AND r->'resultados'->0->>'clave' = 'FALTA_MOTIVO', 'sin motivo: ' || r::text);
   r := public.subir_ventas_sin_internet(e, eq, x, 'El cajero se fue: las subo yo');
@@ -208,6 +243,11 @@ BEGIN
   PERFORM pruebas.afirmar((SELECT creado_por FROM public.venta WHERE id = (r->'resultados'->0->>'venta_id')::uuid) = pruebas.usuario('cajero_a'),
     'la venta queda a nombre del cajero');
 
+END $$;
+
+DO $$
+DECLARE e uuid := pruebas.empresa('A');
+BEGIN
   -- 6) Libros: cada asiento cuadra, el dinero tiene su rastro y la bitácora está íntegra.
   PERFORM pruebas.como('superusuario');
   PERFORM pruebas.afirmar(NOT EXISTS (SELECT 1 FROM public.asiento_linea l JOIN public.asiento a ON a.id = l.asiento_id WHERE a.empresa_id = e
