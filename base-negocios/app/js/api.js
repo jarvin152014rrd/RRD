@@ -32,13 +32,20 @@ function leerRenovacion() {
   try { return localStorage.getItem(LLAVE_GUARDADA); } catch { return null; }
 }
 
-async function pedir(ruta, opciones) {
+// tiempo (ms, opcional): si el servidor no contesta en ese tiempo se corta y cuenta como "sin conexión"
+// (app 0.14.0: la cola de ventas sin internet usa unos 10 s por llamada).
+async function pedir(ruta, opciones, tiempo = 0) {
   let r;
+  const corte = tiempo > 0 && typeof AbortController !== 'undefined' ? new AbortController() : null;
+  const reloj = corte ? setTimeout(() => corte.abort(), tiempo) : null;
   try {
-    r = await fetch(URL_BASE + ruta, opciones);
+    r = await fetch(URL_BASE + ruta, corte ? { ...opciones, signal: corte.signal } : opciones);
   } catch {
     avisar('sin-conexion');
-    throw new ErrorServidor('No hay conexión con el servidor.', { sinConexion: true });
+    throw new ErrorServidor(corte && corte.signal.aborted ? 'El servidor no contestó a tiempo.' : 'No hay conexión con el servidor.',
+      { sinConexion: true });
+  } finally {
+    if (reloj) clearTimeout(reloj);
   }
   avisar('con-conexion');
   return r;
@@ -109,20 +116,20 @@ export async function salir() {
 }
 
 // Pide con el token de la sesión (lo renueva si está por vencer o si el servidor dice 401). Devuelve la respuesta cruda.
-async function pedirConToken(ruta, opciones, reintento = true) {
+async function pedirConToken(ruta, opciones, reintento = true, tiempo = 0) {
   if (!sesion) throw new ErrorServidor('Debe iniciar sesión.', { clave: 'SIN_SESION' });
   if (sesion.expires_at - 30 < Date.now() / 1000) await renovar();
   const r = await pedir(ruta, { ...opciones, headers: { ...opciones.headers, apikey: CLAVE_ANON,
-    Authorization: 'Bearer ' + sesion.access_token } });
+    Authorization: 'Bearer ' + sesion.access_token } }, tiempo);
   if (r.status === 401 && reintento) {
     await renovar();
-    return pedirConToken(ruta, opciones, false);
+    return pedirConToken(ruta, opciones, false, tiempo);
   }
   return r;
 }
 
-async function conToken(ruta, opciones) {
-  const r = await pedirConToken(ruta, opciones);
+async function conToken(ruta, opciones, tiempo = 0) {
+  const r = await pedirConToken(ruta, opciones, true, tiempo);
   const texto = await r.text();
   let datos = null;
   try { datos = texto ? JSON.parse(texto) : null; } catch { datos = texto; }
@@ -136,12 +143,17 @@ async function conToken(ruta, opciones) {
   return datos;
 }
 
-// Llama una función de lectura.
-export function rpc(funcion, args = {}) {
+// Llama una función de lectura. { tiempo }: corte en ms (sin respuesta = sin conexión).
+export function rpc(funcion, args = {}, { tiempo = 0 } = {}) {
   return conToken('/rest/v1/rpc/' + encodeURIComponent(funcion), {
     method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(args),
-  });
+  }, tiempo);
 }
+
+// ¿Hay sesión en memoria? (app 0.14.0: en "modo sin internet" la app abre sin sesión del servidor)
+export function haySesion() { return Boolean(sesion); }
+// ¿Hay un token de renovación guardado? (para volver a entrar solo al volver el internet)
+export function hayRenovacion() { return Boolean(leerRenovacion()); }
 
 // Lectura que solo existe en un núcleo más nuevo (app 0.9.0: totales de 0.16.0). Si el servidor no tiene
 // esa función (núcleo viejo: PostgREST responde 404 / PGRST202) devuelve null y la pantalla usa el método

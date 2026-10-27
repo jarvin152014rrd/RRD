@@ -8,7 +8,19 @@ let perfil = null;
 let permisos = new Set();
 let modulos = new Set();
 let reloj = null;
+let sinInternet = false;   // app 0.14.0 (G1): la app abrió SIN conexión con el perfil guardado en este equipo
 const LLAVE_EMPRESA = 'negocio.empresa';
+
+export function modoSinInternet() { return sinInternet; }
+// Abre con el perfil sin internet guardado en este equipo (G1). Solo para vender de contado y ver las ventas del día.
+export function usarPerfilGuardado(p) {
+  perfil = { ...p, sin_internet_modo: true };
+  permisos = new Set(perfil.permisos || []);
+  modulos = new Set(perfil.modulos || []);
+  sinInternet = true;
+  configurarFormato(perfil.empresa || {});
+  return perfil;
+}
 
 export function perfilActual() { return perfil; }
 export function empresaId() { return perfil && perfil.empresa ? perfil.empresa.id : null; }
@@ -31,6 +43,7 @@ export async function cargarPerfil() {
     leer('version_esquema', {}, { limite: 1 }).then((x) => String((x && x[0] && x[0].version_nucleo) || '')).catch(() => '')]);
   perfil = p;
   perfil.version_nucleo = version;
+  sinInternet = false;
   permisos = new Set(perfil.permisos || []);
   modulos = new Set(perfil.modulos || []);
   configurarFormato(perfil.empresa || {});
@@ -38,7 +51,7 @@ export async function cargarPerfil() {
 }
 
 export function olvidarPerfil() {
-  perfil = null; permisos = new Set(); modulos = new Set();
+  perfil = null; permisos = new Set(); modulos = new Set(); sinInternet = false;
   detenerVigilancia();
 }
 
@@ -48,7 +61,7 @@ export function vigilarSesion(alSalir) {
   detenerVigilancia();
   const cada = Math.max(2, Number(config.revisarSesionSegundos) || 60) * 1000;
   const revisar = async () => {
-    if (!empresaId()) return;
+    if (!empresaId() || sinInternet) return;
     try {
       const e = await rpc('mi_estado_sesion', { p_empresa_id: empresaId() });
       if (!e) return;
