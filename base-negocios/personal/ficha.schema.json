@@ -156,6 +156,10 @@
             "conciliacion": {
               "description": "Conciliación bancaria con el estado de cuenta del banco (necesita dinero).",
               "type": "boolean"
+            },
+            "facturas_emergencia": {
+              "description": "Facturas de emergencia: pasar al sistema el talonario de imprenta (necesita ventas y facturas con CAI).",
+              "type": "boolean"
             }
           }
         },
@@ -359,7 +363,8 @@
               "apartados",
               "comisiones",
               "fondos",
-              "conciliacion"
+              "conciliacion",
+              "facturas_emergencia"
             ]
           }
         },

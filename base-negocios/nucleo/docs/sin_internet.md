@@ -119,3 +119,29 @@ Una transferencia (con o sin internet) entra a "Transferencias por confirmar": n
 - El comprobante que se reimprime desde el servidor no dice "Emitida sin conexión" (la venta lo lleva en la nota).
 - `preparar_sin_internet` entrega el catálogo completo cuando cambia (no por páginas ni solo lo que cambió de cada producto).
 - El permiso se revisa con el que el usuario tiene al subir (no "a la hora de la venta").
+
+# Facturas de emergencia — módulo "facturas_emergencia" (056, núcleo 0.20.0)
+
+Decisión del dueño: plan B cuando no hay sistema (o el equipo se dañó): facturas escritas a mano en un **talonario de
+imprenta con su propio CAI**, que después se pasan al sistema. Módulo que se enciende y apaga como los demás (depende de
+`ventas` y `fiscal_hn`; Armador, ficha y `ficha.py` lo conocen). **El contador debe confirmar cómo pedir a la SAR el
+CAI del talonario** (imprenta autorizada, punto de emisión propio).
+
+- Permisos: `talonario.administrar` (dueño y admin: registrar y desactivar rangos) y `talonario.registrar` (dueño y
+  admin; el dueño se lo puede dar al cajero: pasar facturas y anular números).
+- `registrar_talonario(empresa, {"cai","rango_desde","rango_hasta","fecha_limite_emision","nota"?}, id_operacion)`: el
+  establecimiento es una sucursal; el **punto de emisión es propio** (nunca el de una caja; una caja nueva no puede
+  tomarlo y un rango CAI de caja no puede usar el prefijo de un talonario); sin cruces; CAI vencido no.
+  `desactivar_talonario(empresa, talonario, motivo)`.
+- `registrar_factura_talonario(empresa, {"talonario_id","numero","fecha","cliente_id"?,"lineas","pagos","caja_id"?,
+  "descuento_factura"?,"nota"?}, id_operacion)` (+ `ventas.vender`, y `ventas.cobrar` si entra dinero): número dentro del
+  rango (`TALONARIO_INVALIDO`), no usado ni anulado (`TALONARIO_REPETIDO`), la fecha de la copia dentro de la vigencia
+  del CAI (`CAI_VENCIDO`) y no futura, mes abierto (`PERIODO_CERRADO`: el dueño lo reabre). Se registra la venta
+  completa (inventario, caja o cuenta, ISV, libro de ventas) con ese número, esa fecha y los datos fiscales del talonario
+  (`datos_fiscales.talonario = true`). Funciona aunque la caja tenga un bloque sin internet. Una venta que pediría
+  aprobación no se pasa (`APROBACION_REQUERIDA`: la pasa quien aprueba).
+- `anular_numero_talonario(empresa, talonario, numero, motivo, id_operacion, fecha?)`: un número arruinado queda
+  ANULADO y sale en el libro de ventas en cero como "ANULADA" (también los números de un bloque sin internet anulados o
+  no usados).
+- `talonarios(empresa)`: cada talonario con usados, anulados, libres, **huecos** (libres antes del último usado) y el
+  detalle. Prueba 158.

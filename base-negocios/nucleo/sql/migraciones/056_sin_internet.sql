@@ -19,6 +19,8 @@
 -- reservar_bloque_numeros, devolver_bloque, subir_ventas_sin_internet,
 -- ventas_sin_internet_por_resolver, resolver_venta_sin_internet,
 -- conciliar_bloque, bloques_sin_internet. Detalle: nucleo/docs/sin_internet.md.
+-- Decisiones del dueño (0.20.0): transferencias sin internet por confirmar ("no llegó" = deuda) y el
+-- módulo nuevo "facturas_emergencia" (talonario de imprenta), al final de este archivo.
 -- =====================================================================
 
 INSERT INTO public.error_catalogo (codigo, mensaje_usuario, que_hacer) VALUES
@@ -2263,4 +2265,423 @@ GRANT EXECUTE ON FUNCTION
   public.resolver_venta_sin_internet(uuid, text, text, uuid, jsonb), public.conciliar_bloque(uuid, uuid, text, uuid),
   public.bloques_sin_internet(uuid), public.configurar_empresa(uuid, jsonb, text),
   public.transferencias_por_confirmar(uuid, boolean), public.marcar_transferencia_no_llego(uuid, text, uuid, jsonb)
+TO authenticated;
+
+-- =====================================================================
+-- 13) FACTURAS DE EMERGENCIA (talonario de imprenta) — módulo "facturas_emergencia" (decisión del dueño, 0.20.0)
+--     Plan B cuando no hay sistema: facturas escritas a mano en un talonario con CAI de imprenta. Después se PASAN al
+--     sistema con su número y su fecha (venta completa: inventario, caja o cuenta, ISV y libro de ventas). El talonario
+--     tiene su PROPIO punto de emisión (nunca el de una caja del sistema) para que los números nunca se mezclen.
+--     NOTA: el contador debe confirmar cómo pedir a la SAR el CAI del talonario (imprenta autorizada).
+-- =====================================================================
+INSERT INTO public.error_catalogo (codigo, mensaje_usuario, que_hacer) VALUES
+  ('TALONARIO_INVALIDO', 'Ese número o ese talonario no son válidos.',
+   'Revise el número escrito en la factura: debe estar dentro del rango del talonario (CAI de imprenta) y el talonario activo.'),
+  ('TALONARIO_REPETIDO', 'Ese número del talonario ya se pasó al sistema (o se anuló).',
+   'Busque la factura en la lista del talonario. Un número no se usa dos veces.');
+
+INSERT INTO public.modulo (codigo, nombre) VALUES ('facturas_emergencia', 'Facturas de emergencia (talonario de imprenta)');
+INSERT INTO public.modulo_dependencia (modulo, requiere, motivo) VALUES
+  ('facturas_emergencia', 'ventas', 'Una factura del talonario se pasa al sistema como una venta.'),
+  ('facturas_emergencia', 'fiscal_hn', 'El talonario tiene su CAI de imprenta (régimen fiscal de Honduras).');
+
+INSERT INTO public.permiso (codigo, descripcion, es_movimiento, es_financiero) VALUES
+  ('talonario.administrar', 'Registrar y desactivar los rangos del talonario de facturas de emergencia (CAI de imprenta)', false, false),
+  ('talonario.registrar', 'Pasar al sistema las facturas escritas a mano en el talonario y anular números arruinados', true, false);
+INSERT INTO interno.plantilla_rol_permiso (rol, permiso) VALUES
+  ('dueno', 'talonario.administrar'), ('admin', 'talonario.administrar'),
+  ('dueno', 'talonario.registrar'), ('admin', 'talonario.registrar');
+SELECT interno.repartir_permisos(ARRAY['talonario.administrar', 'talonario.registrar'], 'Núcleo 0.20.0: facturas de emergencia');
+
+CREATE TABLE public.talonario_rango (
+  id                     uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  empresa_id             uuid NOT NULL REFERENCES public.empresa(id),
+  sucursal_id            uuid NOT NULL,
+  cai                    text NOT NULL CHECK (cai ~ '^[0-9A-F]{6}(-[0-9A-F]{6}){4}-[0-9A-F]{2}$'),
+  prefijo                text NOT NULL CHECK (prefijo ~ '^[0-9]{3}-[0-9]{3}-[0-9]{2}$'),
+  rango_desde            text NOT NULL CHECK (rango_desde ~ '^[0-9]{3}-[0-9]{3}-[0-9]{2}-[0-9]{8}$'),
+  rango_hasta            text NOT NULL CHECK (rango_hasta ~ '^[0-9]{3}-[0-9]{3}-[0-9]{2}-[0-9]{8}$'),
+  numero_desde           bigint NOT NULL CHECK (numero_desde BETWEEN 1 AND 99999999),
+  numero_hasta           bigint NOT NULL CHECK (numero_hasta BETWEEN 1 AND 99999999),
+  fecha_limite_emision   date NOT NULL,
+  nota                   text,
+  activo                 boolean NOT NULL DEFAULT true,
+  creado_por             uuid,
+  creado_en              timestamptz NOT NULL DEFAULT now(),
+  id_operacion           uuid NOT NULL,
+  UNIQUE (empresa_id, id),
+  UNIQUE (empresa_id, id_operacion),
+  FOREIGN KEY (empresa_id, sucursal_id) REFERENCES public.sucursal(empresa_id, id),
+  CHECK (numero_desde <= numero_hasta),
+  CHECK (left(rango_desde, 10) = prefijo AND left(rango_hasta, 10) = prefijo),
+  CHECK (right(rango_desde, 8)::bigint = numero_desde AND right(rango_hasta, 8)::bigint = numero_hasta)
+);
+
+CREATE TABLE public.talonario_numero (
+  id                uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  empresa_id        uuid NOT NULL REFERENCES public.empresa(id),
+  rango_id          uuid NOT NULL,
+  sucursal_id       uuid NOT NULL,
+  numero            bigint NOT NULL,
+  numero_documento  text NOT NULL,
+  estado            text NOT NULL CHECK (estado IN ('usado', 'anulado')),
+  fecha             date NOT NULL,                  -- la fecha escrita en la copia (o la de la anulación)
+  venta_id          uuid,
+  motivo            text,
+  id_operacion      uuid NOT NULL,
+  creado_por        uuid,
+  creado_en         timestamptz NOT NULL DEFAULT now(),
+  UNIQUE (empresa_id, id),
+  UNIQUE (rango_id, numero),
+  UNIQUE (empresa_id, id_operacion),
+  FOREIGN KEY (empresa_id, rango_id) REFERENCES public.talonario_rango(empresa_id, id),
+  FOREIGN KEY (empresa_id, venta_id) REFERENCES public.venta(empresa_id, id),
+  CHECK ((estado = 'usado') = (venta_id IS NOT NULL)),
+  CHECK (estado <> 'anulado' OR length(trim(motivo)) >= 5)
+);
+
+CREATE FUNCTION interno.proteger_talonario_rango() RETURNS trigger
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = '' AS $$
+BEGIN
+  IF (to_jsonb(NEW) - 'activo') IS DISTINCT FROM (to_jsonb(OLD) - 'activo') THEN
+    RAISE EXCEPTION 'PROHIBIDO: un rango de talonario no se edita; si está mal, desactívelo y registre el correcto.';
+  END IF;
+  RETURN NEW;
+END $$;
+CREATE TRIGGER proteger BEFORE UPDATE ON public.talonario_rango FOR EACH ROW EXECUTE FUNCTION interno.proteger_talonario_rango();
+CREATE TRIGGER proteger BEFORE UPDATE ON public.talonario_numero
+  FOR EACH ROW EXECUTE FUNCTION interno.prohibir_cambios('Un número del talonario no se edita.');
+DO $$
+DECLARE t text;
+BEGIN
+  FOREACH t IN ARRAY ARRAY['talonario_rango', 'talonario_numero'] LOOP
+    EXECUTE format('CREATE TRIGGER auditar AFTER INSERT OR UPDATE OR DELETE ON public.%I FOR EACH ROW EXECUTE FUNCTION interno.auditar()', t);
+    EXECUTE format('CREATE TRIGGER no_borrar BEFORE DELETE ON public.%I FOR EACH ROW EXECUTE FUNCTION interno.prohibir_cambios(%L)',
+                   t, 'El talonario no se borra: se desactiva o se anula el número.');
+    EXECUTE format('CREATE TRIGGER no_vaciar BEFORE TRUNCATE ON public.%I FOR EACH STATEMENT EXECUTE FUNCTION interno.prohibir_cambios(%L)',
+                   t, 'No se permite vaciar tablas.');
+    EXECUTE format('ALTER TABLE public.%I ENABLE ROW LEVEL SECURITY', t);
+    EXECUTE format('REVOKE ALL ON public.%I FROM PUBLIC, anon, authenticated', t);
+    EXECUTE format('GRANT SELECT ON public.%I TO authenticated, service_role', t);
+    EXECUTE format('CREATE POLICY leer ON public.%I FOR SELECT TO authenticated USING (
+        empresa_id = ANY (ARRAY(SELECT public.empresas_con_permiso(''talonario.registrar'')))
+        OR empresa_id = ANY (ARRAY(SELECT public.empresas_con_permiso(''talonario.administrar'')))
+        OR empresa_id = ANY (ARRAY(SELECT public.empresas_con_permiso(''ventas.ver''))))', t);
+    EXECUTE format('CREATE POLICY por_sucursal ON public.%I AS RESTRICTIVE FOR SELECT TO authenticated USING (
+        empresa_id = ANY (ARRAY(SELECT public.empresas_sin_restriccion())) OR sucursal_id = ANY (ARRAY(SELECT public.sucursales_permitidas())))', t);
+  END LOOP;
+END $$;
+INSERT INTO interno.id_operacion_uso (tabla, columna, tipo, orden) VALUES
+  ('talonario_rango', 'id_operacion', 'registro_talonario', 105),
+  ('talonario_numero', 'id_operacion', 'numero_talonario', 106);
+
+-- Un punto de emisión del talonario nunca es el de una caja, ni un rango CAI del sistema usa el prefijo de un talonario.
+CREATE FUNCTION interno.talonario_sin_cruce() RETURNS trigger
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = '' AS $$
+BEGIN
+  IF TG_TABLE_NAME = 'cai_rango' THEN
+    IF EXISTS (SELECT 1 FROM public.talonario_rango t WHERE t.empresa_id = NEW.empresa_id AND t.prefijo = NEW.prefijo) THEN
+      RAISE EXCEPTION 'CAI_INVALIDO: el prefijo % es de un talonario de facturas de emergencia; la caja usa su propio punto de emisión.', NEW.prefijo;
+    END IF;
+  ELSIF TG_TABLE_NAME = 'caja' THEN
+    IF EXISTS (SELECT 1 FROM public.talonario_rango t JOIN public.sucursal s ON s.id = NEW.sucursal_id
+                WHERE t.empresa_id = NEW.empresa_id AND split_part(t.prefijo, '-', 1) = s.codigo
+                  AND split_part(t.prefijo, '-', 2) = NEW.punto_emision) THEN
+      RAISE EXCEPTION 'DATO_INVALIDO: el punto de emisión % es del talonario de facturas de emergencia; use otro.', NEW.punto_emision;
+    END IF;
+  END IF;
+  RETURN NEW;
+END $$;
+CREATE TRIGGER talonario_sin_cruce BEFORE INSERT ON public.cai_rango FOR EACH ROW EXECUTE FUNCTION interno.talonario_sin_cruce();
+CREATE TRIGGER talonario_sin_cruce BEFORE INSERT OR UPDATE OF punto_emision ON public.caja
+  FOR EACH ROW EXECUTE FUNCTION interno.talonario_sin_cruce();
+
+-- registrar_talonario(empresa, {"cai","rango_desde","rango_hasta","fecha_limite_emision","nota"?}, id_operacion)
+-- talonario.administrar (dueño y admin), módulo facturas_emergencia. El establecimiento es el de una sucursal; el punto de
+-- emisión no puede ser el de una caja del sistema ni cruzarse con otro rango (de talonario o de CAI).
+CREATE FUNCTION public.registrar_talonario(p_empresa_id uuid, p_datos jsonb, p_id_operacion uuid) RETURNS jsonb
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = '' AS $$
+DECLARE
+  v_cai   text;
+  v_desde text;
+  v_hasta text;
+  v_lim   date;
+  v_suc   public.sucursal;
+  t       public.talonario_rango;
+BEGIN
+  PERFORM interno.exigir_escritura(p_empresa_id, 'talonario.administrar', 'facturas_emergencia');
+  IF p_id_operacion IS NULL THEN
+    RAISE EXCEPTION 'FALTA_ID_OPERACION: cada operación necesita un id_operacion (uuid) único.';
+  END IF;
+  PERFORM interno.exigir_tipo_operacion(p_empresa_id, p_id_operacion, 'registro_talonario');
+  PERFORM interno.exigir_claves(p_datos, ARRAY['cai', 'rango_desde', 'rango_hasta', 'fecha_limite_emision', 'nota']);
+  v_cai := upper(regexp_replace(coalesce(interno.json_texto(p_datos->'cai', 'cai', 60), ''), '[[:space:]]', '', 'g'));
+  IF v_cai !~ '^[0-9A-F]{6}(-[0-9A-F]{6}){4}-[0-9A-F]{2}$' THEN
+    RAISE EXCEPTION 'CAI_INVALIDO: el CAI tiene 6 grupos separados por guion (5 de 6 caracteres y 1 de 2, letras A-F y números).';
+  END IF;
+  v_desde := interno.json_texto(p_datos->'rango_desde', 'rango_desde', 20);
+  v_hasta := interno.json_texto(p_datos->'rango_hasta', 'rango_hasta', 20);
+  IF coalesce(v_desde, '') !~ '^[0-9]{3}-[0-9]{3}-[0-9]{2}-[0-9]{8}$' OR coalesce(v_hasta, '') !~ '^[0-9]{3}-[0-9]{3}-[0-9]{2}-[0-9]{8}$'
+     OR left(v_desde, 10) <> left(v_hasta, 10) OR right(v_desde, 8)::bigint = 0 OR right(v_desde, 8)::bigint > right(v_hasta, 8)::bigint THEN
+    RAISE EXCEPTION 'CAI_INVALIDO: el rango va con el formato 000-901-01-00000001, el mismo prefijo al inicio y al final, y el inicio no mayor que el final.';
+  END IF;
+  SELECT * INTO v_suc FROM public.sucursal s WHERE s.empresa_id = p_empresa_id AND s.codigo = split_part(v_desde, '-', 1) AND s.activa;
+  IF v_suc.id IS NULL THEN
+    RAISE EXCEPTION 'CAI_INVALIDO: el establecimiento % no es una sucursal activa de la empresa.', split_part(v_desde, '-', 1);
+  END IF;
+  PERFORM interno.exigir_sucursal(p_empresa_id, v_suc.id);
+  IF EXISTS (SELECT 1 FROM public.caja c WHERE c.sucursal_id = v_suc.id AND c.punto_emision = split_part(v_desde, '-', 2)) THEN
+    RAISE EXCEPTION 'CAI_INVALIDO: el punto de emisión % es de una caja del sistema; el talonario lleva su propio punto de emisión.',
+      split_part(v_desde, '-', 2);
+  END IF;
+  v_lim := interno.json_fecha(p_datos->'fecha_limite_emision', 'fecha_limite_emision');
+  IF v_lim IS NULL THEN
+    RAISE EXCEPTION 'CAI_INVALIDO: indique la fecha límite de emisión (AAAA-MM-DD).';
+  END IF;
+  IF v_lim < public.hoy_local(p_empresa_id) THEN
+    RAISE EXCEPTION 'CAI_VENCIDO: la fecha límite de emisión (%) ya pasó; no se puede registrar.', to_char(v_lim, 'DD/MM/YYYY');
+  END IF;
+  PERFORM interno.reservar_operacion(p_empresa_id, p_id_operacion, 'registro_talonario');
+  SELECT * INTO t FROM public.talonario_rango x WHERE x.empresa_id = p_empresa_id AND x.id_operacion = p_id_operacion;
+  IF t.id IS NOT NULL THEN
+    RETURN jsonb_build_object('talonario_id', t.id, 'ya_estaba', true);
+  END IF;
+  IF EXISTS (SELECT 1 FROM public.cai_rango x WHERE x.empresa_id = p_empresa_id AND x.prefijo = left(v_desde, 10)) THEN
+    RAISE EXCEPTION 'CAI_INVALIDO: ese prefijo (%) ya lo usa un rango CAI de una caja.', left(v_desde, 10);
+  END IF;
+  IF EXISTS (SELECT 1 FROM public.talonario_rango x WHERE x.empresa_id = p_empresa_id AND x.prefijo = left(v_desde, 10)
+               AND x.numero_desde <= right(v_hasta, 8)::bigint AND x.numero_hasta >= right(v_desde, 8)::bigint) THEN
+    RAISE EXCEPTION 'CAI_INVALIDO: el rango se cruza con otro talonario ya registrado.';
+  END IF;
+  INSERT INTO public.talonario_rango (empresa_id, sucursal_id, cai, prefijo, rango_desde, rango_hasta, numero_desde, numero_hasta,
+                                      fecha_limite_emision, nota, creado_por, id_operacion)
+  VALUES (p_empresa_id, v_suc.id, v_cai, left(v_desde, 10), v_desde, v_hasta, right(v_desde, 8)::bigint, right(v_hasta, 8)::bigint,
+          v_lim, interno.json_texto(p_datos->'nota', 'nota', 300), auth.uid(), p_id_operacion)
+  RETURNING * INTO t;
+  RETURN jsonb_build_object('talonario_id', t.id, 'prefijo', t.prefijo, 'rango_desde', t.rango_desde, 'rango_hasta', t.rango_hasta,
+    'fecha_limite_emision', to_char(t.fecha_limite_emision, 'YYYY-MM-DD'), 'ya_estaba', false);
+END $$;
+
+-- desactivar_talonario(empresa, talonario, motivo)   talonario.administrar
+CREATE FUNCTION public.desactivar_talonario(p_empresa_id uuid, p_talonario_id uuid, p_motivo text) RETURNS jsonb
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = '' AS $$
+DECLARE t public.talonario_rango;
+BEGIN
+  PERFORM interno.exigir_escritura(p_empresa_id, 'talonario.administrar', 'facturas_emergencia');
+  IF length(trim(coalesce(p_motivo, ''))) < 5 THEN
+    RAISE EXCEPTION 'FALTA_MOTIVO: escriba por qué se desactiva el talonario (mínimo 5 letras).';
+  END IF;
+  PERFORM interno.bloquear_libros(p_empresa_id);
+  SELECT * INTO t FROM public.talonario_rango x WHERE x.id = p_talonario_id AND x.empresa_id = p_empresa_id FOR UPDATE;
+  IF t.id IS NULL THEN
+    RAISE EXCEPTION 'TALONARIO_INVALIDO: ese talonario no existe en esta empresa.';
+  END IF;
+  IF t.activo THEN
+    PERFORM set_config('app.motivo', trim(p_motivo), true);
+    UPDATE public.talonario_rango SET activo = false WHERE id = t.id;
+    PERFORM set_config('app.motivo', '', true);
+  END IF;
+  RETURN jsonb_build_object('talonario_id', t.id, 'activo', false, 'ya_estaba', NOT t.activo);
+END $$;
+
+-- El número de un talonario (y lo que pide revisar): en el rango, sin usar, la fecha dentro de la vigencia del CAI.
+CREATE FUNCTION interno.numero_talonario(p_empresa_id uuid, p_talonario_id uuid, p_numero bigint, p_fecha date)
+RETURNS public.talonario_rango
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = '' AS $$
+DECLARE t public.talonario_rango;
+BEGIN
+  SELECT * INTO t FROM public.talonario_rango x WHERE x.id = p_talonario_id AND x.empresa_id = p_empresa_id FOR UPDATE;
+  IF t.id IS NULL OR NOT t.activo THEN
+    RAISE EXCEPTION 'TALONARIO_INVALIDO: ese talonario no existe o está desactivado.';
+  END IF;
+  IF p_numero IS NULL OR p_numero NOT BETWEEN t.numero_desde AND t.numero_hasta THEN
+    RAISE EXCEPTION 'TALONARIO_INVALIDO: el número % está fuera del rango del talonario (% a %).', coalesce(p_numero::text, '?'),
+      t.rango_desde, t.rango_hasta;
+  END IF;
+  IF EXISTS (SELECT 1 FROM public.talonario_numero n WHERE n.rango_id = t.id AND n.numero = p_numero) THEN
+    RAISE EXCEPTION 'TALONARIO_REPETIDO: el número %-% ya está en el sistema (pasado o anulado).', t.prefijo, lpad(p_numero::text, 8, '0');
+  END IF;
+  IF p_fecha IS NULL OR p_fecha > public.hoy_local(p_empresa_id) THEN
+    RAISE EXCEPTION 'FECHA_INVALIDA: escriba la fecha que tiene la copia (no puede ser futura).';
+  END IF;
+  IF p_fecha > t.fecha_limite_emision THEN
+    RAISE EXCEPTION 'CAI_VENCIDO: la factura es del % y el CAI del talonario venció el %.', to_char(p_fecha, 'DD/MM/YYYY'),
+      to_char(t.fecha_limite_emision, 'DD/MM/YYYY');
+  END IF;
+  RETURN t;
+END $$;
+
+-- numero_fiscal (reemplaza la de 027; misma firma): una factura del talonario (app.numero_talonario) lleva el número
+-- escrito a mano y los datos fiscales del talonario; si no, como siempre.
+ALTER FUNCTION interno.numero_fiscal(uuid, uuid, text, date) RENAME TO numero_fiscal_027;
+CREATE FUNCTION interno.numero_fiscal(p_empresa_id uuid, p_caja_id uuid, p_tipo text, p_fecha date,
+                                      OUT o_numero text, OUT o_datos jsonb)
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = '' AS $$
+DECLARE
+  v_t jsonb := nullif(current_setting('app.numero_talonario', true), '')::jsonb;
+  t   public.talonario_rango;
+  rf  record;
+BEGIN
+  IF v_t IS NOT NULL AND p_tipo = 'factura' THEN
+    SELECT * INTO t FROM public.talonario_rango x WHERE x.id = (v_t->>'talonario_id')::uuid AND x.empresa_id = p_empresa_id;
+    o_numero := t.prefijo || '-' || lpad((v_t->>'numero'), 8, '0');
+    o_datos := jsonb_build_object('regimen', 'fiscal_hn', 'talonario_id', t.id, 'cai', t.cai, 'rango_desde', t.rango_desde,
+      'rango_hasta', t.rango_hasta, 'fecha_limite_emision', to_char(t.fecha_limite_emision, 'YYYY-MM-DD'), 'talonario', true);
+    RETURN;
+  END IF;
+  SELECT * INTO rf FROM interno.numero_fiscal_027(p_empresa_id, p_caja_id, p_tipo, p_fecha);
+  o_numero := rf.o_numero;
+  o_datos := rf.o_datos;
+END $$;
+
+-- registrar_factura_talonario(empresa, {"talonario_id","numero","fecha", "cliente_id"?, "lineas", "pagos", "caja_id"?,
+--   "descuento_factura"?, "nota"?}, id_operacion)   talonario.registrar + ventas.vender (y ventas.cobrar si entra dinero)
+-- La venta se registra completa (como registrar_venta) con el número escrito a mano y la fecha de la copia; el mes debe
+-- estar abierto (si no, el dueño lo reabre). Si la venta pidiera aprobación, no se pasa (la pasa quien aprueba).
+CREATE FUNCTION public.registrar_factura_talonario(p_empresa_id uuid, p_datos jsonb, p_id_operacion uuid) RETURNS jsonb
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = '' AS $$
+DECLARE
+  t      public.talonario_rango;
+  v      public.venta;
+  n      public.talonario_numero;
+  r      jsonb;
+  v_num  bigint;
+  v_fec  date;
+BEGIN
+  PERFORM interno.exigir_escritura(p_empresa_id, 'talonario.registrar', 'facturas_emergencia');
+  PERFORM interno.exigir_escritura(p_empresa_id, 'ventas.vender', 'ventas');
+  IF p_id_operacion IS NULL THEN
+    RAISE EXCEPTION 'FALTA_ID_OPERACION: cada operación necesita un id_operacion (uuid) único.';
+  END IF;
+  PERFORM interno.exigir_tipo_operacion(p_empresa_id, p_id_operacion, 'venta');
+  SELECT * INTO v FROM public.venta x WHERE x.empresa_id = p_empresa_id AND x.id_operacion = p_id_operacion;
+  IF v.id IS NOT NULL THEN
+    RETURN interno.venta_respuesta(v, true);
+  END IF;
+  PERFORM interno.exigir_claves(p_datos, ARRAY['talonario_id', 'numero', 'fecha', 'cliente_id', 'lineas', 'pagos', 'caja_id',
+                                               'descuento_factura', 'nota', 'equipo']);
+  v_num := interno.json_entero(p_datos->'numero', 'numero');
+  v_fec := interno.json_fecha(p_datos->'fecha', 'fecha');
+  PERFORM interno.reservar_operacion(p_empresa_id, p_id_operacion, 'venta');
+  t := interno.numero_talonario(p_empresa_id, interno.json_uuid(p_datos->'talonario_id', 'talonario_id'), v_num, v_fec);
+  PERFORM interno.exigir_periodo_abierto(p_empresa_id, v_fec);
+  PERFORM set_config('app.numero_talonario', jsonb_build_object('talonario_id', t.id, 'numero', v_num)::text, true);
+  r := interno.registrar_venta_base(p_empresa_id,
+         (p_datos - 'talonario_id' - 'numero') || jsonb_build_object('tipo_documento', 'factura',
+           'nota', concat_ws(' · ', 'Factura de talonario (emergencia)', p_datos->>'nota')),
+         p_id_operacion);
+  PERFORM set_config('app.numero_talonario', '', true);
+  IF r->>'estado' <> 'emitida' THEN
+    RAISE EXCEPTION 'APROBACION_REQUERIDA: esa factura pide aprobación (%); que la pase quien aprueba.', r->'requiere_aprobacion';
+  END IF;
+  INSERT INTO public.talonario_numero (empresa_id, rango_id, sucursal_id, numero, numero_documento, estado, fecha, venta_id, id_operacion, creado_por)
+  VALUES (p_empresa_id, t.id, t.sucursal_id, v_num, r->>'numero_documento', 'usado', v_fec, (r->>'venta_id')::uuid, p_id_operacion, auth.uid())
+  RETURNING * INTO n;
+  RETURN interno.ocultar_costos(p_empresa_id, r, ARRAY['costo_centavos']) || jsonb_build_object('talonario_id', t.id);
+END $$;
+
+-- anular_numero_talonario(empresa, talonario, numero, motivo, id_operacion, fecha?)   talonario.registrar
+-- Un número arruinado o anulado a mano: queda ANULADO (y así sale en el libro de ventas). Nunca se vuelve a usar.
+CREATE FUNCTION public.anular_numero_talonario(p_empresa_id uuid, p_talonario_id uuid, p_numero bigint, p_motivo text,
+                                               p_id_operacion uuid, p_fecha date DEFAULT NULL) RETURNS jsonb
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = '' AS $$
+DECLARE
+  t   public.talonario_rango;
+  n   public.talonario_numero;
+  v_f date := coalesce(p_fecha, public.hoy_local(p_empresa_id));
+BEGIN
+  PERFORM interno.exigir_escritura(p_empresa_id, 'talonario.registrar', 'facturas_emergencia');
+  IF p_id_operacion IS NULL THEN
+    RAISE EXCEPTION 'FALTA_ID_OPERACION: cada operación necesita un id_operacion (uuid) único.';
+  END IF;
+  PERFORM interno.exigir_tipo_operacion(p_empresa_id, p_id_operacion, 'numero_talonario');
+  SELECT * INTO n FROM public.talonario_numero x WHERE x.empresa_id = p_empresa_id AND x.id_operacion = p_id_operacion;
+  IF n.id IS NOT NULL THEN
+    RETURN jsonb_build_object('numero_documento', n.numero_documento, 'estado', n.estado, 'ya_estaba', true);
+  END IF;
+  IF length(trim(coalesce(p_motivo, ''))) < 5 THEN
+    RAISE EXCEPTION 'FALTA_MOTIVO: escriba por qué se anula el número (mínimo 5 letras).';
+  END IF;
+  PERFORM interno.reservar_operacion(p_empresa_id, p_id_operacion, 'numero_talonario');
+  t := interno.numero_talonario(p_empresa_id, p_talonario_id, p_numero, v_f);
+  PERFORM interno.exigir_periodo_abierto(p_empresa_id, v_f);
+  PERFORM set_config('app.motivo', trim(p_motivo), true);
+  INSERT INTO public.talonario_numero (empresa_id, rango_id, sucursal_id, numero, numero_documento, estado, fecha, motivo, id_operacion, creado_por)
+  VALUES (p_empresa_id, t.id, t.sucursal_id, p_numero, t.prefijo || '-' || lpad(p_numero::text, 8, '0'), 'anulado', v_f, trim(p_motivo),
+          p_id_operacion, auth.uid())
+  RETURNING * INTO n;
+  PERFORM set_config('app.motivo', '', true);
+  RETURN jsonb_build_object('numero_documento', n.numero_documento, 'estado', n.estado, 'ya_estaba', false);
+END $$;
+
+-- talonarios(empresa)   talonario.registrar, talonario.administrar o ventas.ver
+-- Cada talonario con usados, anulados y libres; los huecos (números libres ANTES del último usado) y el detalle.
+CREATE FUNCTION public.talonarios(p_empresa_id uuid) RETURNS jsonb
+LANGUAGE plpgsql STABLE SECURITY DEFINER SET search_path = '' AS $$
+BEGIN
+  IF public.tiene_permiso('talonario.registrar', p_empresa_id) THEN
+    PERFORM interno.exigir_lectura(p_empresa_id, 'talonario.registrar');
+  ELSIF public.tiene_permiso('talonario.administrar', p_empresa_id) THEN
+    PERFORM interno.exigir_lectura(p_empresa_id, 'talonario.administrar');
+  ELSE
+    PERFORM interno.exigir_lectura(p_empresa_id, 'ventas.ver');
+  END IF;
+  RETURN jsonb_build_object('talonarios', coalesce((SELECT jsonb_agg(jsonb_build_object(
+      'talonario_id', t.id, 'cai', t.cai, 'prefijo', t.prefijo, 'rango_desde', t.rango_desde, 'rango_hasta', t.rango_hasta,
+      'desde', t.numero_desde, 'hasta', t.numero_hasta, 'fecha_limite_emision', to_char(t.fecha_limite_emision, 'YYYY-MM-DD'),
+      'vencido', t.fecha_limite_emision < public.hoy_local(p_empresa_id), 'activo', t.activo, 'nota', t.nota,
+      'sucursal', (SELECT s.codigo || ' ' || s.nombre FROM public.sucursal s WHERE s.id = t.sucursal_id),
+      'usados', (SELECT count(*) FROM public.talonario_numero n WHERE n.rango_id = t.id AND n.estado = 'usado'),
+      'anulados', (SELECT count(*) FROM public.talonario_numero n WHERE n.rango_id = t.id AND n.estado = 'anulado'),
+      'libres', (t.numero_hasta - t.numero_desde + 1) - (SELECT count(*) FROM public.talonario_numero n WHERE n.rango_id = t.id),
+      'huecos', (SELECT coalesce(jsonb_agg(g ORDER BY g), '[]') FROM (
+                   SELECT g FROM generate_series(t.numero_desde,
+                            coalesce((SELECT max(n.numero) FROM public.talonario_numero n WHERE n.rango_id = t.id), t.numero_desde - 1)) g
+                    WHERE NOT EXISTS (SELECT 1 FROM public.talonario_numero n WHERE n.rango_id = t.id AND n.numero = g)
+                    ORDER BY g LIMIT 200) h),
+      'numeros', (SELECT coalesce(jsonb_agg(jsonb_build_object('numero', n.numero, 'numero_documento', n.numero_documento,
+                    'estado', n.estado, 'fecha', to_char(n.fecha, 'YYYY-MM-DD'), 'venta_id', n.venta_id, 'motivo', n.motivo,
+                    'cliente', v.cliente_nombre, 'total_centavos', v.total_centavos) ORDER BY n.numero), '[]')
+                    FROM public.talonario_numero n LEFT JOIN public.venta v ON v.id = n.venta_id WHERE n.rango_id = t.id))
+      ORDER BY t.activo DESC, t.prefijo, t.numero_desde)
+    FROM public.talonario_rango t
+   WHERE t.empresa_id = p_empresa_id AND interno.sucursal_permitida(p_empresa_id, t.sucursal_id)), '[]'));
+END $$;
+
+-- Libro de ventas (reemplaza la de 044, la misma más): los números ANULADOS del talonario y los números de un bloque sin
+-- internet anulados o no usados salen en cero como "ANULADA" (para que conste).
+ALTER FUNCTION interno.filas_libro_ventas(uuid, date, date) RENAME TO filas_libro_ventas_044;
+CREATE FUNCTION interno.filas_libro_ventas(p_empresa_id uuid, p_desde date, p_hasta date) RETURNS jsonb
+LANGUAGE sql STABLE SECURITY DEFINER SET search_path = '' AS $$
+  WITH f AS (
+    SELECT x FROM jsonb_array_elements(interno.filas_libro_ventas_044(p_empresa_id, p_desde, p_hasta)) x
+    UNION ALL
+    SELECT jsonb_build_object('fecha', to_char(n.fecha, 'YYYY-MM-DD'), 'tipo_documento', 'factura', 'numero_documento', n.numero_documento,
+             'cai', t.cai, 'rtn', NULL, 'nombre', 'ANULADA: ' || n.motivo, 'estado', 'ANULADA', 'documento_referencia', NULL,
+             'documento_id', n.id) || interno.columnas_isv('[]', 0)
+      FROM public.talonario_numero n JOIN public.talonario_rango t ON t.id = n.rango_id
+     WHERE n.empresa_id = p_empresa_id AND n.estado = 'anulado' AND n.fecha BETWEEN p_desde AND p_hasta
+    UNION ALL
+    SELECT jsonb_build_object('fecha', to_char((n.actualizado_en AT TIME ZONE e.zona_horaria)::date, 'YYYY-MM-DD'),
+             'tipo_documento', b.tipo, 'numero_documento', n.numero_documento,
+             'cai', (SELECT r.cai FROM public.cai_rango r WHERE r.id = b.cai_rango_id), 'rtn', NULL,
+             'nombre', CASE n.estado WHEN 'anulado' THEN 'ANULADA (venta sin internet anulada)' ELSE 'ANULADA (número no usado)' END,
+             'estado', 'ANULADA', 'documento_referencia', NULL, 'documento_id', n.id) || interno.columnas_isv('[]', 0)
+      FROM public.numero_emitido n JOIN public.numero_bloque b ON b.id = n.bloque_id JOIN public.empresa e ON e.id = n.empresa_id
+     WHERE n.empresa_id = p_empresa_id AND n.estado IN ('anulado', 'no_usado')
+       AND (n.actualizado_en AT TIME ZONE e.zona_horaria)::date BETWEEN p_desde AND p_hasta)
+  SELECT coalesce(jsonb_agg(f.x ORDER BY f.x->>'fecha', f.x->>'numero_documento', f.x->>'tipo_documento'), '[]') FROM f
+$$;
+
+REVOKE EXECUTE ON FUNCTION interno.proteger_talonario_rango(), interno.talonario_sin_cruce(),
+  interno.numero_talonario(uuid, uuid, bigint, date), interno.numero_fiscal(uuid, uuid, text, date),
+  interno.filas_libro_ventas(uuid, date, date)
+FROM PUBLIC, anon, authenticated, service_role;
+REVOKE EXECUTE ON FUNCTION public.registrar_talonario(uuid, jsonb, uuid), public.desactivar_talonario(uuid, uuid, text),
+  public.registrar_factura_talonario(uuid, jsonb, uuid), public.anular_numero_talonario(uuid, uuid, bigint, text, uuid, date),
+  public.talonarios(uuid)
+FROM PUBLIC, anon, service_role;
+GRANT EXECUTE ON FUNCTION public.registrar_talonario(uuid, jsonb, uuid), public.desactivar_talonario(uuid, uuid, text),
+  public.registrar_factura_talonario(uuid, jsonb, uuid), public.anular_numero_talonario(uuid, uuid, bigint, text, uuid, date),
+  public.talonarios(uuid)
 TO authenticated;

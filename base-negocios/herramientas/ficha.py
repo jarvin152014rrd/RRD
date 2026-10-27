@@ -36,7 +36,7 @@ import urllib.parse
 
 RAIZ = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 ESQUEMA = os.path.join(RAIZ, "personal", "ficha.schema.json")
-MODULOS = ["contabilidad", "inventario", "dinero", "ventas", "compras", "apartados", "comisiones", "fondos", "conciliacion"]   # los que van en "modulos"
+MODULOS = ["contabilidad", "inventario", "dinero", "ventas", "compras", "apartados", "comisiones", "fondos", "conciliacion", "facturas_emergencia"]   # los que van en "modulos"
 REGIMENES = {"ninguno": None, "fiscal_hn": "fiscal_hn"}
 CAMPOS_NEGOCIO = ["nombre", "rtn", "rubro", "moneda", "pais", "zona_horaria", "fecha_inicio", "dias_futuro_max"]
 LIMITES = ["usuarios", "cajas", "sucursales", "bodegas"]

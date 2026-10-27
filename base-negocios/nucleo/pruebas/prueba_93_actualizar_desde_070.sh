@@ -55,7 +55,7 @@ PGDATABASE="$VIEJA" SIN_PREGUNTAR=1 SIN_RESPALDO=1 bash "$RAIZ/herramientas/migr
 # 4) Lo de antes, igual.
 [ "$(q "SELECT total_centavos || '/' || descuento_manual_centavos FROM public.venta WHERE id = pruebas.id('V1')")" = "12825/587" ] || falla "venta vieja intacta"
 [ "$(q "SELECT count(*) FROM public.modulo_activo WHERE NOT estuvo_activo")" = "0" ] || falla "los módulos de antes cuentan como usados"
-[ "$(q "SELECT count(*) FROM public.modulo_dependencia")" = "10" ] || falla "dependencias (0.11.0: 10 con conciliacion)"
+[ "$(q "SELECT count(*) FROM public.modulo_dependencia")" = "12" ] || falla "dependencias (0.11.0: 10 con conciliacion; 0.20.0: 12 con facturas_emergencia)"
 [ "$(q "SELECT count(*) FROM public.rol_permiso WHERE empresa_id = $E AND permiso = 'proveedor.solicitar'")" = "2" ] || falla "permiso nuevo: dueño y admin"
 [ "$(q "SELECT count(*) FROM public.limite_contrato")" = "0" ] || falla "sin límites: como antes"
 [ "$(q "SELECT bool_or(vendedor_cobra) FROM public.empresa")" = "f" ] || falla "el vendedor sigue sin cobrar"

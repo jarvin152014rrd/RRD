@@ -27,8 +27,9 @@ export const NOMBRES = {
   contabilidad: 'Contabilidad (siempre)', ventas: 'Ventas, clientes y cobros', inventario: 'Inventario',
   dinero: 'Cajas, bancos y gastos', compras: 'Compras y proveedores', apartados: 'Apartados',
   comisiones: 'Comisiones', fondos: 'Fondos y socios', conciliacion: 'Cuadrar con el banco', fiscal_hn: 'Facturas con CAI',
+  facturas_emergencia: 'Facturas de emergencia (talonario)',
 };
-export const ORDEN_MODULOS = ['contabilidad', 'ventas', 'inventario', 'dinero', 'compras', 'apartados', 'comisiones', 'fondos', 'conciliacion'];
+export const ORDEN_MODULOS = ['contabilidad', 'ventas', 'inventario', 'dinero', 'compras', 'apartados', 'comisiones', 'fondos', 'conciliacion', 'facturas_emergencia'];
 
 const num = (v, min = 1) => Math.max(min, Math.floor(Number(v) || 0));
 
