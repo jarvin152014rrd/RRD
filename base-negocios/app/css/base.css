@@ -226,8 +226,20 @@ h2 { font-size: 18px; margin: 0 0 8px; }
   /* Lo impreso: solo texto y líneas, en negro (sin íconos ni colores de pantalla). */
   .comprobante svg, .comprobante .icono, .comprobante .chip-color, .comprobante .burbuja { display: none !important; }
   .comprobante, .comprobante * { color: #000 !important; background: #fff !important; box-shadow: none !important; }
+  /* App 0.14.0: venta sin internet: original y copia, una debajo de la otra (la copia en hoja aparte). */
+  .comprobante-tarjeta[data-local] { position: absolute; left: 0; top: 0; width: 74mm; display: block; }
+  .comprobante-tarjeta[data-local] .comprobante { position: static; }
+  .comprobante-copia { break-before: page; page-break-before: always; }
 }
 .suma-nota { color: var(--color-suave); }
+
+/* App 0.14.0: barra de ventas sin internet (arriba, dentro del flujo: el contenido baja y no tapa Cobrar). */
+.sin-conexion[data-tipo=ok] { background: var(--color-ok-fondo, #e6f4ea); color: var(--color-ok, #1d6b35); border-bottom-color: #b9dfc4; }
+.comprobante-copia { width: 100%; display: flex; justify-content: center; }
+.estado-equipo { display: inline-block; font-size: 13px; font-weight: 600; padding: 2px 8px; border-radius: 999px; }
+.estado-equipo[data-estado=en_equipo] { background: #eceff3; color: #3b4352; }
+.estado-equipo[data-estado=subida] { background: #e6f4ea; color: #1d6b35; }
+.estado-equipo[data-estado=por_resolver], .estado-equipo[data-estado=rechazada] { background: #fdecea; color: #a12a1e; }
 
 /* App 0.3.0: tablas, columnas, inventario y ajustes */
 .marca-logo-img { width: 100%; height: 100%; object-fit: contain; border-radius: inherit; background: #ffffff; }

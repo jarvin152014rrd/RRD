@@ -1,6 +1,9 @@
 // Arranque de la app: sesión, menú, rutas (#/pestana/subpestana) y aviso "Sin conexión".
+// App 0.14.0 (núcleo 0.20.0): abre SIN internet con el perfil guardado en este equipo (G1), la barra fija
+// "Sin conexión: N ventas guardadas en este equipo" y la cola de ventas que sube sola (js/sin_internet.js).
 import * as api from './api.js';
-import { cargarPerfil, olvidarPerfil, perfilActual, vigilarSesion, empresaId, puede } from './sesion.js';
+import { cargarPerfil, olvidarPerfil, perfilActual, vigilarSesion, empresaId, puede, modoSinInternet, usarPerfilGuardado, tieneModulo } from './sesion.js';
+import * as si from './sin_internet.js';
 import { menuDelUsuario, botonesCelular, RUTAS_VIEJAS } from './menu.js';
 import { olvidarCatalogo } from './errores.js';
 import { cargarMarca, aplicarMarca, iniciales } from './marca.js';
@@ -15,11 +18,43 @@ const bandaSinConexion = document.getElementById('sin-conexion');
 let menu = [];
 let saliendo = false;
 
-// ---------------- Sin conexión ----------------
-function marcarConexion(hay) { bandaSinConexion.hidden = hay; }
+// ---------------- Sin conexión y ventas guardadas en el equipo ----------------
+// La barra va ARRIBA, dentro del flujo (el contenido baja): nunca tapa el botón Cobrar.
+let hayConexion = navigator.onLine;
+let estadoCola = { pendientes: 0, subiendo: null };
+let todoSubidoHasta = 0;
+const TEXTO_SIN_CONEXION = 'Sin conexión. Lo que ve puede no estar al día; para guardar necesita internet.';
+function pintarBarra() {
+  const n = estadoCola.pendientes || 0;
+  const plural = n === 1 ? '1 venta guardada' : `${n} ventas guardadas`;
+  let texto = null, tipo = 'aviso';
+  if (!hayConexion) texto = n || modoSinInternet() ? `Sin conexión: ${plural} en este equipo` : TEXTO_SIN_CONEXION;
+  else if (estadoCola.subiendo) texto = `Subiendo ${Math.min(estadoCola.subiendo.hecho + 1, estadoCola.subiendo.total)} de ${estadoCola.subiendo.total}…`;
+  else if (n) texto = `${plural} en este equipo, por subir`;
+  else if (Date.now() < todoSubidoHasta) { texto = 'Todo subido'; tipo = 'ok'; }
+  bandaSinConexion.hidden = !texto;
+  bandaSinConexion.textContent = texto || '';
+  bandaSinConexion.dataset.tipo = tipo;
+  bandaSinConexion.dataset.pendientes = String(n);
+}
+function marcarConexion(hay) {
+  const volvio = hay && !hayConexion;
+  hayConexion = hay;
+  pintarBarra();
+  if (volvio) alVolverConexion();
+}
+si.escuchar((e) => {
+  const antes = estadoCola;
+  estadoCola = e;
+  if (antes.pendientes > 0 && e.pendientes === 0 && !e.subiendo) { todoSubidoHasta = Date.now() + 5000; setTimeout(pintarBarra, 5100); }
+  pintarBarra();
+});
+si.alAvisoVersion((texto) => avisoFijo(texto));
 window.addEventListener('online', () => marcarConexion(true));
 window.addEventListener('offline', () => marcarConexion(false));
 marcarConexion(navigator.onLine);
+// Antes de cerrar la pestaña con ventas sin subir (en el celular casi nunca sale: por eso la cola sube sola).
+window.addEventListener('beforeunload', (ev) => { if (estadoCola.pendientes > 0) { ev.preventDefault(); ev.returnValue = ''; } });
 api.escuchar((tipo, dato) => {
   if (tipo === 'sin-conexion') marcarConexion(false);
   if (tipo === 'con-conexion') marcarConexion(true);
@@ -34,6 +69,12 @@ if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => navigator.serviceWorker.register('sw.js').catch(() => {}));
 }
 
+function avisoFijo(texto) {
+  let el = document.getElementById('aviso-version');
+  if (!el) { el = document.createElement('div'); el.id = 'aviso-version'; el.className = 'sin-conexion'; el.setAttribute('role', 'alert'); document.body.prepend(el); }
+  el.textContent = texto;
+}
+
 // ---------------- Entrar y salir ----------------
 async function iniciar() {
   try {
@@ -42,10 +83,40 @@ async function iniciar() {
       return mostrarApp();
     }
   } catch (err) {
+    // G1: sin internet, si este equipo tiene el perfil sin internet del último usuario, abre en "modo sin internet".
+    if (err.sinConexion && await abrirSinInternet()) return;
     return mostrarEntrar(err.sinConexion ? { tipo: 'info', texto: 'Sin conexión. Para entrar necesita internet.' } : null);
   }
   mostrarEntrar();
 }
+
+async function abrirSinInternet() {
+  try {
+    const u = si.ultimoUsuario();
+    if (!u || !api.hayRenovacion()) return false;
+    const guardado = await si.perfilLocal(u.empresa_id, u.usuario_id);
+    if (!guardado || !guardado.perfil || !(guardado.sin_internet && (guardado.sin_internet.permisos || []).includes('ventas.sin_internet'))) return false;
+    usarPerfilGuardado(guardado.perfil);
+    mostrarApp();
+    return true;
+  } catch { return false; }
+}
+
+// Volvió el internet: en modo sin internet se renueva la sesión y se carga el perfil completo; después se sube la cola.
+let reconectando = false;
+async function alVolverConexion() {
+  if (modoSinInternet() && !reconectando) {
+    reconectando = true;
+    try {
+      if (await api.restaurar()) { await cargarPerfil(); mostrarApp(); }
+    } catch (err) {
+      if (!err.sinConexion) forzarSalida('Su sesión terminó. Vuelva a entrar (las ventas guardadas siguen en este equipo).');
+    } finally { reconectando = false; }
+  }
+  si.programarSubida(true);
+}
+// En modo sin internet se prueba la conexión cada 20 segundos (navigator.onLine no siempre avisa).
+setInterval(() => { if (modoSinInternet() && navigator.onLine) alVolverConexion(); }, 20000);
 
 async function mostrarEntrar(mensaje = null) {
   window.removeEventListener('hashchange', alCambiarRuta);
@@ -59,7 +130,22 @@ async function mostrarEntrar(mensaje = null) {
   });
 }
 
-async function salir(texto = 'Cerró su sesión.', tipo = 'ok') {
+async function salir(texto = 'Cerró su sesión.', tipo = 'ok', forzado = false) {
+  const p = perfilActual();
+  // Ventas de este usuario sin subir: con internet se suben primero; sin internet no deja salir (4.4).
+  if (p && p.empresa && p.usuario) {
+    let n = (await si.pendientes(p.empresa.id, p.usuario.id)).length;
+    if (n && hayConexion && !modoSinInternet()) {
+      try { await si.subir(p.empresa.id); } catch { /* se revisa abajo */ }
+      n = (await si.pendientes(p.empresa.id, p.usuario.id)).length;
+    }
+    if (n && !forzado && (!hayConexion || modoSinInternet())) {
+      const { aviso } = await import('./ui.js');
+      aviso(`Conéctese para subir ${n === 1 ? 'la venta guardada' : `las ${n} ventas guardadas`} antes de salir.`, 'error', 8000);
+      return;
+    }
+    await si.alSalir(p.empresa.id, p.usuario.id);
+  }
   aplicarMarca({});
   olvidarPerfil();
   olvidarCatalogo();
@@ -77,7 +163,7 @@ async function salir(texto = 'Cerró su sesión.', tipo = 'ok') {
 function forzarSalida(texto) {
   if (saliendo || !perfilActual()) return;
   saliendo = true;
-  salir(texto, 'info').finally(() => { saliendo = false; });
+  salir(texto, 'info', true).finally(() => { saliendo = false; });
 }
 
 // ---------------- Armazón de la app ----------------
@@ -112,9 +198,16 @@ function mostrarApp() {
   zonas = { pestanas, subpestanas, contenido, barra, campana };
   numeroPendientes = 0;
   cargarMarca(); // nombre comercial, logo y colores (si no hay, quedan los del tema)
-  prepararFotos(); // borra la caché de fotos de OTRO negocio que haya usado este equipo
-  contarPendientes();
-  vigilarSesion((motivo) => forzarSalida(motivo));
+  if (!modoSinInternet()) {
+    prepararFotos(); // borra la caché de fotos de OTRO negocio que haya usado este equipo
+    contarPendientes();
+    vigilarSesion((motivo) => forzarSalida(motivo));
+  }
+  // La cola de ventas de este equipo: barra, subida sola y reintentos.
+  si.activar(perfil.empresa.id, perfil.usuario.id);
+  si.programarSubida(true);
+  pintarBarra();
+  programarRefresco();
   window.addEventListener('hashchange', alCambiarRuta);
   alCambiarRuta();
 }
@@ -202,6 +295,22 @@ function alCambiarRuta() {
   document.title = `${titulo} · ${perfilActual().empresa.nombre}`;
   // subpestanas: las pantallas que quieren (Inicio) las ponen al lado de su título (ui.cabezaPantalla).
   mostrarPantalla(pantalla, { pestana, sub, titulo, menu, subpestanas: zonas.subpestanas });
+}
+
+// Con internet, un equipo preparado actualiza sus precios cada 15 minutos (y reserva más números si quedan pocos).
+let relojRefresco = null;
+function programarRefresco() {
+  clearInterval(relojRefresco);
+  relojRefresco = setInterval(async () => {
+    const p = perfilActual();
+    if (!p || modoSinInternet() || !hayConexion || !puede('ventas.sin_internet') || !tieneModulo('ventas')) return;
+    try {
+      if (!(await si.equipoLocal(p.empresa.id)) || !(await si.catalogoLocal(p.empresa.id, p.usuario.id))) return;
+      const c = await si.cajaConBloque(p);
+      const pocos = !c || c.bloque.hasta - c.bloque.siguiente + 1 <= Math.max(5, (c.bloque.hasta - c.bloque.desde + 1) / 5);
+      await si.preparar(p, { reservar: pocos });
+    } catch { /* se intenta en la próxima vuelta */ }
+  }, 15 * 60 * 1000);
 }
 
 let turno = 0; // evita que una pantalla lenta pinte encima de la siguiente

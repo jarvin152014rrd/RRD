@@ -6,6 +6,7 @@ import { perfilActual } from './sesion.js';
 import { dinero, cantidad } from './formato.js';
 import { h, enlaceWhatsApp } from './ui.js';
 import { limpiarImprimible, sinEmojis } from './imprimible.js';
+import { montoEnLetras } from './calculo_local.js';
 
 const FORMA = { efectivo: 'Efectivo', tarjeta: 'Tarjeta', transferencia: 'Transferencia', credito: 'Crédito',
   saldo_favor: 'Saldo a favor', anticipo: 'Anticipo', cheque: 'Cheque' };
@@ -27,6 +28,8 @@ export function comprobante(doc) {
     fiscal.cai ? h('p', { class: 'comp-centro' }, 'CAI ' + fiscal.cai) : null,
     h('p', { class: 'comp-centro comp-negrita', dataset: { dato: 'numero_documento' } }, `${titulo} ${doc.numero_documento || ''}`),
     doc.anulada ? h('p', { class: 'comp-centro comp-negrita' }, 'ANULADA') : null,
+    // App 0.14.0: "Emitida sin conexión" y "Copia: obligado tributario emisor" (solo texto).
+    (doc.notas || []).map((x) => h('p', { class: 'comp-centro comp-negrita', dataset: { dato: 'nota-comprobante' } }, x)),
     h('p', {}, 'Fecha: ' + doc.fecha),
     h('p', {}, 'Cliente: ' + (doc.cliente && doc.cliente.nombre ? doc.cliente.nombre : 'Consumidor final'),
       doc.cliente && doc.cliente.rtn ? ' · RTN ' + doc.cliente.rtn : ''),
@@ -125,4 +128,51 @@ export async function vistaNotaCredito(devolucionId) {
     notaCredito(doc),
     h('div', { class: 'botones no-imprimir' },
       h('button', { type: 'button', class: 'boton boton-principal', onclick: () => window.print() }, 'Imprimir')));
+}
+
+// ---------------- Comprobante de una venta SIN INTERNET (app 0.14.0) ----------------
+// Se arma en el equipo con lo guardado en la cola (el número es el definitivo). Se imprime el ORIGINAL y la
+// "Copia: obligado tributario emisor" (G3: la copia se guarda en la caja; sirve si el equipo se pierde).
+const fechaHoraLocal = (iso, zona) => new Intl.DateTimeFormat('es-HN', { timeZone: zona || 'America/Tegucigalpa',
+  day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false }).format(new Date(iso));
+const fechaCorta = (aaaammdd) => (aaaammdd ? aaaammdd.split('-').reverse().join('/') : '');
+
+export function documentoLocal(reg, copia = false) {
+  const c = reg.comprobante || {};
+  const calc = c.calculo || {};
+  const p = reg.payload;
+  const factura = p.tipo_documento === 'factura';
+  const cai = c.cai || {};
+  const pagos = (p.pagos || []).map((x) => ({ forma: x.forma, referencia: [x.referencia, x.banco].filter(Boolean).join(' · ') || null,
+    monto_centavos: x.monto_centavos, recibido_centavos: x.recibido_centavos || null,
+    vuelto_centavos: x.recibido_centavos ? x.recibido_centavos - x.monto_centavos : null }));
+  return {
+    tipo: factura ? 'FACTURA' : 'TICKET', numero_documento: reg.numero_documento,
+    emisor: { nombre: (c.emisor && c.emisor.nombre) || '', rtn: c.emisor && c.emisor.rtn, caja: c.caja },
+    fecha: fechaHoraLocal(p.hora_equipo, c.zona), cliente: c.cliente, vendedor: c.vendedor,
+    lineas: (calc.lineas || []).map((l) => ({ descripcion: l.descripcion, cantidad: l.cantidad, precio_unitario_centavos: l.precio_unitario_centavos,
+      descuento_centavos: l.descuento_con_isv_centavos || 0, total_centavos: l.total_centavos, precio_tipo: l.precio_tipo,
+      precio_normal_centavos: l.precio_normal_centavos })),
+    totales: { subtotal_centavos: calc.subtotal_centavos, descuento_centavos: calc.descuento_centavos,
+      impuestos: (calc.desglose_impuestos || []).filter((d) => d.clase === 'gravado').map((d) => ({ nombre: `${d.nombre}`, impuesto_centavos: d.impuesto_centavos })),
+      exento_centavos: calc.exento_centavos, total_centavos: calc.total_centavos, impuesto_centavos: calc.impuesto_centavos,
+      total_en_letras: montoEnLetras(calc.total_centavos, c.moneda || 'HNL') },
+    pagos,
+    fiscal: factura ? { cai: cai.cai, rango_desde: cai.rango_desde, rango_hasta: cai.rango_hasta,
+      fecha_limite_emision: fechaCorta(cai.fecha_limite_emision),
+      leyendas: ['La factura es beneficio de todos. ¡Exíjala!', 'Original: Cliente. Copia: Obligado tributario emisor.',
+        !(c.cliente && c.cliente.rtn) ? 'Consumidor final' : null, c.emisor && c.emisor.leyenda_factura].filter(Boolean) }
+      : { leyendas: ['Documento interno (ticket), sin valor fiscal.', c.emisor && c.emisor.leyenda_factura].filter(Boolean) },
+    notas: [c.en_linea ? null : 'Emitida sin conexión', copia ? 'Copia: obligado tributario emisor' : 'Original: cliente'].filter(Boolean),
+  };
+}
+
+// Original y copia, con Imprimir (y los botones que se agreguen).
+export function vistaComprobanteLocal(reg, { extra = [] } = {}) {
+  return h('section', { class: 'tarjeta comprobante-tarjeta', 'aria-label': 'Comprobante', dataset: { local: 'si' } },
+    comprobante(documentoLocal(reg, false)),
+    h('div', { class: 'comprobante-copia' }, comprobante(documentoLocal(reg, true))),
+    h('div', { class: 'botones no-imprimir' },
+      h('button', { type: 'button', class: 'boton boton-principal', onclick: () => window.print() }, 'Imprimir original y copia'),
+      ...extra));
 }

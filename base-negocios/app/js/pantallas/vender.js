@@ -3,13 +3,20 @@
 // registrar_venta) para mostrar totales, ISV, promociones sugeridas y si el descuento pide aprobación.
 // Cobrar llama registrar_venta con un id_operacion que se conserva mientras el carrito no cambie
 // (si se corta el internet y se vuelve a tocar Cobrar, el servidor reconoce la misma venta).
+// App 0.14.0 (núcleo 0.20.0, docs/SIN_INTERNET.md):
+//   * modo sin internet (la app abrió sin conexión): productos, clientes y la cuenta salen de la foto del catálogo
+//     guardada en el equipo (js/calculo_local.js); solo efectivo o transferencia; la venta se guarda en la cola.
+//   * caja con números reservados en ESTE equipo (G2): toda venta de contado pasa por la cola (número del bloque) y
+//     se sube enseguida; si el servidor no contesta, queda guardada y se imprime "Emitida sin conexión".
 import { rpc, escribir, nuevoId } from '../api.js';
-import { empresaId, perfilActual, puede, tieneModulo } from '../sesion.js';
+import { empresaId, perfilActual, puede, tieneModulo, modoSinInternet } from '../sesion.js';
+import * as si from '../sin_internet.js';
+import { precioConTasa } from '../calculo_local.js';
 import { dinero, cantidad as fCantidad, aCentavos, paraCampo } from '../formato.js';
 import { h, icono, aviso, cajaError, errorSimple, campo, dialogo, titulo, estadoVacio, mensaje, chip } from '../ui.js';
 import { hayEnMenu } from '../menu.js';
 import { productos, clientes, miTurno, filtrar, olvidarDatos, nucleoAlMenos } from '../datos.js';
-import { vistaComprobante, nombreForma } from '../comprobante.js';
+import { vistaComprobante, vistaComprobanteLocal, nombreForma } from '../comprobante.js';
 import { abrirTurnoDialogo } from './caja_turno.js';
 import { fotosActivas, miniatura } from '../fotos.js';
 
@@ -57,16 +64,47 @@ export async function escanear(alCodigo, campoCodigo) {
 }
 
 // Carrito compartido por "Nueva venta" (modo 'venta') y "Cotizaciones" (modo 'cotizacion').
+// Productos y clientes de la foto del catálogo guardada en el equipo (modo sin internet).
+function productosDeFoto(cat) {
+  return Object.entries(cat.catalogo.productos).map(([id, p]) => {
+    const imp = cat.catalogo.impuestos[p.tipo_impuesto] || {};
+    return { producto_id: id, nombre: p.nombre, codigo: p.codigo, codigo_barras: p.codigo_barras, unidad: p.unidad, tipo: p.tipo,
+      permite_fracciones: p.permite_fracciones, precio_incluye_isv: p.precio_incluye_isv, impuesto: p.tipo_impuesto,
+      impuesto_clase: imp.clase, existencia: (cat.existencias || {})[id] ?? null,
+      // Para mostrar: el precio con ISV (como lo paga el cliente).
+      precio_venta_centavos: precioConTasa(p.precio_venta_centavos, p.precio_incluye_isv, Number(imp.porcentaje || 0)).con };
+  }).sort((a, b) => a.nombre.localeCompare(b.nombre));
+}
+
 export async function armarCarrito(vista, ctx, { modo, alTerminar = null }) {
   const perfil = perfilActual();
-  const cobra = modo === 'venta' && puedeCobrar() && tieneModulo('dinero');
-  const formas = cobra ? ['efectivo', 'tarjeta', 'transferencia', 'credito', 'mixto'] : ['credito'];
+  // Sin internet (G1) o caja con números reservados en este equipo (G2): la venta de contado va por la cola.
+  const local = modo === 'venta' && modoSinInternet();
+  const conBloque = modo === 'venta' && !local && puedeCobrar() && tieneModulo('ventas') ? await si.cajaConBloque(perfil) : null;
+  let cat = conBloque ? conBloque.cat : null;
+  let estadoLocal = null;
+  if (local) {
+    estadoLocal = await si.estadoVenta(perfil);
+    cat = estadoLocal.cat || null;
+    if (!cat || !cat.catalogo) {
+      vista.append(h('section', { class: 'tarjeta tarjeta-angosta' }, titulo('h1', 'alerta', 'Sin conexión'),
+        mensaje('info', 'Este equipo no está preparado para vender sin internet.', 'Cuando vuelva el internet, prepare el equipo en Ajustes > Sin internet.')));
+      return;
+    }
+  }
+  const porCola = local || Boolean(conBloque);
+  const cobra = modo === 'venta' && (local ? true : puedeCobrar() && tieneModulo('dinero'));
+  const formas = local ? ['efectivo', 'transferencia']
+    : conBloque ? ['efectivo', 'tarjeta', 'transferencia']
+      : cobra ? ['efectivo', 'tarjeta', 'transferencia', 'credito', 'mixto'] : ['credito'];
   // n018: núcleo 0.18.0 (precio mayorista: la previa recibe el cliente).
-  const [lista, listaClientes, n018] = await Promise.all([productos(), clientes().catch(() => []), nucleoAlMenos('0.18.0')]);
+  const [lista, listaClientes, n018] = local
+    ? [productosDeFoto(cat), (cat.clientes || []).map((c) => ({ ...c, activo: true })), true]
+    : await Promise.all([productos(), clientes().catch(() => []), nucleoAlMenos('0.18.0')]);
   if (!ctx.sigueVigente()) return;
 
   const estado = {
-    lineas: [], descFactura: '', clienteId: '', forma: formas[0], recibido: '', referencia: '',
+    lineas: [], descFactura: '', clienteId: '', forma: formas[0], recibido: '', referencia: '', banco: '', previaLocal: local,
     mixto: { efectivo: '', tarjeta: '', transferencia: '', credito: '' }, previa: null, errorPrevia: null, idOperacion: null,
   };
   let turno = null;
@@ -86,7 +124,7 @@ export async function armarCarrito(vista, ctx, { modo, alTerminar = null }) {
     resultados.replaceChildren(...(q ? filtrar(lista, q, ['nombre', 'codigo', 'codigo_barras']).slice(0, 8).map((p) =>
       h('button', { type: 'button', class: 'resultado-producto', role: 'listitem', onclick: () => agregar(p) },
         // Fotos encendidas (app 0.11.0): miniatura (o el ícono si no tiene foto).
-        fotosActivas() ? miniatura(p, { icono: p.tipo === 'servicio' ? 'servicio' : 'etiqueta', props: { class: 'burbuja-chica' } }) : null,
+        (!local && fotosActivas()) ? miniatura(p, { icono: p.tipo === 'servicio' ? 'servicio' : 'etiqueta', props: { class: 'burbuja-chica' } }) : null,
         h('span', { class: 'resultado-texto' }, p.nombre, h('span', { class: 'detalle' }, [p.codigo, p.tipo === 'servicio' ? 'Servicio' : null, p.unidad].filter(Boolean).join(' · '))),
         h('span', { class: 'monto' }, dinero(p.precio_venta_centavos)))) : []));
     if (q && !resultados.children.length) resultados.append(h('p', { class: 'vacio' }, 'No hay productos con ese nombre o código.'));
@@ -100,7 +138,7 @@ export async function armarCarrito(vista, ctx, { modo, alTerminar = null }) {
       const encontrados = filtrar(lista, c, ['nombre', 'codigo', 'codigo_barras']);
       if (encontrados.length === 1) p = encontrados[0];
     }
-    if (!p) {
+    if (!p && !local) {
       try {
         const r = await rpc('buscar_producto_por_codigo', { p_empresa_id: empresaId(), p_codigo: c });
         if (r && r.encontrado && r.producto) p = lista.find((x) => x.producto_id === r.producto.id);
@@ -157,13 +195,13 @@ export async function armarCarrito(vista, ctx, { modo, alTerminar = null }) {
             p.impuesto_clase === 'gravado' ? `${p.impuesto || p.tipo_impuesto} ${p.precio_incluye_isv ? 'incluido' : 'aparte'}` : 'Exento',
             p.permite_fracciones ? `por ${p.unidad}, admite decimales` : null].filter(Boolean).join(' · ')));
       const partes = [
-        fotosActivas() ? h('div', { class: 'linea-cabeza' }, miniatura(p, { icono: p.tipo === 'servicio' ? 'servicio' : 'etiqueta', props: { class: 'burbuja-chica' } }), nombreLinea)
+        (!local && fotosActivas()) ? h('div', { class: 'linea-cabeza' }, miniatura(p, { icono: p.tipo === 'servicio' ? 'servicio' : 'etiqueta', props: { class: 'burbuja-chica' } }), nombreLinea)
           : nombreLinea,
         h('div', { class: 'linea-datos' },
           campo('Cantidad', cant),
           h('div', { class: 'campo' }, h('span', { class: 'etiqueta-campo' }, 'Precio'), h('span', { class: 'monto valor-campo', dataset: { dato: 'precio-linea' } },
             dinero(pl ? pl.precio_unitario_centavos : p.precio_venta_centavos))),
-          promos.length || esMayorista ? null : (() => {
+          promos.length || esMayorista || porCola ? null : (() => {
             const d = h('input', { name: 'descuento', type: 'number', min: '0', max: '100', step: '0.01', inputmode: 'decimal',
               value: l.descPct, placeholder: '0' });
             // Un descuento manual va con el precio normal (nunca descuento sobre el mayorista).
@@ -264,10 +302,18 @@ export async function armarCarrito(vista, ctx, { modo, alTerminar = null }) {
       detalle.append(campo('Recibido del cliente (L)', rec, 'Déjelo vacío si le pagan exacto.'), vuelto);
       pintarVuelto();
     } else if (estado.forma === 'tarjeta' || estado.forma === 'transferencia') {
-      const ref = h('input', { id: 'referencia', type: 'text', maxlength: 100, value: estado.referencia });
+      const ref = h('input', { id: 'referencia', type: 'text', maxlength: 60, value: estado.referencia });
       ref.addEventListener('input', () => { estado.referencia = ref.value; });
-      detalle.append(campo(estado.forma === 'tarjeta' ? 'Número de voucher (opcional)' : 'Referencia de la transferencia (opcional)', ref,
-        estado.forma === 'transferencia' ? 'La transferencia queda "por confirmar" hasta que se vea en el banco.' : null));
+      // Por la cola (sin internet) la transferencia EXIGE su referencia; el banco ayuda a confirmarla.
+      const exige = porCola && estado.forma === 'transferencia';
+      detalle.append(campo(estado.forma === 'tarjeta' ? 'Número de voucher (opcional)'
+        : exige ? 'Número de referencia de la transferencia' : 'Referencia de la transferencia (opcional)', ref,
+      estado.forma === 'transferencia' ? 'La transferencia queda "por confirmar" hasta que se vea en el banco.' : null));
+      if (exige) {
+        const banco = h('input', { id: 'banco-transferencia', type: 'text', maxlength: 38, value: estado.banco, placeholder: 'Ej.: BAC' });
+        banco.addEventListener('input', () => { estado.banco = banco.value; });
+        detalle.append(campo('Banco (si lo sabe)', banco));
+      }
     } else if (estado.forma === 'credito') {
       const cli = listaClientes.find((c) => c.id === estado.clienteId);
       detalle.append(h('p', { class: 'ayuda' }, cli ? `Se carga a la cuenta de ${cli.nombre} (plazo ${cli.plazo_dias || 0} días).`
@@ -292,6 +338,19 @@ export async function armarCarrito(vista, ctx, { modo, alTerminar = null }) {
 
   async function pintarTurno() {
     zonaTurno.replaceChildren();
+    if (local) {
+      const t = cat.turno;
+      zonaTurno.append(h('p', { class: 'ayuda con-icono-linea', dataset: { dato: 'turno' } }, icono('candado_abierto'),
+        t ? ` Turno ${t.numero} · ${(cat.caja && cat.caja.nombre) || ''} · sin conexión` : ` ${(cat.caja && cat.caja.nombre) || ''} · sin conexión`));
+      if (!estadoLocal.puede) zonaTurno.append(mensaje('error', estadoLocal.razon, null, { dataset: { dato: 'no-sin-internet' } }));
+      else if (estadoLocal.quedan <= 10) zonaTurno.append(mensaje('info', `Quedan ${estadoLocal.quedan} números reservados en este equipo.`));
+      return;
+    }
+    if (conBloque) {
+      zonaTurno.append(mensaje('info', 'Esta caja tiene números reservados en este equipo.',
+        'Aquí solo se cobra de contado (efectivo, tarjeta o transferencia); la venta se guarda primero en el equipo y sube enseguida. Para crédito use otra caja o devuelva los números en Ajustes > Sin internet.',
+        { dataset: { dato: 'caja-con-bloque' } }));
+    }
     if (!cobra || !puede('caja.turno')) return;
     try { turno = await miTurno(); } catch { turno = null; }
     if (turno) {
@@ -332,8 +391,21 @@ export async function armarCarrito(vista, ctx, { modo, alTerminar = null }) {
       return;
     }
     try {
-      const pv = await rpc('calcular_venta_previa', { p_empresa_id: empresaId(),
-        p_datos: { lineas: lineasServidor(), descuento_factura: descuentoFactura(), ...(n018 && estado.clienteId ? { cliente_id: estado.clienteId } : {}) } });
+      let pv;
+      if (local || estado.previaLocal) {
+        pv = si.calcular(cat, { lineas: lineasServidor(), cliente_id: estado.clienteId || null });
+      } else {
+        try {
+          pv = await rpc('calcular_venta_previa', { p_empresa_id: empresaId(),
+            p_datos: { lineas: lineasServidor(), descuento_factura: descuentoFactura(), ...(n018 && estado.clienteId ? { cliente_id: estado.clienteId } : {}) } },
+          { tiempo: porCola ? 10000 : 0 });
+        } catch (e) {
+          // El servidor no contesta y la caja tiene números en este equipo: se sigue con la foto del catálogo.
+          if (!(e.sinConexion && conBloque && cat)) throw e;
+          estado.previaLocal = true;
+          pv = si.calcular(cat, { lineas: lineasServidor(), cliente_id: estado.clienteId || null });
+        }
+      }
       if (mia !== vez) return;
       // Varias promociones y nadie eligió: se usa la sugerida (y se manda explícita al cobrar).
       pv.lineas.forEach((pl, i) => {
@@ -408,6 +480,12 @@ export async function armarCarrito(vista, ctx, { modo, alTerminar = null }) {
       if (descuentoFactura()) datos.descuento_factura = descuentoFactura();
       if (estado.clienteId) datos.cliente_id = estado.clienteId;
       if (modo === 'venta') datos.pagos = pagos();
+      if (modo === 'venta' && porCola) {
+        const reg = await cobrarPorCola(datos.pagos);
+        listo = true;
+        await terminadoCola(reg);
+        return;
+      }
       if (!estado.idOperacion) estado.idOperacion = nuevoId();
       if (modo === 'venta') {
         const r = await escribir('registrar_venta', { p_empresa_id: empresaId(), p_datos: datos, p_id_operacion: estado.idOperacion });
@@ -426,6 +504,68 @@ export async function armarCarrito(vista, ctx, { modo, alTerminar = null }) {
       if (!listo) { botonCobrar.disabled = false; pintarTotales(); }
     }
   });
+
+  // ---------------- Por la cola (sin internet o caja con bloque) ----------------
+  async function cobrarPorCola(pagosVenta) {
+    const t = total();
+    const sinRed = local || estado.previaLocal;
+    const p = pagosVenta[0];
+    if (pagosVenta.length !== 1 || !['efectivo', 'tarjeta', 'transferencia'].includes(p.forma)) {
+      throw errorSimple('Aquí solo se cobra de contado: efectivo, tarjeta o transferencia.');
+    }
+    if (sinRed && p.forma === 'tarjeta') throw errorSimple('Sin internet no se cobra con tarjeta (el POS necesita conexión).', 'Cobre en efectivo o con transferencia.');
+    if (p.forma === 'transferencia') {
+      if (estado.referencia.trim().length < 3) throw errorSimple('Escriba el número de referencia de la transferencia.', 'Sin la referencia no se puede confirmar después en el banco.');
+      if (estado.banco.trim()) p.banco = estado.banco.trim();
+    }
+    const est = await si.estadoVenta(perfil);
+    if (sinRed) {
+      if (!est.puede) throw errorSimple(est.razon);
+      const reglas = est.cat.reglas;
+      if (t > reglas.tope_venta_centavos) throw errorSimple(`Sin internet una venta no puede pasar de ${dinero(reglas.tope_venta_centavos)}.`, 'Divida la venta o espere el internet.');
+      const vendido = (await si.cola(perfil.empresa.id)).filter((x) => x.usuario_id === perfil.usuario.id && !x.payload.en_linea
+        && x.payload.bloque_id === est.bloque.bloque_id).reduce((s2, x) => s2 + x.total_centavos, 0);
+      if (vendido + t > reglas.tope_turno_centavos) throw errorSimple(`Lo vendido sin internet en este turno pasaría de ${dinero(reglas.tope_turno_centavos)}.`, 'Espere el internet para seguir vendiendo.');
+    } else if (!est.bloque && !(conBloque && conBloque.bloque)) {
+      throw errorSimple('Este equipo no tiene números reservados para esta caja.');
+    }
+    const nombre = (perfil.usuario && (perfil.usuario.nombre || perfil.usuario.correo)) || '';
+    const reg = await si.guardarVenta(perfil, { usuario: { id: perfil.usuario.id, nombre }, calculo: estado.previa,
+      cliente_id: estado.clienteId || null, pagos: pagosVenta, en_linea: !sinRed }, { fallar: window.__fallarGuardarVenta === true });
+    if (!sinRed) {
+      try { await si.subir(perfil.empresa.id); } catch { /* queda en la cola: sube sola */ }
+      const ahora = (await si.cola(perfil.empresa.id)).find((x) => x.id_operacion === reg.id_operacion);
+      return ahora || reg;
+    }
+    si.programarSubida(true);
+    return reg;
+  }
+
+  async function terminadoCola(reg) {
+    const nueva = h('a', { class: 'boton', href: '#/vender/nueva', onclick: (ev) => { ev.preventDefault(); reiniciar(); } }, 'Nueva venta');
+    if (!local) olvidarDatos('productos');
+    const p = reg.payload.pagos[0];
+    const como = `en ${nombreForma(p.forma).toLowerCase()}`;
+    const subida = reg.estado === 'subida' && reg.resultado && reg.resultado.venta_id;
+    const hecho = subida ? `Venta ${reg.numero_documento} guardada · ${dinero(reg.total_centavos)} ${como}`
+      : `Venta ${reg.numero_documento} guardada en este equipo · ${dinero(reg.total_centavos)} ${como}`;
+    aviso(hecho);
+    const vuelto = p.recibido_centavos ? p.recibido_centavos - p.monto_centavos : 0;
+    const cabeza = h('div', { class: `mensaje ${reg.estado === 'por_resolver' ? 'mensaje-error' : 'mensaje-ok'} con-icono venta-lista resultado`, role: 'status',
+      dataset: { estado: reg.estado } }, icono(reg.estado === 'por_resolver' ? 'alerta' : 'check_circulo'),
+    h('div', {}, h('p', {}, h('strong', {}, hecho)),
+      reg.estado === 'en_equipo' ? h('p', {}, 'Se sube sola cuando vuelva el internet.') : null,
+      reg.estado === 'por_resolver' ? h('p', {}, 'Quedó por resolver: ', (reg.resultado && reg.resultado.problema_texto) || '') : null,
+      vuelto ? h('p', { class: 'vuelto-grande' }, 'Vuelto: ', h('strong', { class: 'monto', dataset: { dato: 'vuelto-final' } }, dinero(vuelto))) : null));
+    if (subida) {
+      vista.replaceChildren(cabeza, h('p', { class: 'cargando' }, 'Preparando el comprobante…'));
+      try {
+        vista.replaceChildren(cabeza, await vistaComprobante(reg.resultado.venta_id, { extra: [nueva] }));
+        return;
+      } catch { /* sin conexión justo ahora: el comprobante del equipo */ }
+    }
+    vista.replaceChildren(cabeza, vistaComprobanteLocal(reg, { extra: [nueva] }));
+  }
 
   async function terminado(r) {
     const cli = listaClientes.find((c) => c.id === r.cliente_id);
@@ -475,9 +615,9 @@ export async function armarCarrito(vista, ctx, { modo, alTerminar = null }) {
       zonaTurno,
       campo('Cliente', selCliente, modo === 'venta' ? 'Opcional. El crédito necesita cliente.' : null),
       totales,
-      campo('Descuento a toda la factura (%)', descFactura, 'Solo va a las líneas sin promoción ni otro descuento.'),
+      porCola ? null : campo('Descuento a toda la factura (%)', descFactura, 'Solo va a las líneas sin promoción ni otro descuento.'),
       zonaPago,
-      !cobra && modo === 'venta' ? mensaje('info', 'Usted puede vender al crédito o hacer una cotización.',
+      !cobra && modo === 'venta' && !porCola ? mensaje('info', 'Usted puede vender al crédito o hacer una cotización.',
         'El cobro en efectivo, tarjeta o transferencia lo hace el cajero.') : null,
       zonaError, botonCobrar));
   vista.append(raiz);

@@ -8,6 +8,7 @@
 //   icono: nombre de un ícono de js/iconos.js (todas las pestañas y subpestañas llevan uno).
 //   contador: "pendientes" = la subpestaña muestra el número de pendientes.
 //   nucleo: versión mínima del núcleo (app 0.12.0): con un núcleo anterior la subpestaña no sale.
+//   sinInternet: true = también sale en el "modo sin internet" (app 0.14.0: la app abrió sin conexión; solo esas).
 
 export const MENU = [
   // Cada pestaña responde UNA pregunta. icono: nombre de js/iconos.js (lo revisa la prueba de la app).
@@ -18,8 +19,12 @@ export const MENU = [
     { id: 'pendientes', titulo: 'Pendientes', icono: 'pendientes', pantalla: 'pendientes', contador: 'pendientes' },
   ] },
   { id: 'vender', titulo: 'Vender', icono: 'vender', subs: [
-    { id: 'nueva', titulo: 'Nueva venta', icono: 'mas', modulos: ['ventas'], permisos: ['ventas.vender'], pantalla: 'vender' },
-    { id: 'ventas', titulo: 'Ventas del día', icono: 'lista', modulos: ['ventas'], permisos: ['ventas.ver', 'ventas.vender'], pantalla: 'ventas_dia' },
+    { id: 'nueva', titulo: 'Nueva venta', icono: 'mas', modulos: ['ventas'], permisos: ['ventas.vender'], pantalla: 'vender', sinInternet: true },
+    { id: 'ventas', titulo: 'Ventas del día', icono: 'lista', modulos: ['ventas'], permisos: ['ventas.ver', 'ventas.vender'], pantalla: 'ventas_dia', sinInternet: true },
+    // App 0.14.0 (núcleo 0.20.0): ventas sin internet que no se pudieron registrar solas (el supervisor decide).
+    { id: 'por_resolver', titulo: 'Sin internet por resolver', icono: 'alerta', modulos: ['ventas'], permisos: ['ventas.resolver_sin_internet'], nucleo: '0.20.0', pantalla: 'vender_por_resolver' },
+    // App 0.14.0 (núcleo 0.20.0): facturas de emergencia (talonario de imprenta), con el módulo encendido.
+    { id: 'talonario', titulo: 'Talonario de emergencia', icono: 'documento', modulos: ['facturas_emergencia'], permisos: ['talonario.registrar', 'talonario.administrar'], nucleo: '0.20.0', pantalla: 'talonario' },
     { id: 'cotizaciones', titulo: 'Cotizaciones', icono: 'documento', modulos: ['ventas'], permisos: ['ventas.cotizar'], pantalla: 'cotizaciones' },
     { id: 'apartados', titulo: 'Apartados', icono: 'bolsa', modulos: ['apartados'], permisos: ['apartados.registrar'] },
     { id: 'devoluciones', titulo: 'Devoluciones', icono: 'devolucion', modulos: ['ventas'], permisos: ['ventas.devolver'], pantalla: 'devoluciones' },
@@ -61,6 +66,8 @@ export const MENU = [
     { id: 'depositos', titulo: 'Depósitos y traslados', icono: 'deposito', modulos: ['dinero'], permisos: ['dinero.trasladar'], todos: ['dinero.ver'], pantalla: 'dinero_depositos' },
     { id: 'pagos-fijos', titulo: 'Pagos fijos', icono: 'calendario', modulos: ['dinero'], permisos: ['dinero.administrar'], todos: ['dinero.ver'], pantalla: 'dinero_pagos_fijos' },
     { id: 'fondos', titulo: 'Fondos y socios', icono: 'capas', modulos: ['fondos'], permisos: ['fondos.ver'], pantalla: 'dinero_fondos' },
+    // App 0.14.0 (núcleo 0.20.0): transferencias de ventas por confirmar (confirmar en el banco o "no llegó").
+    { id: 'transferencias', titulo: 'Transferencias por confirmar', icono: 'reloj', modulos: ['dinero'], permisos: ['dinero.trasladar'], todos: ['dinero.ver'], nucleo: '0.20.0', pantalla: 'dinero_transferencias' },
     { id: 'banco', titulo: 'Cuadrar con el banco', icono: 'conciliar', modulos: ['conciliacion'], permisos: ['conciliacion.ver'], todos: ['dinero.ver'], pantalla: 'dinero_banco' },
     // proyeccion_flujo (núcleo 042) pide contabilidad.ver.
     { id: 'proyeccion', titulo: 'Proyección', icono: 'proyeccion', modulos: ['dinero'], permisos: ['contabilidad.ver'], pantalla: 'dinero_proyeccion' },
@@ -89,6 +96,8 @@ export const MENU = [
     { id: 'reglas', titulo: 'Reglas y topes', icono: 'reglas', permisos: ['empresa.configurar'], pantalla: 'aj_reglas' },
     // Antes era Inventario > Excel (mismos módulos y permisos).
     { id: 'excel', titulo: 'Excel y copia de mis datos', icono: 'excel', modulos: ['inventario', 'ventas'], permisos: ['excel.importar'], pantalla: 'inv_excel' },
+    // App 0.14.0 (núcleo 0.20.0): preparar este equipo para vender sin internet, reglas, equipos y números.
+    { id: 'sin_internet', titulo: 'Sin internet', icono: 'subir', modulos: ['ventas'], permisos: ['ventas.sin_internet', 'equipos.administrar', 'ventas.resolver_sin_internet'], nucleo: '0.20.0', pantalla: 'aj_sin_internet' },
     // Antes "Mis datos"; "Alertas que recibo" va dentro.
     { id: 'mi-cuenta', titulo: 'Mi cuenta', icono: 'cuenta', pantalla: 'aj_datos' },
   ] },
