@@ -639,3 +639,5 @@ a.fila-icono:hover .fila-icono-titulo { text-decoration: underline; }
   /* Lo impreso (comprobantes y reportes) nunca lleva fotos. */
   .foto-producto, .foto-ficha, .seccion-foto { display: none !important; }
 }
+/* App 0.14.0: con la barra "Sin conexión" visible, la columna de Cobrar (sticky) queda debajo de la barra, nunca tapada. */
+body:has(#sin-conexion:not([hidden])) .vender-der { top: 56px; }

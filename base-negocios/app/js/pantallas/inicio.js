@@ -14,6 +14,7 @@ import { tarjetaAlerta, leerAlertas } from './alertas.js';
 import { pendientes, listaAprobaciones } from './aprobaciones.js';
 import { fotosActivas, miniatura, porProducto } from '../fotos.js';
 import { productos } from '../datos.js';
+import { equipoLocal } from '../sin_internet.js';
 
 const LIMITE_LINEAS = 1000; // líneas de venta que se leen para "lo más vendido"
 
@@ -198,7 +199,7 @@ function masVendido(dato, hoy) {
 
 // "Primeros pasos": el estado sale de los datos (nada se guarda). Solo los pasos cuya pantalla
 // puede abrir; desaparece cuando todo está hecho.
-function primerosPasos(menu, arranque, marca, turnos, turno) {
+function primerosPasos(menu, arranque, marca, turnos, turno, equipoListo = false) {
   const paso = (codigo) => ((arranque.pasos || []).find((p) => p.paso === codigo) || {}).estado === 'hecho';
   const m = (marca && marca.marca) || {};
   const pasos = [
@@ -207,7 +208,9 @@ function primerosPasos(menu, arranque, marca, turnos, turno) {
     { id: 'productos', texto: 'Agregar mis productos', hecho: paso('productos'), ruta: 'inventario/productos' },
     { id: 'venta', texto: 'Hacer mi primera venta', hecho: paso('primera_venta'), ruta: 'vender/nueva' },
     { id: 'empleado', texto: 'Crear a mi empleado', hecho: paso('usuarios'), ruta: 'ajustes/usuarios' },
-  ].filter((p) => hayEnMenu(menu, ...p.ruta.split('/')));
+    // App 0.14.0 (núcleo 0.20.0): preparar este equipo para vender sin internet (se sabe por la base del equipo).
+    puede('ventas.sin_internet') ? { id: 'sin_internet', texto: 'Preparar este equipo para vender sin internet', hecho: equipoListo, ruta: 'ajustes/sin_internet' } : null,
+  ].filter((p) => p && hayEnMenu(menu, ...p.ruta.split('/')));
   const hechos = pasos.filter((p) => p.hecho).length;
   if (!pasos.length || hechos === pasos.length) return null;
   const relleno = h('div', { class: 'progreso-relleno' });
@@ -332,7 +335,7 @@ export async function mostrar(vista, ctx) {
   if (!t.length) { const a = atajos(menu); if (a) izq.append(a); }
 
   if (arranque && arranque.ok && marca && marca.ok) {
-    const pp = primerosPasos(menu, arranque.ok, marca.ok, turnos && turnos.ok, miTurno);
+    const pp = primerosPasos(menu, arranque.ok, marca.ok, turnos && turnos.ok, miTurno, Boolean(await equipoLocal(empresaId())));
     if (pp) der.append(pp);
   }
   der.append(await tarjetaPendientes(alertas, aprob, ctx));

@@ -94,17 +94,27 @@ export async function armarCarrito(vista, ctx, { modo, alTerminar = null }) {
   }
   const porCola = local || Boolean(conBloque);
   const cobra = modo === 'venta' && (local ? true : puedeCobrar() && tieneModulo('dinero'));
-  const formas = local ? ['efectivo', 'transferencia']
+  // n018: núcleo 0.18.0 (precio mayorista: la previa recibe el cliente).
+  const deFoto = () => [productosDeFoto(cat), (cat.clientes || []).map((c) => ({ ...c, activo: true })), true];
+  let lista, listaClientes, n018;
+  let sinRedAlAbrir = false;   // se fue el internet con la sesión abierta y la caja tiene números en este equipo
+  if (local) [lista, listaClientes, n018] = deFoto();
+  else {
+    try {
+      [lista, listaClientes, n018] = await Promise.all([productos(), clientes().catch(() => []), nucleoAlMenos('0.18.0')]);
+    } catch (e) {
+      if (!(e.sinConexion && conBloque && cat)) throw e;
+      sinRedAlAbrir = true;
+      [lista, listaClientes, n018] = deFoto();
+    }
+  }
+  const formas = local || sinRedAlAbrir ? ['efectivo', 'transferencia']
     : conBloque ? ['efectivo', 'tarjeta', 'transferencia']
       : cobra ? ['efectivo', 'tarjeta', 'transferencia', 'credito', 'mixto'] : ['credito'];
-  // n018: núcleo 0.18.0 (precio mayorista: la previa recibe el cliente).
-  const [lista, listaClientes, n018] = local
-    ? [productosDeFoto(cat), (cat.clientes || []).map((c) => ({ ...c, activo: true })), true]
-    : await Promise.all([productos(), clientes().catch(() => []), nucleoAlMenos('0.18.0')]);
   if (!ctx.sigueVigente()) return;
 
   const estado = {
-    lineas: [], descFactura: '', clienteId: '', forma: formas[0], recibido: '', referencia: '', banco: '', previaLocal: local,
+    lineas: [], descFactura: '', clienteId: '', forma: formas[0], recibido: '', referencia: '', banco: '', previaLocal: local || sinRedAlAbrir,
     mixto: { efectivo: '', tarjeta: '', transferencia: '', credito: '' }, previa: null, errorPrevia: null, idOperacion: null,
   };
   let turno = null;
@@ -543,7 +553,8 @@ export async function armarCarrito(vista, ctx, { modo, alTerminar = null }) {
 
   async function terminadoCola(reg) {
     const nueva = h('a', { class: 'boton', href: '#/vender/nueva', onclick: (ev) => { ev.preventDefault(); reiniciar(); } }, 'Nueva venta');
-    if (!local) olvidarDatos('productos');
+    // Las existencias cambiaron: se vuelven a leer, salvo si la venta fue sin conexión (sin red no se podrían leer).
+    if (!local && reg.payload.en_linea) olvidarDatos('productos');
     const p = reg.payload.pagos[0];
     const como = `en ${nombreForma(p.forma).toLowerCase()}`;
     const subida = reg.estado === 'subida' && reg.resultado && reg.resultado.venta_id;

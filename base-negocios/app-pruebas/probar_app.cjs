@@ -149,8 +149,10 @@ const textoDe = (pagina, sel) => pagina.locator(sel).first().innerText();
     const marca = JSON.parse(sql('dueno@demo.hn', `public.marca_empresa('${EMPRESA}')`)).marca || {};
     const turnos = Number(sql('dueno@demo.hn', `(SELECT count(*) FROM public.v_turno_caja WHERE empresa_id = '${EMPRESA}')`));
     const n = [Boolean(marca.logo || marca.color_principal || marca.color_acento), turnos > 0, hecho('productos'), hecho('primera_venta'), hecho('usuarios')].filter(Boolean).length;
-    afirmar((await textoDe(p, '[data-dato=pasos-hechos]')).trim() === `${n} de 5`, 'primeros pasos: ' + await textoDe(p, '[data-dato=pasos-hechos]') + ', esperaba ' + n);
-    afirmar(await p.locator('#primeros-pasos [data-hecho=false] a.boton').count() === 5 - n, 'cada paso pendiente debe tener "Hacerlo"');
+    // App 0.14.0 (núcleo 0.20.0): sexto paso "Preparar este equipo para vender sin internet" (todavía sin hacer aquí).
+    afirmar((await textoDe(p, '[data-dato=pasos-hechos]')).trim() === `${n} de 6`, 'primeros pasos: ' + await textoDe(p, '[data-dato=pasos-hechos]') + ', esperaba ' + n);
+    afirmar(await p.locator('#primeros-pasos [data-paso=sin_internet][data-hecho=false] a[href="#/ajustes/sin_internet"]').count() === 1, 'falta el paso de preparar el equipo');
+    afirmar(await p.locator('#primeros-pasos [data-hecho=false] a.boton').count() === 6 - n, 'cada paso pendiente debe tener "Hacerlo"');
     // Campanita = alertas (sin la de "aprobaciones", que ya sale con botones) + aprobaciones pendientes.
     const alertas = JSON.parse(sql('dueno@demo.hn', `public.alertas_activas('${EMPRESA}')`)).alertas.filter((a) => a.tipo !== 'aprobaciones').length;
     const aprob = Number(sql('dueno@demo.hn', `(SELECT count(*) FROM public.v_aprobacion WHERE empresa_id = '${EMPRESA}' AND estado = 'pendiente')`));

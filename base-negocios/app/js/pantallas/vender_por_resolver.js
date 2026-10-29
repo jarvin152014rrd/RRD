@@ -49,7 +49,7 @@ export async function mostrar(vista, ctx) {
         derecha: pendiente ? chip(v.grave ? 'Grave' : 'Por resolver', v.grave ? 'rojo' : 'dorado') : chip(v.estado === 'anulada' ? 'Anulada' : 'Registrada', v.estado === 'anulada' ? 'rojo' : 'verde') }),
       mensaje(v.grave ? 'error' : 'info', v.problema_texto || 'Revise esta venta.', null, { dataset: { dato: 'problema', problema: v.problema || '' } }),
       h('ul', { class: 'lista-simple' }, (v.lineas || []).map((l) => h('li', {}, `${cantidad(l.cantidad)} x ${l.nombre || 'Producto'} · ${dinero(l.total_centavos)}`))),
-      h('p', { class: 'ayuda' }, 'Pagos: ', (v.pagos || []).map((p) => `${PAGOS[p.metodo] || p.metodo} ${dinero(p.monto_centavos)}${p.referencia ? ' (ref. ' + p.referencia + ')' : ''}`).join(', ')),
+      h('p', { class: 'ayuda' }, 'Pagos: ', (v.pagos || []).map((p) => `${PAGOS[p.forma] || p.forma}${dinero(p.monto_centavos)}${p.referencia ? ' (ref. ' + p.referencia + ')' : ''}`).join(', ')),
       v.subido_por && v.subido_por !== v.usuario ? h('p', { class: 'ayuda' }, `Subida por ${v.subido_por}.`) : null,
       v.motivo_resolucion ? h('p', { class: 'ayuda' }, `Resuelta por ${v.resuelto_por || ''}: ${v.motivo_resolucion}`) : null,
       botones ? h('div', { class: 'botones' }, botones) : null);

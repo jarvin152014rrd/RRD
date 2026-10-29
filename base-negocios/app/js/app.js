@@ -28,7 +28,10 @@ function pintarBarra() {
   const n = estadoCola.pendientes || 0;
   const plural = n === 1 ? '1 venta guardada' : `${n} ventas guardadas`;
   let texto = null, tipo = 'aviso';
-  if (!hayConexion) texto = n || modoSinInternet() ? `Sin conexión: ${plural} en este equipo` : TEXTO_SIN_CONEXION;
+  if (!hayConexion) {
+    texto = n ? `Sin conexión: ${plural} en este equipo`
+      : modoSinInternet() ? 'Sin conexión: las ventas se guardan en este equipo' : TEXTO_SIN_CONEXION;
+  }
   else if (estadoCola.subiendo) texto = `Subiendo ${Math.min(estadoCola.subiendo.hecho + 1, estadoCola.subiendo.total)} de ${estadoCola.subiendo.total}…`;
   else if (n) texto = `${plural} en este equipo, por subir`;
   else if (Date.now() < todoSubidoHasta) { texto = 'Todo subido'; tipo = 'ok'; }
@@ -133,7 +136,8 @@ async function mostrarEntrar(mensaje = null) {
 async function salir(texto = 'Cerró su sesión.', tipo = 'ok', forzado = false) {
   const p = perfilActual();
   // Ventas de este usuario sin subir: con internet se suben primero; sin internet no deja salir (4.4).
-  if (p && p.empresa && p.usuario) {
+  // Sin ventas en la cola (lo dice la barra, sin esperar a IndexedDB) se sale enseguida, como antes.
+  if (p && p.empresa && p.usuario && estadoCola.pendientes > 0) {
     let n = (await si.pendientes(p.empresa.id, p.usuario.id)).length;
     if (n && hayConexion && !modoSinInternet()) {
       try { await si.subir(p.empresa.id); } catch { /* se revisa abajo */ }
@@ -144,8 +148,9 @@ async function salir(texto = 'Cerró su sesión.', tipo = 'ok', forzado = false)
       aviso(`Conéctese para subir ${n === 1 ? 'la venta guardada' : `las ${n} ventas guardadas`} antes de salir.`, 'error', 8000);
       return;
     }
-    await si.alSalir(p.empresa.id, p.usuario.id);
   }
+  // Se borra el catálogo del usuario (y su perfil sin internet si no le quedan ventas) a la vez que la sesión.
+  const limpiarEquipo = p && p.empresa && p.usuario ? si.alSalir(p.empresa.id, p.usuario.id) : Promise.resolve();
   aplicarMarca({});
   olvidarPerfil();
   olvidarCatalogo();
@@ -156,6 +161,7 @@ async function salir(texto = 'Cerró su sesión.', tipo = 'ok', forzado = false)
   const fotos = olvidarFotos();
   await api.salir();
   await fotos;
+  await limpiarEquipo;
   if (location.hash) history.replaceState(null, '', location.pathname);
   mostrarEntrar({ tipo, texto });
 }
@@ -271,7 +277,8 @@ function alCambiarRuta() {
     pantalla = 'mas'; titulo = 'Más';
   } else {
     pestana = menu.find((p) => p.id === pid);
-    if (!pestana) { location.replace('#/inicio/hoy'); return; }
+    // Sin internet solo abre lo que funciona sin conexión: lo demás lleva a Nueva venta.
+    if (!pestana) { location.replace(modoSinInternet() ? '#/vender/nueva' : '#/inicio/hoy'); return; }
     sub = pestana.subs.find((s) => s.id === sid);
     if (!sub) { location.replace(`#/${pestana.id}/${pestana.subs[0].id}`); return; }
     pantalla = sub.pantalla || 'en_construccion'; titulo = sub.titulo;

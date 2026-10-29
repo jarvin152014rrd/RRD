@@ -86,7 +86,7 @@ async function abrirDevolucion(p, numero) {
   };
   const celular = { viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true };
   console.log('Pruebas de la app 0.13.0 (devolución con mayorista, cambio exacto, estado de cuenta del socio):');
-  afirmar(sql(null, '(SELECT version_nucleo FROM public.version_esquema)') === '0.19.0', 'la base de demo no es 0.19.0');
+  afirmar(sql(null, '(SELECT version_nucleo FROM public.version_esquema)') >= '0.19.0', 'la base de demo es anterior a 0.19.0');
 
   // Precios fijos para las cuentas a mano: tubo PVC L 115.00 (mayorista L 100.00 desde 10), clavo L 40.00 la libra.
   sqlEscribir(DUENO, `SELECT public.cambiar_precio_producto(demo.id('EMPRESA'), demo.id('PVC'), 11500, 'Prueba 0.13.0: precio fijo')`);

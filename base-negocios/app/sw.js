@@ -2,17 +2,20 @@
 // y abrir rápido. Los datos (/rest/, /auth/, /storage/, /functions/) SIEMPRE van al servidor: el
 // service worker no los toca. Las fotos de productos las guarda la app (js/fotos.js) en su propia caché
 // "fotos-<empresa>", que se borra al salir; al activar una versión nueva solo se borran cascarones viejos.
-// Al cambiar cualquier archivo del cascarón, suba VERSION.
-const VERSION = 'cascaron-0.13.1';
+// Al cambiar cualquier archivo del cascarón, suba VERSION. La lista debe tener TODOS los archivos de la app (app 0.14.0:
+// sin internet la app abre solo con lo guardado aquí); la prueba app-pruebas/probar_cascaron.mjs la compara con la carpeta.
+const VERSION = 'cascaron-0.14.0';
 const CASCARON = [
   './', 'index.html', 'manifest.webmanifest', 'config.js',
   'css/tema.css', 'css/base.css', 'css/controles.css',
   'js/app.js', 'js/api.js', 'js/iconos.js', 'js/sesion.js', 'js/menu.js', 'js/menu_datos.js', 'js/formato.js', 'js/errores.js', 'js/ui.js',
+  'js/calculo_local.js', 'js/sin_internet.js',
   'js/datos.js', 'js/fotos.js', 'js/formularios.js', 'js/comprobante.js', 'js/imprimible.js', 'js/marca.js', 'js/excel.js', 'js/reportes.js', 'vendor/xlsx.bundle.js',
   'js/pantallas/entrar.js', 'js/pantallas/inicio.js', 'js/pantallas/alertas.js',
   'js/pantallas/aprobaciones.js', 'js/pantallas/pendientes.js', 'js/pantallas/en_construccion.js', 'js/pantallas/mas.js',
   'js/pantallas/dinero_donde.js', 'js/pantallas/dinero_gastos.js', 'js/pantallas/dinero_depositos.js', 'js/pantallas/dinero_pagos_fijos.js',
   'js/pantallas/dinero_fondos.js', 'js/pantallas/dinero_banco.js', 'js/pantallas/dinero_proyeccion.js',
+  'js/pantallas/dinero_transferencias.js', 'js/pantallas/vender_por_resolver.js', 'js/pantallas/talonario.js', 'js/pantallas/aj_sin_internet.js',
   'js/pantallas/vender.js', 'js/pantallas/ventas_dia.js', 'js/pantallas/cotizaciones.js', 'js/pantallas/devoluciones.js',
   'js/pantallas/caja_turno.js', 'js/pantallas/caja_dinero.js', 'js/pantallas/caja_gasto.js',
   'js/pantallas/clientes.js', 'js/pantallas/me_deben.js',

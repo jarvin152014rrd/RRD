@@ -11,6 +11,9 @@ import { dinero, fechaHora, aCentavos, paraCampo } from '../formato.js';
 import { h, aviso, cajaError, campo, conBoton, titulo, mensaje, chip, filaIcono, estadoVacio, pedirMotivo, errorSimple } from '../ui.js';
 import * as si from '../sin_internet.js';
 
+// replaceChildren escribe "null" si recibe un vacío y no aplana listas: se limpian antes.
+const poner = (el, ...xs) => el.replaceChildren(...xs.flat(Infinity).filter((x) => x !== null && x !== undefined && x !== false));
+
 export async function mostrar(vista, ctx) {
   const perfil = perfilActual();
   const E = empresaId();
@@ -61,7 +64,7 @@ export async function mostrar(vista, ctx) {
       aviso(`Respaldo guardado (${datos.ventas.length} venta(s)). Guárdelo bien: lo sube el dueño en otro equipo.`, 'ok', 8000);
     });
     const relojMal = si.relojMal(cat);
-    zonaEquipo.replaceChildren(
+    poner(zonaEquipo, 
       titulo('h1', 'subir', 'Vender sin internet en este equipo', { id: 't-si-equipo' }),
       h('p', { class: 'ayuda' }, 'Cuando se va el internet, la caja sigue vendiendo de contado (efectivo o transferencia). Cada venta se guarda en el equipo y sube sola cuando vuelve el internet.'),
       sop.listo ? mensaje('ok', 'Este equipo guarda las ventas de forma segura.', null, { dataset: { dato: 'soporte' } })
@@ -106,7 +109,7 @@ export async function mostrar(vista, ctx) {
           aviso(`Respaldo subido: ${r.subidas + r.ya_estaban} registradas, ${r.por_resolver} por resolver, ${r.rechazadas} rechazadas.`, 'ok', 8000);
         } });
     });
-    zona.replaceChildren(titulo('h2', 'usuarios', 'Ventas de otros usuarios guardadas en este equipo', { id: 't-si-ajenas' }),
+    poner(zona, titulo('h2', 'usuarios', 'Ventas de otros usuarios guardadas en este equipo', { id: 't-si-ajenas' }),
       ajenas.length ? [...porUsuario.entries()].map(([uid, lista]) => {
         const b = h('button', { type: 'button', class: 'boton', dataset: { usuario: uid } }, 'Subirlas');
         b.addEventListener('click', () => pedirMotivo({ titulo: `Subir las ${lista.length} venta(s) de ${lista[0].usuario_nombre}`,
@@ -172,7 +175,7 @@ export async function mostrar(vista, ctx) {
     let d;
     try { d = await rpc('bloques_sin_internet', { p_empresa_id: E }); } catch (err) { zona.replaceChildren(await cajaError(err)); return; }
     const admin = puede('equipos.administrar');
-    zona.replaceChildren(titulo('h2', 'banco', 'Equipos y números reservados', { id: 't-si-equipos' }),
+    poner(zona, titulo('h2', 'banco', 'Equipos y números reservados', { id: 't-si-equipos' }),
       d.por_resolver ? mensaje('info', `${d.por_resolver} venta(s) sin internet por resolver.`, null) : null,
       d.equipos.length ? d.equipos.map((q) => {
         const bloques = d.bloques.filter((b) => b.equipo_id === q.equipo_id);

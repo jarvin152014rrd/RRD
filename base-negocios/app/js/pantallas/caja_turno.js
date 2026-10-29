@@ -6,6 +6,7 @@ import { empresaId, perfilActual, puede } from '../sesion.js';
 import { dinero, fechaHora, aCentavos } from '../formato.js';
 import { h, aviso, limpiarAvisos, cajaError, errorSimple, campo, dialogo, conBoton, titulo, mensaje, monto, chip, estadoVacio, filaIcono } from '../ui.js';
 import { cajas, cuentasDinero, miTurno, olvidarDatos } from '../datos.js';
+import * as si from '../sin_internet.js';
 
 // Billetes y monedas de Honduras (centavos).
 const DENOMINACIONES = { HNL: [50000, 20000, 10000, 5000, 2000, 1000, 500, 200, 100, 50, 20, 10, 5] };
@@ -170,8 +171,12 @@ export async function mostrar(vista, ctx) {
       const datos = {};
       if (v.conteo) datos.conteo = v.conteo;
       if (nota.value.trim()) datos.nota = nota.value.trim();
-      const r = await conBoton(boton, zonaError, () => escribir('cerrar_turno', { p_turno_id: turno.turno_id,
-        p_contado_centavos: v.contado, p_datos: datos }), 'Cerrando…');
+      const r = await conBoton(boton, zonaError, async () => {
+        // App 0.14.0: si este equipo tiene números reservados de esta caja (vender sin internet), primero sube las
+        // ventas guardadas y devuelve los números; el servidor no deja cerrar el turno con un bloque activo.
+        if ((await si.bloquesLocales(empresaId())).some((b) => b.estado === 'activo' && b.caja_id === turno.caja_id)) await si.devolverBloques(empresaId(), turno.caja_id);
+        return escribir('cerrar_turno', { p_turno_id: turno.turno_id, p_contado_centavos: v.contado, p_datos: datos });
+      }, 'Cerrando…');
       if (r) {
         olvidarDatos('cuentas'); limpiarAvisos();
         // "Turno cerrado · faltante L 50.00": rojo si falta dinero, verde si cuadra o sobra.

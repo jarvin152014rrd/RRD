@@ -15,6 +15,8 @@
 #    la misma app con una demo de núcleo 0.17.0 (lo nuevo se oculta).
 # 3f. Corre app-pruebas/probar_0130.cjs: lo nuevo de la app 0.13.0 (núcleo 0.19.0), y probar_0130_nucleo_viejo.cjs:
 #    la misma app con una demo de núcleo 0.18.0 (lo nuevo se oculta).
+# 3g. App 0.14.0: probar_espejo.mjs (cálculo del equipo = servidor), probar_cascaron.mjs (sw.js tiene todos los archivos),
+#    probar_0140.cjs (vender sin internet, con su propia demo con CAI) y probar_0140_nucleo_viejo.cjs (núcleo 0.19.0).
 # 3d. Corre app-pruebas/probar_fotos.cjs: fotos de productos (app 0.11.0) con el Storage mínimo del
 #    servidor (al final: enciende las fotos y sube una).
 # 4. Corre app-pruebas/probar_funciones.mjs: las Edge Functions reales de
@@ -109,7 +111,43 @@ if [ -z "${codigo_viejo18:-}" ]; then
 fi
 dropdb --if-exists "$BASE_VIEJA18" >/dev/null 2>&1
 echo
+# 4f. App 0.14.0 (núcleo 0.20.0): la cuenta del equipo igual que el servidor (200 carritos), el cascarón del service
+#     worker completo, y vender SIN internet en Chromium (setOffline) con una demo propia con CAI (fiscal_hn) y talonario.
+node "$RAIZ/app-pruebas/probar_espejo.mjs"
+codigo_espejo=$?
+echo
+node "$RAIZ/app-pruebas/probar_cascaron.mjs"
+codigo_cascaron=$?
+echo
+BASE_SI="${BASE_DEMO}_si"
+SOLO_PREPARAR=1 BASE_DEMO="$BASE_SI" bash "$RAIZ/herramientas/demo_app.sh" >/dev/null \
+  || { echo "FALLA: no se pudo preparar la demo de sin internet."; codigo_0140=1; }
+if [ -z "${codigo_0140:-}" ]; then
+  BASE="$BASE_SI" PUERTO=$((PUERTO_PRUEBA + 3)) node "$RAIZ/herramientas/servidor_app.js" > "$CAPTURAS/servidor_si.log" 2>&1 &
+  PID_SI=$!
+  for _ in $(seq 1 50); do curl -s -o /dev/null "http://127.0.0.1:$((PUERTO_PRUEBA + 3))/" && break; sleep 0.2; done
+  URL_APP="http://127.0.0.1:$((PUERTO_PRUEBA + 3))" BASE_DEMO="$BASE_SI" node "$RAIZ/app-pruebas/probar_0140.cjs"
+  codigo_0140=$?
+  kill "$PID_SI" 2>/dev/null
+fi
+dropdb --if-exists "$BASE_SI" >/dev/null 2>&1
+echo
+# 4g. La app 0.14.0 con un núcleo 0.19.0 (base de demo hasta la 055): lo nuevo se oculta y nada se rompe.
+BASE_VIEJA19="${BASE_DEMO}_019"
+SOLO_PREPARAR=1 BASE_DEMO="$BASE_VIEJA19" NUCLEO_HASTA=055 NUCLEO_VERSION=0.19.0 bash "$RAIZ/herramientas/demo_app.sh" >/dev/null \
+  || { echo "FALLA: no se pudo preparar la demo con el núcleo 0.19.0."; codigo_viejo19=1; }
+if [ -z "${codigo_viejo19:-}" ]; then
+  BASE="$BASE_VIEJA19" PUERTO=$((PUERTO_PRUEBA + 4)) node "$RAIZ/herramientas/servidor_app.js" > "$CAPTURAS/servidor_019.log" 2>&1 &
+  PID_VIEJO19=$!
+  for _ in $(seq 1 50); do curl -s -o /dev/null "http://127.0.0.1:$((PUERTO_PRUEBA + 4))/" && break; sleep 0.2; done
+  URL_APP="http://127.0.0.1:$((PUERTO_PRUEBA + 4))" BASE_DEMO="$BASE_VIEJA19" node "$RAIZ/app-pruebas/probar_0140_nucleo_viejo.cjs"
+  codigo_viejo19=$?
+  kill "$PID_VIEJO19" 2>/dev/null
+fi
+dropdb --if-exists "$BASE_VIEJA19" >/dev/null 2>&1
+echo
 # 5. Fotos de productos (app 0.11.0): al final, porque enciende las fotos y sube archivos.
 URL_APP="http://127.0.0.1:$PUERTO_PRUEBA" node "$RAIZ/app-pruebas/probar_fotos.cjs"
 codigo_fotos=$?
-[ "$codigo_app" = "0" ] && [ "$codigo_dinero" = "0" ] && [ "$codigo_reportes" = "0" ] && [ "$codigo_funciones" = "0" ] && [ "$codigo_fotos" = "0" ] && [ "$codigo_0120" = "0" ] && [ "$codigo_viejo" = "0" ] && [ "$codigo_0130" = "0" ] && [ "$codigo_viejo18" = "0" ]
+[ "$codigo_app" = "0" ] && [ "$codigo_dinero" = "0" ] && [ "$codigo_reportes" = "0" ] && [ "$codigo_funciones" = "0" ] && [ "$codigo_fotos" = "0" ] && [ "$codigo_0120" = "0" ] && [ "$codigo_viejo" = "0" ] && [ "$codigo_0130" = "0" ] && [ "$codigo_viejo18" = "0" ] \
+  && [ "$codigo_espejo" = "0" ] && [ "$codigo_cascaron" = "0" ] && [ "$codigo_0140" = "0" ] && [ "$codigo_viejo19" = "0" ]
