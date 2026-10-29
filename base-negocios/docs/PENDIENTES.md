@@ -1,10 +1,28 @@
-# Pendientes (núcleo 0.19.0, 151 pruebas OK; también con probar.sh --paquete)
+# Pendientes (núcleo 0.20.0, 158 pruebas OK; también con probar.sh --paquete)
 
 Estado: etapa 2 terminada. Las correcciones de la revisión de la etapa 2 están
 HECHAS en la migración 038 (núcleo 0.9.1) y las de la revisión de 0.9.1 en la
 migración 039 (núcleo 0.9.2), cada una con su prueba (falla contra la versión
 anterior y pasa con la nueva). Falta que el revisor las confirme antes de la
 etapa 3.
+
+## Vender sin internet, etapa 1 (HECHO en 0.20.0, migración 056, pruebas 152-158; app 0.14.0)
+
+Diseño y diferencias: `docs/SIN_INTERNET.md` (punto 17). Guía: `docs/SIN_INTERNET_GUIA.md`. Técnico: `nucleo/docs/sin_internet.md`.
+
+- HECHO: equipos, bloques de números por caja y equipo (con CAI), foto del catálogo, subida en tandas con revisión
+  completa, "por resolver", devolver el bloque al cerrar el turno, equipo desactivado -> bloque por conciliar.
+- HECHO (decisión del dueño) [DINERO]: sin internet efectivo y transferencia (con referencia, por confirmar); tarjeta no.
+  "No llegó" deja la deuda al cliente o al cajero.
+- HECHO (decisión del dueño): módulo `facturas_emergencia` (talonario de imprenta).
+- A CONFIRMAR (contador): cómo se pide el CAI de un talonario de imprenta; cómo se reportan al SAR los números de un
+  bloque "no usados" y los anulados (salen en el libro de ventas como ANULADA).
+- A CONFIRMAR (dueño) [DINERO]: tope por turno L 50,000 por defecto; la venta con transferencia "no llegó" ya no se anula.
+- FALTA: pantalla para pasar ventas desde las copias en papel de un equipo perdido (hoy: conciliar y registrar como venta
+  normal); hoja imprimible de arqueo sin internet (M4); catálogo por partes (hoy entero, con "sin cambios" por versión).
+- FALTA (dueño): pegar `dist/actualizar_supabase_0.20.0.sql` en su Supabase (después de 0.19.0). **NO PROBADO en un
+  Supabase real** (solo en el mini Supabase de la prueba 157).
+- FALTA: que el revisor revise 0.20.0.
 
 ## Decisiones del dueño 0.19.0 (HECHO en 0.19.0, migración 055, pruebas 147-150; app 0.13.0)
 
@@ -29,7 +47,6 @@ etapa 3.
 - NOTA: un cambio exacto de una venta al crédito puede pedir aprobación de crédito si el cliente no tiene límite
   (`APROBACION_REQUERIDA`; lo hace quien aprueba), igual que el cambio por garantía.
 - FALTA: que el revisor revise 0.19.0.
-- Diseño (sin programar) de "vender sin internet": `docs/SIN_INTERNET.md`.
 
 ## Mayorista, garantías, cheques y antigüedad (HECHO en 0.18.0, migración 054, pruebas 141-145; app 0.12.0)
 

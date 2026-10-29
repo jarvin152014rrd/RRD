@@ -1,5 +1,27 @@
 # Cambios de la app
 
+## app 0.14.0 (núcleo 0.20.0; también funciona con 0.19.0, sin lo nuevo) — Vender sin internet
+
+- **Ajustes > Sin internet:** preparar el equipo (nombre, números de la caja, precios), si el equipo guarda seguro
+  (almacenamiento persistente, sin incógnito, iPhone instalado), reloj mal puesto, subir ahora, respaldo en archivo,
+  ventas de otros usuarios del equipo (con motivo) y subir un respaldo de otro equipo; reglas del dueño (horas, topes,
+  bloque y "Los cajeros pueden vender sin internet"); equipos y números (desactivar, conciliar). Paso nuevo en Primeros
+  pasos: "Preparar este equipo para vender sin internet".
+- **Vender:** con números en el equipo la venta de contado se guarda primero en el equipo (una sola transacción) y sube
+  enseguida; sin conexión se calcula con la foto del catálogo (igual que el servidor: pruebas espejo), solo efectivo y
+  transferencia con referencia; comprobante "Emitida sin conexión" con original y copia del emisor. La app abre sin
+  internet con el perfil guardado (solo Nueva venta y Ventas del día). Barra fija "Sin conexión: N ventas guardadas en
+  este equipo" (no tapa Cobrar), "Subiendo x de y" y "Todo subido". No deja salir con ventas sin subir y sin internet.
+- **Cola:** sube sola en orden, en tandas de 15, una pestaña a la vez (`navigator.locks`), con tiempo máximo de 10 s
+  por llamada; un error de red detiene la cola y reintenta (5 s, 30 s, 2 min, 5 min). Cerrar el turno sube lo que falte
+  y devuelve los números.
+- **Ventas del día:** las ventas del equipo con su estado (En el equipo, Subida, Con problema).
+- Pantallas nuevas: **Vender > Sin internet por resolver**, **Vender > Talonario de emergencia** y **Dinero >
+  Transferencias por confirmar** (Llegó, No llegó, Referencia repetida).
+- El cascarón (`sw.js`, `cascaron-0.14.0`) guarda TODOS los archivos de la app (prueba `probar_cascaron.mjs`).
+- Pruebas: `probar_0140.cjs` (14, con `setOffline`), `probar_0140_nucleo_viejo.cjs` (5), `probar_espejo.mjs` (200
+  carritos) y `probar_cascaron.mjs`.
+
 ## app 0.13.1 (núcleo 0.19.0) — Revisión
 
 - **Ajustes > Reglas y topes:** interruptor "Cambio exacto" (solo el dueño, con motivo y bitácora). Oculto con núcleo 0.18.0.

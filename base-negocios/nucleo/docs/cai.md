@@ -52,3 +52,17 @@ y la leyenda propia de la empresa (`leyenda_factura`). Una venta anulada sale "A
 
 Códigos de tipo de documento que usa la SAR (a confirmar por el contador; el sistema NO los
 impone, toma el que trae el rango): 01 factura; las notas de crédito y débito según su resolución.
+
+## Sin internet y talonario de emergencia (núcleo 0.20.0, migración 056)
+
+- **Bloques de números por equipo:** un equipo preparado reserva un bloque de números del rango CAI de su caja
+  (`reservar_bloque_numeros`). El candado del rango (`proteger_cai_rango`) solo deja saltar `ultimo_numero` con la marca
+  interna de la reserva. Mientras el bloque está activo, la caja no numera en línea (`BLOQUE_ACTIVO`). Al cerrar el
+  turno el equipo devuelve los números que no usó y la numeración en línea sigue con ellos (correlativa). Un equipo
+  desactivado deja su bloque "por conciliar": los números que no se usaron quedan "no usados" y salen en el libro de
+  ventas como ANULADA. Detalle: `nucleo/docs/sin_internet.md`.
+- **Talonario de emergencia** (módulo `facturas_emergencia`): rango de imprenta con su CAI y su **propio punto de
+  emisión** (no puede ser el de una caja ni cruzarse con otro rango). Las facturas se pasan con el número y la fecha de
+  la copia; los números anulados salen en el libro de ventas como ANULADA.
+- **A CONFIRMAR con el contador:** cómo se pide al SAR el CAI de un talonario de imprenta (y su punto de emisión), y cómo
+  se reportan los números "no usados" de un bloque y los anulados del talonario.

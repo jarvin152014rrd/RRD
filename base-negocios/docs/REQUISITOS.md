@@ -466,3 +466,21 @@ puede cambiarla (regla del dueño: nunca se suman).
   en la venta nueva, sin pedir aprobación de crédito y con el mismo vencimiento (el cliente debe lo mismo que antes).
   El dueño enciende o apaga la regla en Ajustes > Reglas y topes (con motivo). En la app: contador "Falta L X / Sobra L X", el botón se
   activa solo con la cuenta exacta y al lado "Devolver todo el dinero".
+
+## Decisiones del dueño 0.20.0 (hechas en la migración 056, núcleo 0.20.0; app 0.14.0)
+
+Diseño completo: `docs/SIN_INTERNET.md` (punto 14 y punto 17). Guía para el cajero y el dueño: `docs/SIN_INTERNET_GUIA.md`.
+
+- **B1. Vender sin internet (etapa 1).** Sí, de contado, con la cola del equipo, números reservados por caja y equipo
+  (también facturas con CAI) y todo revisado otra vez por el servidor al subir. Lo que no cuadra queda "por resolver"
+  para el supervisor. Solo usuarios con el permiso `ventas.sin_internet` (dueño y administrador; a los cajeros lo da el
+  dueño). Tiempo máximo 24 horas y topes (L 10,000 por venta y L 50,000 por turno), configurables por el dueño.
+- **B2. Formas de pago sin internet: efectivo y transferencia. Tarjeta NO.** La transferencia exige el número de
+  referencia (y el banco si se sabe) y queda "por confirmar" en la cuenta puente. Se confirma en Dinero >
+  Transferencias por confirmar. Si **no llegó**, la venta queda como deuda del cliente o, si fue a Consumidor final,
+  del cajero que la cobró (con aviso, motivo y bitácora). Una referencia repetida se avisa. La conciliación bancaria la
+  empareja.
+- **B3. Talonario de emergencia** (módulo `facturas_emergencia`): facturas de imprenta escritas a mano cuando el sistema
+  no se puede usar; después se pasan al sistema con su número y fecha, revisando rango, que no se repita, la vigencia del
+  CAI y que el mes esté abierto; los números arruinados se anulan. **A CONFIRMAR con el contador:** cómo se pide al SAR
+  el CAI de un talonario de imprenta y su punto de emisión.

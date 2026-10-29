@@ -159,7 +159,46 @@ Queda la carpeta `dist/app-<cliente>/`. Si por error pega la llave secreta, la h
 
 ---
 
-## Actualizar de 0.18.0 a 0.19.0 (si YA lo tenía instalado) — devolución con mayorista, cambio exacto y estado de cuenta del socio
+## Actualizar de 0.19.0 a 0.20.0 (si YA lo tenía instalado) — vender sin internet, transferencias por confirmar y talonario
+
+Si su Supabase ya tiene la 0.19.0, **no** vuelva a pegar las partes. Solo se pega **un archivo** (unos 168 KB).
+Los datos de su negocio no se tocan.
+
+**¿Todavía no pegó 0.16.0 a 0.19.0?** Péguelos primero, uno por uno y en orden (cada uno debe decir "ACTUALIZADO A ...").
+`armar_instalacion.sh` deja en `dist/` solo la actualización nueva; si no guardó las anteriores, pídalas a su proveedor.
+
+1. **Haga un respaldo primero** (vea "Respaldos" más abajo).
+2. En la carpeta `base-negocios`, en una terminal: `bash herramientas/armar_instalacion.sh`
+   En `dist/` aparece **`actualizar_supabase_0.20.0.sql`**.
+3. Supabase > **SQL Editor** > **New query** (arriba a la derecha: rol **postgres**).
+4. Abra el archivo con el Bloc de notas, **Ctrl+A**, **Ctrl+C**, péguelo en el editor (**Ctrl+V**) y toque **Run**.
+   Si pregunta por "operaciones destructivas", toque **Run this query** (es normal).
+5. Abajo debe salir: **ACTUALIZADO A 0.20.0**, **version = 0.20.0** y **migraciones = 56**.
+6. Suba la app nueva (**0.14.0**) a Netlify (pasos 10 y 11). Con la app vieja (0.13.x) todo sigue funcionando como antes
+   (solo no tiene lo nuevo). Después de subirla, **cierre y vuelva a abrir la app** en cada equipo (así guarda la
+   versión nueva para abrir sin internet).
+
+Qué cambia para el negocio (detalle en `docs/REQUISITOS.md`, "Decisiones del dueño 0.20.0", y la guía sencilla
+`docs/SIN_INTERNET_GUIA.md`):
+- **Vender sin internet:** primero hay que **preparar cada equipo** con internet (Ajustes > Sin internet). El dueño y
+  el administrador pueden; a los cajeros se lo da el dueño en esa misma pantalla.
+- Sin internet se cobra en **efectivo o transferencia** (con su número de referencia). **Tarjeta no.**
+- Las transferencias quedan **por confirmar** (Dinero > Transferencias por confirmar).
+- **Talonario de emergencia:** el módulo `facturas_emergencia` se enciende como los demás (ficha o Armador). Antes,
+  pregunte a su contador cómo pedir el CAI del talonario.
+
+Si sale un error en rojo, **no se cambió nada**:
+
+| Lo que sale | Qué hacer |
+|---|---|
+| `FALTA_VERSION_ANTERIOR ... 055 (núcleo 0.19.0)` | Su base no tiene la 0.19.0. Pegue primero `actualizar_supabase_0.19.0.sql` (y antes los que falten) y después este. |
+| `FALTA_NUCLEO` | Esa base no tiene el sistema. Haga la instalación completa (paso 5). |
+| `PAQUETE_VIEJO` o `MIGRACION_DISTINTA` | No siga. Avise a su proveedor. |
+| `ROL_EQUIVOCADO` | Elija el rol **postgres** arriba a la derecha y vuelva a correr. |
+
+Si lo pega dos veces no pasa nada: la segunda vez dice igual **ACTUALIZADO A 0.20.0**.
+
+## Actualizar de 0.18.0 a 0.19.0 (versión anterior) — devolución con mayorista, cambio exacto y estado de cuenta del socio
 
 Si su Supabase ya tiene la 0.18.0, **no** vuelva a pegar las partes. Solo se pega **un archivo** (unos 95 KB).
 Los datos de su negocio no se tocan.

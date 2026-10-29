@@ -1,9 +1,16 @@
-# Pendientes de la app (0.13.1)
+# Pendientes de la app (0.14.0)
+
+- HECHO (0.14.0, núcleo 0.20.0): vender sin internet (preparar el equipo, barra "Sin conexión: N ventas guardadas en este
+  equipo", abrir sin internet, cola que sube sola, comprobante "Emitida sin conexión" con original y copia, ventas por
+  resolver, ventas de otros usuarios del equipo, respaldo en archivo, equipos y bloques), transferencias por confirmar
+  y talonario de emergencia. Falta: probarlo contra un Supabase REAL y en celulares de verdad (iPhone instalado como
+  app, Android); en Chromium de las pruebas el almacenamiento persistente se simula. Falta la pantalla para pasar ventas
+  de copias en papel y la hoja de arqueo sin internet (M4). La reimpresión desde el servidor no dice "Emitida sin
+  conexión". Sin internet, la pestaña Inicio lleva a Nueva venta.
 
 - HECHO (0.13.0, núcleo 0.19.0): ajuste por perder precio mayorista en Devoluciones (vista previa y comprobante), cambio
   exacto con varios productos y "Devolver todo el dinero", garantía por otro producto exacta y estado de cuenta del
   socio con Excel e Imprimir. Falta: probarlo contra un Supabase REAL; el comprobante de la devolución no se manda por WhatsApp (solo Imprimir).
-- Vender sin internet: diseño en `docs/SIN_INTERNET.md` (sin programar todavía).
 
 - HECHO (0.12.0, núcleo 0.18.0): precio mayorista, garantías, abonos con cheque y antigüedad de saldos. Falta:
   probarlo contra un Supabase REAL; vender al contado con cheque (el núcleo no lo acepta, decisión); la antigüedad

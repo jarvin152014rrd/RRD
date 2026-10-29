@@ -4,6 +4,38 @@ Formato: versión (fecha) y lista de cambios. La versión vive en `VERSION_NUCLE
 y queda guardada en cada base al migrar (vista `version_esquema`).
 Números: MAYOR.MENOR.ARREGLO (ver `docs/CONVENCIONES.md`).
 
+## 0.20.0 (2026-10-29) — Vender sin internet (etapa 1), transferencias por confirmar y talonario de emergencia
+
+Migración nueva 056 (las 001-055 no se tocaron). 158 pruebas (nuevas 152 a 158; la 150 queda fija en 0.19.0). Todas
+pasan también con `probar.sh --paquete`. Para quien ya tiene 0.19.0 en Supabase: `dist/actualizar_supabase_0.20.0.sql`
+(168 KB, una sola pegada; ver `docs/SUPABASE.md`, "Actualizar de 0.19.0 a 0.20.0"). Diseño: `docs/SIN_INTERNET.md`
+(punto 17: lo que quedó distinto). Técnico: `nucleo/docs/sin_internet.md`. Decisiones en `docs/REQUISITOS.md`,
+"Decisiones del dueño 0.20.0".
+
+- **Equipos y números reservados:** `registrar_equipo`, `desactivar_equipo` (sus bloques quedan "por conciliar"; no se
+  anulan números), `reservar_bloque_numeros` (un bloque activo por caja y tipo, con el CAI de la caja; el candado de
+  `cai_rango` solo salta con la marca de la reserva), `bloques_del_equipo`, `devolver_bloque` (exige que todo lo del
+  equipo esté subido: `FALTAN_VENTAS_POR_SUBIR`), `conciliar_bloque` y `bloques_sin_internet`. Mientras hay un bloque
+  activo la caja no numera en línea (`BLOQUE_ACTIVO`) y el turno no cierra (`BLOQUE_SIN_DEVOLVER`; si el equipo lleva
+  48 h sin noticias, el bloque pasa a "por conciliar" con alerta). Números emitidos en `numero_emitido`.
+- **Foto del catálogo** (`preparar_sin_internet`): precios, impuestos, promociones, mayorista, clientes y existencias
+  con versión; al subir, el servidor calcula con la foto de esa venta (G5), no con la de hoy.
+- **Subir** (`subir_ventas_sin_internet`): en tandas, cada venta en su propia subtransacción, a nombre de quien la hizo,
+  con id_operacion (un reintento no duplica). Se revisa todo otra vez: precio, total, número, hora, usuario, permiso,
+  turno, mes y existencias (se aceptan en negativo con aviso). Lo que no cuadra queda **por resolver**
+  (`ventas_sin_internet_por_resolver`, `resolver_venta_sin_internet`: registrar con su fecha real o anular, con motivo).
+  Subir ventas de otro usuario: `ventas.subir_ajenas` (dueño), con motivo.
+- **Pagos sin internet (decisión del dueño):** efectivo y transferencia; tarjeta no. La transferencia exige referencia
+  y queda por confirmar. Nuevo `transferencias_por_confirmar` y `marcar_transferencia_no_llego` (deuda del cliente
+  "TRF-<factura>" o del cajero en Cuentas por cobrar a empleados; la venta ya no se anula); aviso de referencia repetida.
+- **Talonario de emergencia** (módulo nuevo `facturas_emergencia`, depende de ventas y fiscal_hn; también en el Armador
+  y la ficha): `registrar_talonario`, `desactivar_talonario`, `registrar_factura_talonario` (rango, no repetido, CAI
+  vigente, mes abierto), `anular_numero_talonario` y `talonarios` (usados, anulados, libres y huecos). El libro de
+  ventas muestra los números anulados del talonario y los anulados o no usados de un bloque como ANULADA.
+- Reglas de la empresa (`configurar_empresa`, solo el dueño): `sin_internet_horas` (24), topes por venta (L 10,000) y
+  por turno (L 50,000) y tamaño del bloque. Permisos nuevos: `ventas.sin_internet`, `ventas.resolver_sin_internet`,
+  `ventas.subir_ajenas`, `equipos.administrar`, `talonario.administrar`, `talonario.registrar`. Alerta `sin_internet`.
+
 ## 0.19.0 (2026-10-26) — Decisiones del dueño: devolución con mayorista, estado de cuenta del socio y cambio exacto
 
 Migración nueva 055 (las 001-054 no se tocaron). 151 pruebas (nuevas 147 a 151; la 145 queda fija en 0.18.0). Todas

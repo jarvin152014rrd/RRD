@@ -6,7 +6,7 @@ La app será una PWA (página web instalable) y los datos vivirán en Supabase
 funciones SQL que guardan todo o nada. El navegador solo muestra y llama
 esas funciones.
 
-Versión del núcleo: ver `VERSION_NUCLEO` (hoy 0.19.0). Cambios: `CHANGELOG.md`.
+Versión del núcleo: ver `VERSION_NUCLEO` (hoy 0.20.0). Cambios: `CHANGELOG.md`.
 Subir a un proyecto real de Supabase + Netlify, paso a paso: `docs/SUPABASE.md`.
 
 ## Carpetas
@@ -214,6 +214,9 @@ Si algo falla, termina con error (código distinto de 0).
 | `totales_compras` / `totales_gastos` / `mas_vendido` (0.16.0) | totales de un rango, por sucursal si el usuario es limitado (`totales.md`) | compras.ver / dinero.ver / ventas.ver |
 | `estado_cuenta_socio(empresa, socio, desde?, hasta?)` (0.19.0) | estado de cuenta de un socio con cuadre (`fondos.md`) | fondos.ver |
 | `calcular_devolucion_previa(venta, datos)` (0.19.0) | lo que se devuelve, con el ajuste por perder precio mayorista (`devoluciones.md`) | ventas.devolver |
+| `preparar_sin_internet`, `reservar_bloque_numeros`, `subir_ventas_sin_internet`, `devolver_bloque`, `resolver_venta_sin_internet` (0.20.0) | vender sin internet: equipos, números reservados, subida y "por resolver" (`sin_internet.md`) | ventas.sin_internet / ventas.resolver_sin_internet |
+| `transferencias_por_confirmar`, `marcar_transferencia_no_llego` (0.20.0) | transferencias por confirmar y "no llegó" (`sin_internet.md`) | dinero.ver / dinero.trasladar |
+| `registrar_talonario`, `registrar_factura_talonario`, `anular_numero_talonario`, `talonarios` (0.20.0) | talonario de emergencia (`sin_internet.md`, `cai.md`) | talonario.administrar / talonario.registrar |
 
 Vistas: `v_existencia` (inventario.ver; costos solo con inventario.costos),
 `v_kardex` (inventario.costos), `v_cxp_documento` y `v_cxp_proveedor` (compras.ver),
@@ -260,5 +263,6 @@ en ese mismo archivo. La prueba 17 falla si alguna falta.
 
 - `docs/CONVENCIONES.md` — nombres, centavos, `_en`, permisos, migraciones.
 - `docs/PERSONALIZAR.md` — qué se cambia por cliente sin programar y qué nunca.
+- `docs/SIN_INTERNET.md` y `docs/SIN_INTERNET_GUIA.md` — vender sin internet: diseño y guía sencilla.
 - `docs/PROCEDIMIENTOS.md` — instalar, actualizar, respaldar/restaurar
   (cifrado), soporte, simulacro de restauración, activar módulos con saldos.

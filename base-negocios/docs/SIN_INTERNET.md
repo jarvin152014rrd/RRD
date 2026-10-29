@@ -1,8 +1,10 @@
-# Vender sin internet — diseño (todavía NO programado)
+# Vender sin internet — diseño
 
-Estado: **diseño para que el dueño decida**, versión 2 (con la revisión del revisor). No hay código de esto en el núcleo
-0.19.0 ni en la app 0.13.0. Cuando el dueño apruebe las decisiones del final, se programa en etapas, cada una con sus
-pruebas.
+Estado: **etapa 1 programada** en el núcleo 0.20.0 (migración 056) y la app 0.14.0, con las decisiones del dueño
+(punto 14) y los cambios que pidió después: **sin internet se cobra en efectivo o con transferencia; con tarjeta NO**, y
+el **talonario de emergencia** (módulo `facturas_emergencia`). Lo que se programó distinto a este diseño, y por qué, está
+en el punto 17. Guía sencilla para el cajero y el dueño: `docs/SIN_INTERNET_GUIA.md`. Detalle técnico:
+`nucleo/docs/sin_internet.md`.
 
 Los cambios de la revisión van marcados con su código para poder seguirlos: **G1-G6** (graves, obligatorios antes de
 programar), **M1-M7** (medios), **m** (menores) y **CAI** (numeración fiscal). Lista completa en el punto 16.
@@ -31,7 +33,8 @@ La app **abre sin internet** en un "modo sin internet" si ese usuario ya se prep
 | Acción | ¿Sin internet? | Recomendación |
 |---|---|---|
 | Vender de contado en **efectivo** | Sí | Etapa 1. Es lo que más se necesita. |
-| Vender con **tarjeta** (POS del banco que funciona solo) | Sí, con el número de voucher | Etapa 1, si el POS imprime voucher sin internet. |
+| Vender con **transferencia** | Sí, **con el número de referencia** (y el banco si se sabe) | Decisión del dueño: queda **"por confirmar"** en la cuenta puente hasta verla en el banco (Dinero > Transferencias por confirmar). Si no llegó, la venta queda como deuda del cliente (o del cajero si fue a Consumidor final). |
+| Vender con **tarjeta** | **No** | Decisión del dueño: el POS necesita conexión para aprobar. |
 | Ver productos, precios y existencias (de la última vez que hubo internet) | Sí (solo mirar) | Etapa 1, con la hora de la última actualización a la vista. |
 | Reimprimir el comprobante de una venta hecha sin internet | Sí | Etapa 1. |
 | Abrir o cerrar el turno de caja | **No** | Se abre y se cierra con internet. Sin internet se vende dentro del turno ya abierto. Si al final del día no hay internet: ver M4. |
@@ -46,8 +49,8 @@ la cola, **después de las ventas**, y que se suba solo.
 ## 3. Qué NO se puede hacer sin internet, y por qué
 
 - **Ventas al crédito:** hay que revisar el límite y lo que el cliente debe HOY; eso solo lo sabe el servidor.
-- **Transferencias, cheques, saldo a favor y vales:** se confirman contra el banco o contra un saldo que puede gastarse
-  dos veces en dos equipos a la vez.
+- **Tarjeta, cheques, saldo a favor y vales:** el POS necesita conexión, y los saldos pueden gastarse dos veces en dos
+  equipos a la vez. (La transferencia sí se acepta, con referencia y "por confirmar": decisión del dueño.)
 - **Descuentos manuales y todo lo que pide aprobación:** quien aprueba está en el servidor. Sin internet solo se aplican
   las promociones vigentes y el precio mayorista que ya se bajaron.
 - **Devoluciones, cambios, anulaciones y garantías:** mueven dinero ya registrado y piden ver la venta en el servidor.
@@ -290,7 +293,7 @@ App (Playwright, `context.setOffline(true)`):
 | 1 | ¿Facturas con CAI sin internet? | **Sí, con bloque reservado por caja y equipo** (tamaño según el promedio de ventas), que dura hasta cerrar el turno o la fecha límite del CAI. Plan B: talonario a mano con CAI de imprenta (lo confirma el contador). |
 | 2 | ¿Abrir y cerrar turno sin internet? | **No.** Sin internet al cerrar: contar y anotar en papel, cerrar al volver (M4). |
 | 3 | ¿Cobros (abonos) y gastos de caja sin internet? | **No en la etapa 1.** En REQUISITOS, "cobro" sin internet significa **cobrar la venta** en la caja, no abonos de clientes. |
-| 4 | Formas de pago sin internet | **Efectivo y tarjeta** (con voucher). Nada de crédito, transferencia, cheque, saldo a favor ni vales. |
+| 4 | Formas de pago sin internet | **Decidido por el dueño: efectivo y transferencia** (con referencia, queda por confirmar). **Tarjeta no.** Nada de crédito, cheque, saldo a favor ni vales. |
 | 5 | Descuentos sin internet | **Solo promociones y precio mayorista** ya bajados. Sin descuento manual. |
 | 6 | Tiempo máximo sin internet y topes | **24 horas, configurable**; **L 10,000 por venta** y **un tope por turno** sin internet. |
 | 7 | Producto sin existencias al subir | **Aceptar y avisar** (la mercadería ya salió). |
@@ -396,3 +399,39 @@ Funciones (`SECURITY DEFINER`, `search_path = ''`, permisos, errores del catálo
 | M7 | Subir funciona fuera del horario | 7 |
 | m | Barra y Cobrar; beforeunload en celular; servidor que no contesta; "Emitida sin conexión"; solo lo que cambió; fecha atrasada; tamaño de bloque; equipo en el asistente | 5, 6.2, 8, 10, 15.2 |
 | CAI | Dura hasta cerrar turno o fecha límite (48 h solo si no vuelve); talonario de imprenta; nada de "ticket ahora y factura después" | 3, 6.2, 14 |
+
+---
+
+## 17. Lo programado en la etapa 1 (núcleo 0.20.0, app 0.14.0) y lo que quedó distinto
+
+Programado: G1-G6, M1-M3, M5-M7 y los menores, con pruebas (núcleo 152-158; app `probar_0140.cjs`, `probar_espejo.mjs`,
+`probar_cascaron.mjs` y `probar_0140_nucleo_viejo.cjs`). Además, por decisión del dueño después de este diseño:
+
+- **Pagos sin internet:** efectivo y transferencia. La transferencia exige su número de referencia (y el banco si se sabe)
+  y queda "por confirmar". Pantalla **Dinero > Transferencias por confirmar**: "Llegó" (pasa al banco) o "No llegó"
+  (`marcar_transferencia_no_llego`: la venta queda como deuda del cliente con una cuenta por cobrar "TRF-<factura>", o
+  del cajero en "Cuentas por cobrar a empleados" si fue a Consumidor final; con aviso, motivo y bitácora). Una
+  referencia repetida sale marcada "Referencia repetida". La conciliación bancaria la empareja como cualquier
+  transferencia por confirmar. La venta con una transferencia "no llegó" ya no se puede anular (se cobra la deuda).
+- **Talonario de emergencia** (módulo `facturas_emergencia`, depende de ventas y fiscal_hn): el dueño o el administrador
+  registran el rango de imprenta con su propio punto de emisión; "Pasar factura" revisa número en el rango, no repetido,
+  CAI vigente en la fecha de la copia y mes abierto; anular un número; lista con usados, anulados, libres y huecos.
+  **El contador debe confirmar cómo se pide el CAI de un talonario de imprenta.**
+
+Distinto al diseño (lo más seguro en cada caso):
+
+1. **Caja con bloque activo:** mientras un equipo tiene números reservados de una caja, esa caja numera en línea con
+   `BLOQUE_ACTIVO`. En esa caja solo se cobra de contado por la cola del equipo (efectivo, transferencia y, con internet,
+   tarjeta). Crédito, convertir cotizaciones, apartados y cambios: en otra caja o devolviendo antes los números.
+2. **Números del bloque con huecos:** el servidor acepta una venta aunque falte una anterior (llega en otra tanda); el
+   orden se exige al **devolver** el bloque (`FALTAN_VENTAS_POR_SUBIR`).
+3. **Usuario desactivado:** la hora de desactivación sale de la bitácora. El permiso se revisa al subir.
+4. **Catálogo:** se baja entero (con "sin cambios" por versión), sin páginas ni cambios por producto.
+5. **Reimpresión desde el servidor:** no dice "Emitida sin conexión" (queda en la nota de la venta).
+6. **Pendiente:** pantalla para pasar ventas desde las copias en papel de un equipo perdido (hoy se concilia y lo que
+   falte se registra como venta normal) y la hoja imprimible de arqueo (M4).
+7. **Talonario:** una factura que pediría aprobación no se pasa (`APROBACION_REQUERIDA`); la pasa quien aprueba.
+8. **Tope por turno** por defecto: L 50,000 (configurable). Tamaño del bloque: sugerido o el que ponga el dueño (10 a 5000).
+9. **Sin internet con la sesión abierta:** si se va el internet con la app abierta y la caja tiene números en el equipo,
+   Vender usa los precios guardados (solo efectivo y transferencia); si la app se abre sin internet, entra en el "modo
+   sin internet" (solo Nueva venta y Ventas del día).
