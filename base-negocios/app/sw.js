@@ -10,7 +10,7 @@ const CASCARON = [
   'css/tema.css', 'css/base.css', 'css/controles.css',
   'js/app.js', 'js/api.js', 'js/iconos.js', 'js/sesion.js', 'js/menu.js', 'js/menu_datos.js', 'js/formato.js', 'js/errores.js', 'js/ui.js',
   'js/calculo_local.js', 'js/sin_internet.js',
-  'js/datos.js', 'js/fotos.js', 'js/formularios.js', 'js/comprobante.js', 'js/imprimible.js', 'js/marca.js', 'js/tema_oscuro.js', 'js/excel.js', 'js/reportes.js', 'vendor/xlsx.bundle.js',
+  'js/datos.js', 'js/fotos.js', 'js/formularios.js', 'js/comprobante.js', 'js/imprimible.js', 'js/marca.js', 'js/tema_oscuro.js', 'js/buscador.js', 'js/excel.js', 'js/reportes.js', 'vendor/xlsx.bundle.js',
   'js/pantallas/entrar.js', 'js/pantallas/inicio.js', 'js/pantallas/alertas.js',
   'js/pantallas/aprobaciones.js', 'js/pantallas/pendientes.js', 'js/pantallas/en_construccion.js', 'js/pantallas/mas.js',
   'js/pantallas/dinero_donde.js', 'js/pantallas/dinero_gastos.js', 'js/pantallas/dinero_depositos.js', 'js/pantallas/dinero_pagos_fijos.js',

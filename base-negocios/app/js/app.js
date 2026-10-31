@@ -13,6 +13,7 @@ import { olvidarDatos, reiniciarTodo } from './datos.js';
 import { comaInvalida, MENSAJE_COMA } from './formato.js';
 import { olvidarFotos, prepararFotos } from './fotos.js';
 import { temaActual, cambiarTema, alCambiarTema } from './tema_oscuro.js';
+import { botonBuscador, usarMenu } from './buscador.js';
 
 const raiz = document.getElementById('app');
 const bandaSinConexion = document.getElementById('sin-conexion');
@@ -193,6 +194,7 @@ let quitarOyenteTema = null;
 function mostrarApp() {
   const perfil = perfilActual();
   menu = menuDelUsuario();
+  usarMenu(() => menu);
   const nombre = (perfil.usuario && (perfil.usuario.nombre || perfil.usuario.correo)) || '';
   const pestanas = h('nav', { class: 'pestanas', 'aria-label': 'Menú principal' },
     menu.map((p) => h('a', { class: 'pestana' + (p.final ? ' pestana-final' : ''), href: `#/${p.id}/${p.subs[0].id}`,
@@ -224,7 +226,7 @@ function mostrarApp() {
         h('div', { class: 'marca' },
           h('div', { class: 'marca-logo', id: 'marca-logo', 'aria-hidden': 'true', dataset: { iniciales: iniciales(perfil.empresa.nombre) } }, iniciales(perfil.empresa.nombre)),
           h('span', { class: 'marca-nombre', id: 'marca-nombre' }, perfil.empresa.nombre)),
-        h('div', { class: 'quien' }, estadoRed, botonTema, campana,
+        h('div', { class: 'quien' }, botonBuscador(), estadoRed, botonTema, campana,
           h('span', {}, nombre, h('span', { class: 'rol-texto' }, ' · ', perfil.rol.nombre || perfil.rol.codigo)),
           h('button', { type: 'button', class: 'boton boton-claro', onclick: () => salir() }, 'Salir'))),
       pestanas),
