@@ -157,7 +157,7 @@ export function abrirBuscador() {
     h('p', { class: 'buscador-pie' }, 'Flechas para moverse · Enter para abrir · Esc para cerrar'));
   dlg.addEventListener('close', () => dlg.remove());
   dlg.addEventListener('click', (ev) => { if (ev.target === dlg) cerrar(); });   // clic fuera
-  function cerrar() { if (dlg.open) dlg.close(); }
+  function cerrar() { if (dlg.open) dlg.close(); dlg.remove(); }   // se quita enseguida (el evento close llega después)
   document.body.append(dlg);
   dlg.showModal();
   pintar();

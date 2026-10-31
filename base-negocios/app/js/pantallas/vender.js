@@ -13,7 +13,7 @@ import { empresaId, perfilActual, puede, tieneModulo, modoSinInternet } from '..
 import * as si from '../sin_internet.js';
 import { precioConTasa } from '../calculo_local.js';
 import { dinero, cantidad as fCantidad, aCentavos, paraCampo } from '../formato.js';
-import { h, icono, aviso, cajaError, errorSimple, campo, dialogo, titulo, estadoVacio, mensaje, chip } from '../ui.js';
+import { h, icono, aviso, cajaError, errorSimple, campo, dialogo, titulo, estadoVacio, mensaje, chip, confirmar } from '../ui.js';
 import { hayEnMenu } from '../menu.js';
 import { productos, clientes, miTurno, filtrar, olvidarDatos, nucleoAlMenos, existenciasPorProducto } from '../datos.js';
 import { vistaComprobante, vistaComprobanteLocal, nombreForma } from '../comprobante.js';
@@ -679,6 +679,32 @@ export async function armarCarrito(vista, ctx, { modo, alTerminar = null }) {
     armarCarrito(vista, ctx, { modo, alTerminar });
   }
 
+  // ---------------- Teclas rápidas (app 0.15.0, para el mostrador con teclado y lector de códigos) ----------------
+  //   F2 = ir al buscador · F9 = cobrar (o guardar la cotización) · Esc en el buscador vacío = vaciar la venta (pregunta).
+  // Solo mientras esta pantalla está abierta y sin otra ventana encima.
+  function teclasRapidas() {
+    const alTeclear = async (ev) => {
+      if (!raiz.isConnected) { document.removeEventListener('keydown', alTeclear); return; }
+      if (document.querySelector('dialog[open]') || ev.ctrlKey || ev.metaKey || ev.altKey) return;
+      if (ev.key === 'F2') { ev.preventDefault(); buscar.focus(); buscar.select(); }
+      else if (ev.key === 'F9') {
+        ev.preventDefault();
+        if (!botonCobrar.disabled && estado.lineas.length && !raiz.dataset.calculando) botonCobrar.click();
+        else if (!estado.lineas.length) aviso('Primero agregue un producto.', 'info', 2500);
+        else aviso('Espere un momento: se está calculando el total.', 'info', 2500);
+      } else if (ev.key === 'Escape' && ev.target === buscar && !buscar.value && estado.lineas.length) {
+        ev.preventDefault();
+        if (await confirmar({ titulo: 'Vaciar la venta', texto: `${estado.lineas.length === 1 ? 'Se quita el artículo' : `Se quitan los ${estado.lineas.length} artículos`} de esta venta. No se guardó nada todavía.`,
+          textoBoton: 'Sí, vaciar', peligro: true })) {
+          estado.lineas = []; estado.descFactura = ''; descFactura.value = ''; cambio();
+        }
+        // Después de que la ventana termine de cerrarse (si no, el lector de códigos escribe en el aire).
+        setTimeout(() => { buscar.blur(); buscar.focus(); }, 0);
+      }
+    };
+    document.addEventListener('keydown', alTeclear);
+  }
+
   // ---------------- Barra del celular (app 0.15.0) ----------------
   // En el celular el ticket queda abajo de los artículos: esta barra fija muestra el total y lleva al cobro.
   // No cobra sola (primero se ve la forma de pago). Se esconde cuando el pie del ticket ya se ve en pantalla.
@@ -696,6 +722,8 @@ export async function armarCarrito(vista, ctx, { modo, alTerminar = null }) {
         h('label', { for: 'buscar-producto', class: 'etiqueta-grande titulo-icono' }, icono('buscar'), 'Buscar producto o servicio'),
         h('div', { class: 'buscar-fila' }, buscar, botonCamara),
         h('p', { class: 'ayuda', id: 'ayuda-buscar' }, 'Con lector de códigos: apunte y listo (escribe el código y Enter).'),
+        h('p', { class: 'ayuda teclas-ayuda', 'aria-hidden': 'true' }, h('kbd', {}, 'F2'), ' buscar · ', h('kbd', {}, 'F9'), modo === 'venta' ? ' cobrar · ' : ' guardar · ',
+          h('kbd', {}, 'Esc'), ' en el buscador vacío: vaciar la venta'),
         zonaBuscar, resultados),
       h('section', { class: 'tarjeta', 'aria-labelledby': 't-carrito' },
         titulo('h2', 'bolsa', [modo === 'venta' ? 'Artículos' : 'Artículos de la cotización', ' ', cuentaArticulos], { id: 't-carrito' }), carrito)),
@@ -716,6 +744,7 @@ export async function armarCarrito(vista, ctx, { modo, alTerminar = null }) {
     barraCelular);
   vista.append(raiz);
   ajustarTicket(raiz.querySelector('.vender-der'));
+  teclasRapidas();
   if ('IntersectionObserver' in window) {
     const ojo = new IntersectionObserver(([e]) => { raiz.classList.toggle('pie-visible', e.isIntersecting); });
     ojo.observe(raiz.querySelector('.ticket-pie'));

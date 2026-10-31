@@ -907,3 +907,7 @@ html[data-tema="oscuro"] .filtro-rapido[aria-checked="true"] { background: var(-
 }
 .mas-sesion { display: flex; align-items: center; gap: 12px; }
 .mas-sesion-texto { flex: 1; min-width: 0; display: flex; flex-direction: column; overflow-wrap: anywhere; }
+/* App 0.15.0: ayuda de teclas rápidas en Vender (solo computadora) */
+.teclas-ayuda kbd { font-family: var(--letra-mono); font-size: 15px; border: 1px solid var(--color-campo-borde-suave); border-bottom-width: 2px; border-radius: 5px; padding: 0 5px; background: var(--color-fondo); }
+@media (max-width: 899px) { .teclas-ayuda { display: none; } }
+.cifras-dia { grid-template-columns: minmax(0, 380px); }

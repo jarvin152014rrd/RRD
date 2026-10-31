@@ -2,13 +2,13 @@
 // con su comprobante y el botón para empezar una devolución.
 // App 0.14.0: arriba, las ventas guardadas en ESTE equipo (cola sin internet) con su estado: En el equipo (gris),
 // Subida (verde) o Con problema (rojo, con la razón). Sin conexión solo salen esas.
-import { leer } from '../api.js';
-import { empresaId, perfilActual, puede, modoSinInternet } from '../sesion.js';
+import { leer, rpc } from '../api.js';
+import { empresaId, perfilActual, puede, modoSinInternet, tieneModulo } from '../sesion.js';
 import * as si from '../sin_internet.js';
 import { vistaComprobanteLocal } from '../comprobante.js';
 import { fechaLocal } from '../calculo_local.js';
 import { dinero, fechaHora } from '../formato.js';
-import { h, cajaError, titulo, filaIcono, chipEstado, monto, estadoVacio, filtrosRapidos } from '../ui.js';
+import { h, cajaError, titulo, filaIcono, chipEstado, chip, monto, estadoVacio, filtrosRapidos, tarjetaCifra } from '../ui.js';
 import { hayEnMenu } from '../menu.js';
 import { vistaComprobante } from '../comprobante.js';
 import { prepararDevolucion } from './devoluciones.js';
@@ -21,8 +21,11 @@ export async function mostrar(vista, ctx) {
   const hoy = fechaLocal(Date.now(), zona);
   const locales = (await si.cola(empresaId())).filter((x) => x.usuario_id === perfil.usuario.id
     && (x.estado !== 'subida' || fechaLocal(Date.parse(x.creada_en), zona) === hoy)).reverse();
-  const ventas = modoSinInternet() ? [] : await leer('v_venta', { empresa_id: empresaId(), fecha_contable: perfil.empresa.hoy },
-    { orden: 'registrado_en.desc', limite: 300 });
+  // App 0.15.0: arriba, lo vendido hoy (el MISMO número de Inicio: resumen_hoy del servidor; la app no suma).
+  const verResumen = !modoSinInternet() && tieneModulo('ventas') && puede('ventas.ver');
+  const [ventas, resumen] = modoSinInternet() ? [[], null] : await Promise.all([
+    leer('v_venta', { empresa_id: empresaId(), fecha_contable: perfil.empresa.hoy }, { orden: 'registrado_en.desc', limite: 300 }),
+    verResumen ? rpc('resumen_hoy', { p_empresa_id: empresaId() }).catch(() => null) : null]);
   if (!ctx.sigueVigente()) return;
   if (locales.length) vista.append(tarjetaEquipo(vista, locales, () => mostrar(vista.replaceChildren() || vista, ctx)));
   if (modoSinInternet()) {
@@ -38,9 +41,16 @@ export async function mostrar(vista, ctx) {
     opciones: [{ id: 'todas', texto: 'Todas', n: ventas.length, siempre: true, color: 'azul' }, { id: 'contado', texto: 'Contado', n: cuenta('contado'), color: 'verde' },
       { id: 'credito', texto: 'Crédito', n: cuenta('credito'), color: 'azul' }, { id: 'otra', texto: 'En espera', n: cuenta('otra'), color: 'dorado' },
       { id: 'anulada', texto: 'Anuladas', n: cuenta('anulada'), color: 'rojo' }] }) : null;
+  const vh = resumen && resumen.ventas_hoy;
+  const cifras = vh ? h('div', { class: 'cifras cifras-dia' },
+    tarjetaCifra({ dato: 'dia-total', icono: 'sube', color: 'verde', etiqueta: resumen.solo_mis_sucursales ? 'Vendido hoy (mis sucursales)' : 'Vendido hoy',
+      valor: dinero(vh.total_centavos),
+      chip: vh.porcentaje === null || vh.porcentaje === undefined ? chip(`Ayer: ${dinero(vh.ayer_centavos)}`, 'neutro')
+        : chip(`${vh.porcentaje > 0 ? '+' : ''}${vh.porcentaje} % que ayer`, vh.porcentaje >= 0 ? 'verde' : 'rojo'),
+      nota: `${vh.cantidad || 0} ${(vh.cantidad || 0) === 1 ? 'venta' : 'ventas'} · sin anuladas` })) : null;
   const tarjeta = h('section', { class: 'tarjeta', 'aria-labelledby': 't-dia' },
     titulo('h1', 'lista', 'Ventas del día', { id: 't-dia' }),
-    puede('ventas.ver') ? null : h('p', { class: 'ayuda' }, 'Aquí salen las ventas que usted hizo hoy.'), filtros, lista);
+    puede('ventas.ver') ? null : h('p', { class: 'ayuda' }, 'Aquí salen las ventas que usted hizo hoy.'), cifras, filtros, lista);
   const pintarLista = () => {
     const vistas = filtro === 'todas' ? ventas : ventas.filter((v) => clase(v) === filtro);
     lista.replaceChildren(...(vistas.length ? vistas.map((v) => {

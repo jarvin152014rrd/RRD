@@ -32,8 +32,12 @@ Solo pantalla: no cambia ningún cálculo ni función del núcleo, y lo impreso 
 - **Clientes:** filtros rápidos Con atraso, Deben, Al día y Mayoristas (los de deuda, solo si el usuario ve saldos).
 - **Celular:** encabezado en una sola línea (el nombre del usuario y Salir pasan arriba de "Más"); en Vender, barra fija
   con el total y "Ir a cobrar" (no cobra sola; se esconde cuando el botón Cobrar ya se ve).
+- **Teclas rápidas en Vender** (computadora): F2 lleva al buscador, F9 cobra (o guarda la cotización; sin artículos o
+  mientras calcula no hace nada) y Esc en el buscador vacío vacía la venta (pregunta antes). El cursor vuelve al buscador
+  para seguir escaneando.
+- **Ventas del día:** arriba, lo vendido hoy (el mismo número de Inicio, `resumen_hoy`), con la comparación con ayer.
 - Buscador: Esc siempre cierra (antes, la primera vez solo borraba lo escrito).
-- Prueba nueva `probar_0150.cjs` (5): modo oscuro con contraste AA y comprobante blanco, buscador (palabras, productos,
+- Prueba nueva `probar_0150.cjs` (6; también total del día y teclas rápidas): modo oscuro con contraste AA y comprobante blanco, buscador (palabras, productos,
   clientes, permisos, no borra la venta, no se abre encima de otra ventana), filtros que cuentan como la base,
   cotizaciones con WhatsApp sin emojis y celular.
 - Cascarón `cascaron-0.15.0` (archivos nuevos `js/tema_oscuro.js` y `js/buscador.js`).

@@ -2,6 +2,7 @@
 // se lee bien con contraste AA y lo impreso sigue blanco y negro), buscador general (palabras, productos, clientes,
 // permisos, no borra la venta, no se abre encima de otra ventana), filtros rápidos que cuentan como la base,
 // cotizaciones (cifras y WhatsApp sin emojis) y celular (encabezado en una línea, barra con el total, Salir en Más).
+// Ventas del día con el total del servidor y teclas rápidas en Vender (F2, F9, Esc).
 // La corre herramientas/probar_app.sh. Variables: URL_APP, BASE_DEMO, CAPTURAS, PG* del servidor local.
 'use strict';
 const path = require('node:path');
@@ -115,6 +116,7 @@ const EM = () => id('EMPRESA');
     afirmar((await textoDe(p, '.buscador-opcion')).includes('Mi turno'), 'arqueo no lleva a Mi turno');
     await p.keyboard.press('Enter');
     await p.waitForFunction(() => location.hash === '#/caja/turno');
+    await p.waitForSelector('#buscador', { state: 'detached', timeout: 3000 }).catch(() => {});
     afirmar(await p.locator('#buscador').count() === 0, 'el buscador no se cerró');
     paso = 'producto';
     await p.click('#boton-buscar');
@@ -192,6 +194,41 @@ const EM = () => id('EMPRESA');
       afirmar(await p.locator('[data-cliente]').count() === k, 'el filtro Con atraso no filtra');
       afirmar((await p.locator('.lista [data-cliente]').allInnerTexts()).every((t) => t.includes('Con atraso')), 'sale un cliente sin atraso');
     }
+    await ctx.close();
+  });
+
+  await prueba('Ventas del día con el total del servidor; teclas rápidas F2, F9 y Esc en Vender', async () => {
+    const { ctx, p } = await nueva();
+    await entrar(p, DUENO);
+    paso = 'total del día';
+    await ir(p, 'vender/ventas', '[data-dato=dia-total]');
+    const r = JSON.parse(sql(DUENO, `public.resumen_hoy('${E}')`));
+    afirmar((await textoDe(p, '[data-dato=dia-total] .cifra-valor')).trim() === lempiras(r.ventas_hoy.total_centavos), 'el total del día no es el del servidor');
+    paso = 'F2';
+    await ir(p, 'vender/nueva', '#buscar-producto');
+    await p.click('h2#t-carrito');
+    await p.keyboard.press('F2');
+    afirmar(await p.evaluate(() => document.activeElement.id) === 'buscar-producto', 'F2 no lleva al buscador');
+    paso = 'Esc';
+    await p.keyboard.type('CEM-425'); await p.keyboard.press('Enter');
+    await p.waitForSelector('.linea-carrito');
+    await p.keyboard.press('Escape');
+    await p.waitForSelector('dialog[open]');
+    await p.click('#confirmar-si');
+    await p.waitForFunction(() => document.querySelectorAll('.linea-carrito').length === 0);
+    afirmar(await p.evaluate(() => document.activeElement.id) === 'buscar-producto', 'después de vaciar no vuelve al buscador');
+    paso = 'F9';
+    const antes = Number(sql(DUENO, `(SELECT count(*) FROM public.venta WHERE empresa_id = '${E}')`));
+    await p.keyboard.press('F9');   // sin artículos no cobra
+    await p.waitForTimeout(500);
+    afirmar(Number(sql(DUENO, `(SELECT count(*) FROM public.venta WHERE empresa_id = '${E}')`)) === antes, 'F9 cobró sin artículos');
+    await p.keyboard.type('VAR-038'); await p.keyboard.press('Enter');   // con existencias de sobra
+    await p.waitForSelector('.linea-carrito');
+    await p.waitForSelector('.vender:not([data-calculando])');
+    await p.waitForTimeout(300);
+    await p.keyboard.press('F9');
+    await p.waitForSelector('.venta-lista', { timeout: 15000 });
+    afirmar(Number(sql(DUENO, `(SELECT count(*) FROM public.venta WHERE empresa_id = '${E}')`)) === antes + 1, 'F9 no registró la venta (o la registró dos veces)');
     await ctx.close();
   });
 
