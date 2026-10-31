@@ -15,6 +15,7 @@
 #    la misma app con una demo de núcleo 0.17.0 (lo nuevo se oculta).
 # 3f. Corre app-pruebas/probar_0130.cjs: lo nuevo de la app 0.13.0 (núcleo 0.19.0), y probar_0130_nucleo_viejo.cjs:
 #    la misma app con una demo de núcleo 0.18.0 (lo nuevo se oculta).
+# 3h. App 0.15.0: probar_0150.cjs (modo oscuro, buscador, filtros rápidos, cotizaciones y celular).
 # 3g. App 0.14.0: probar_espejo.mjs (cálculo del equipo = servidor), probar_cascaron.mjs (sw.js tiene todos los archivos),
 #    probar_0140.cjs (vender sin internet, con su propia demo con CAI) y probar_0140_nucleo_viejo.cjs (núcleo 0.19.0).
 # 3d. Corre app-pruebas/probar_fotos.cjs: fotos de productos (app 0.11.0) con el Storage mínimo del
@@ -97,6 +98,10 @@ echo
 URL_APP="http://127.0.0.1:$PUERTO_PRUEBA" node "$RAIZ/app-pruebas/probar_0130.cjs"
 codigo_0130=$?
 echo
+# 4d-bis. App 0.15.0: modo oscuro, buscador general, filtros rápidos, cotizaciones y celular.
+URL_APP="http://127.0.0.1:$PUERTO_PRUEBA" node "$RAIZ/app-pruebas/probar_0150.cjs"
+codigo_0150=$?
+echo
 # 4e. La app 0.13.0 con un núcleo 0.18.0 (base de demo hasta la 054): lo nuevo se oculta y nada se rompe.
 BASE_VIEJA18="${BASE_DEMO}_018"
 SOLO_PREPARAR=1 BASE_DEMO="$BASE_VIEJA18" NUCLEO_HASTA=054 NUCLEO_VERSION=0.18.0 bash "$RAIZ/herramientas/demo_app.sh" >/dev/null \
@@ -149,5 +154,5 @@ echo
 # 5. Fotos de productos (app 0.11.0): al final, porque enciende las fotos y sube archivos.
 URL_APP="http://127.0.0.1:$PUERTO_PRUEBA" node "$RAIZ/app-pruebas/probar_fotos.cjs"
 codigo_fotos=$?
-[ "$codigo_app" = "0" ] && [ "$codigo_dinero" = "0" ] && [ "$codigo_reportes" = "0" ] && [ "$codigo_funciones" = "0" ] && [ "$codigo_fotos" = "0" ] && [ "$codigo_0120" = "0" ] && [ "$codigo_viejo" = "0" ] && [ "$codigo_0130" = "0" ] && [ "$codigo_viejo18" = "0" ] \
+[ "$codigo_app" = "0" ] && [ "$codigo_dinero" = "0" ] && [ "$codigo_reportes" = "0" ] && [ "$codigo_funciones" = "0" ] && [ "$codigo_fotos" = "0" ] && [ "$codigo_0120" = "0" ] && [ "$codigo_viejo" = "0" ] && [ "$codigo_0130" = "0" ] && [ "$codigo_0150" = "0" ] && [ "$codigo_viejo18" = "0" ] \
   && [ "$codigo_espejo" = "0" ] && [ "$codigo_cascaron" = "0" ] && [ "$codigo_0140" = "0" ] && [ "$codigo_viejo19" = "0" ]

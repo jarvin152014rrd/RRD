@@ -95,7 +95,8 @@ export function abrirBuscador() {
   if (verProductos) productos().then((x) => { fuentes.productos = x; pintar(); }).catch(() => { fuentes.productos = []; });
   if (verClientes) clientes().then((x) => { fuentes.clientes = (x || []).filter((c) => c.activo !== false); pintar(); }).catch(() => { fuentes.clientes = []; });
 
-  const campo = h('input', { type: 'search', id: 'buscador-campo', autocomplete: 'off', enterkeyhint: 'search', role: 'combobox',
+  // type text (no search): en un cuadro de búsqueda, Esc solo borra lo escrito y no cerraría la ventana.
+  const campo = h('input', { type: 'text', id: 'buscador-campo', autocomplete: 'off', enterkeyhint: 'search', role: 'combobox',
     'aria-expanded': 'true', 'aria-controls': 'buscador-lista', 'aria-autocomplete': 'list',
     placeholder: verProductos || verClientes ? 'Pantalla, producto o cliente…' : 'Buscar una pantalla…', 'aria-label': 'Buscar en el programa' });
   const listaEl = h('div', { id: 'buscador-lista', class: 'buscador-lista', role: 'listbox', 'aria-label': 'Resultados' });
@@ -147,6 +148,7 @@ export function abrirBuscador() {
     if (ev.key === 'ArrowDown') { ev.preventDefault(); if (opciones.length) { activa = (activa + 1) % opciones.length; marcar(); } }
     else if (ev.key === 'ArrowUp') { ev.preventDefault(); if (opciones.length) { activa = (activa - 1 + opciones.length) % opciones.length; marcar(); } }
     else if (ev.key === 'Enter') { ev.preventDefault(); if (opciones[activa]) elegir(opciones[activa]); }
+    else if (ev.key === 'Escape') { ev.preventDefault(); cerrar(); }
   });
   const dlg = h('dialog', { class: 'dialogo dialogo-buscador', id: 'buscador', 'aria-label': 'Buscar en el programa' },
     h('div', { class: 'buscador-cabeza' }, icono('buscar'), campo,

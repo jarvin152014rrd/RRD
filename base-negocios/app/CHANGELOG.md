@@ -26,6 +26,16 @@ Solo pantalla: no cambia ningún cálculo ni función del núcleo, y lo impreso 
   sucursales solo suma las bodegas de esas sucursales (`datos.existenciasPorProducto`).
 - ¿Dónde está mi dinero?: las cuentas desactivadas que aún tienen saldo salen marcadas (el total del servidor las incluye).
 - Demo: el emulador acepta `offset` y orden por varias columnas, como Supabase.
+- **Cotizaciones:** cifras arriba (vigentes, vencen pronto, se volvieron venta y "se cierran" = de las decididas este mes,
+  cuántas se vendieron), chip "Vence en N días", filtros (Vigentes, Vencen pronto, Vencidas este mes) y botón
+  **WhatsApp** con la cotización en texto, sin emojis (solo si el cliente tiene teléfono).
+- **Clientes:** filtros rápidos Con atraso, Deben, Al día y Mayoristas (los de deuda, solo si el usuario ve saldos).
+- **Celular:** encabezado en una sola línea (el nombre del usuario y Salir pasan arriba de "Más"); en Vender, barra fija
+  con el total y "Ir a cobrar" (no cobra sola; se esconde cuando el botón Cobrar ya se ve).
+- Buscador: Esc siempre cierra (antes, la primera vez solo borraba lo escrito).
+- Prueba nueva `probar_0150.cjs` (5): modo oscuro con contraste AA y comprobante blanco, buscador (palabras, productos,
+  clientes, permisos, no borra la venta, no se abre encima de otra ventana), filtros que cuentan como la base,
+  cotizaciones con WhatsApp sin emojis y celular.
 - Cascarón `cascaron-0.15.0` (archivos nuevos `js/tema_oscuro.js` y `js/buscador.js`).
 
 ## app 0.14.0 (núcleo 0.20.0; también funciona con 0.19.0, sin lo nuevo) — Vender sin internet

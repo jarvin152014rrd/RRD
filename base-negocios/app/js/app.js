@@ -228,7 +228,7 @@ function mostrarApp() {
           h('span', { class: 'marca-nombre', id: 'marca-nombre' }, perfil.empresa.nombre)),
         h('div', { class: 'herramientas' }, botonBuscador(), estadoRed, botonTema),
         h('div', { class: 'quien' }, campana,
-          h('span', {}, nombre, h('span', { class: 'rol-texto' }, ' · ', perfil.rol.nombre || perfil.rol.codigo)),
+          h('span', { class: 'quien-nombre' }, nombre, h('span', { class: 'rol-texto' }, ' · ', perfil.rol.nombre || perfil.rol.codigo)),
           h('button', { type: 'button', class: 'boton boton-claro', onclick: () => salir() }, 'Salir'))),
       pestanas),
     contenido, barra);

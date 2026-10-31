@@ -873,3 +873,37 @@ html[data-tema="oscuro"] .filtro-rapido[aria-checked="true"] { background: var(-
 /* Buscador, estado de conexión y modo oscuro: grupo aparte, a la izquierda de la campanita y el usuario. */
 .herramientas { display: flex; align-items: center; gap: 10px; margin-left: auto; color: var(--color-en-principal-suave); }
 @media (max-width: 699px) { .herramientas { gap: 2px; } }
+
+/* ===================== App 0.15.0: barra de cobro en el celular ===================== */
+.barra-cobro { display: none; }
+@media (max-width: 899px) {
+  .barra-cobro:not([hidden]) {
+    display: flex; align-items: center; justify-content: space-between; gap: 12px;
+    position: fixed; left: 8px; right: 8px; bottom: calc(72px + env(safe-area-inset-bottom)); z-index: 35;
+    background: var(--color-total-fondo); color: var(--color-total-texto); border-radius: 14px; padding: 8px 8px 8px 16px;
+    box-shadow: 0 6px 20px rgba(0,0,0,.25);
+  }
+  .vender.pie-visible .barra-cobro { display: none; }
+  .barra-cobro-texto { display: flex; flex-direction: column; line-height: 1.15; min-width: 0; }
+  .barra-cobro-etiqueta { font-size: 15px; opacity: .9; }
+  .barra-cobro-monto { font-size: 22px; font-weight: 700; color: var(--color-total-texto); white-space: nowrap; }
+  .boton.barra-cobro-boton { background: var(--color-cobrar); border-color: var(--color-cobrar); color: var(--color-cobrar-texto); min-height: 48px; font-size: 16px; flex: none; }
+  /* Espacio abajo para que la barra no tape lo último de la pantalla */
+  .contenido:has(.barra-cobro:not([hidden])) { padding-bottom: 170px; }
+}
+@media (min-width: 700px) and (max-width: 899px) { .barra-cobro:not([hidden]) { bottom: 16px; } }
+
+/* App 0.15.0: encabezado del celular en UNA línea: logo, nombre del negocio, lupa, conexión, modo oscuro y campanita.
+   El nombre del usuario y "Salir" quedan en la pestaña "Más" (abajo), que ya tiene su botón Salir. */
+@media (max-width: 699px) {
+  .encabezado-fila { flex-wrap: nowrap; gap: 6px; padding: 10px 0; }
+  .marca { flex: 1 1 auto; gap: 10px; }
+  .marca-logo { width: 38px; height: 38px; border-radius: 10px; font-size: 15px; }
+  .marca-nombre { font-size: 18px; }
+  .herramientas { flex: none; margin-left: 0; gap: 0; }
+  .quien { flex: none; gap: 0; }
+  .quien .quien-nombre, .quien .boton-claro { display: none; }
+  .estado-red { padding: 0 6px; }
+}
+.mas-sesion { display: flex; align-items: center; gap: 12px; }
+.mas-sesion-texto { flex: 1; min-width: 0; display: flex; flex-direction: column; overflow-wrap: anywhere; }

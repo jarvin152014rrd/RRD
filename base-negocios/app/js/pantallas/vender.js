@@ -346,6 +346,9 @@ export async function armarCarrito(vista, ctx, { modo, alTerminar = null }) {
           'Puede seguir: la venta quedará esperando la aprobación del administrador o del dueño.', { class: 'aviso-tope' }) : null].flat().filter(Boolean));
     }
     botonCobrar.textContent = modo === 'venta' ? `Cobrar ${pv ? dinero(pv.total_centavos) : ''}`.trim() : 'Guardar cotización';
+    // Celular: barra fija abajo con el total (solo si hay artículos y el pie del ticket no se ve).
+    barraCelularMonto.textContent = pv ? dinero(pv.total_centavos) : estado.lineas.length ? 'Calculando…' : dinero(0);
+    barraCelular.hidden = !estado.lineas.length;
   }
 
   function pintarPago() {
@@ -676,6 +679,16 @@ export async function armarCarrito(vista, ctx, { modo, alTerminar = null }) {
     armarCarrito(vista, ctx, { modo, alTerminar });
   }
 
+  // ---------------- Barra del celular (app 0.15.0) ----------------
+  // En el celular el ticket queda abajo de los artículos: esta barra fija muestra el total y lleva al cobro.
+  // No cobra sola (primero se ve la forma de pago). Se esconde cuando el pie del ticket ya se ve en pantalla.
+  const barraCelularMonto = h('span', { class: 'monto barra-cobro-monto', dataset: { dato: 'total-celular' } }, dinero(0));
+  const barraCelular = h('div', { class: 'barra-cobro', hidden: true, role: 'region', 'aria-label': 'Total de la venta' },
+    h('span', { class: 'barra-cobro-texto' }, h('span', { class: 'barra-cobro-etiqueta' }, modo === 'venta' ? 'Total a cobrar' : 'Total'), barraCelularMonto),
+    h('button', { type: 'button', class: 'boton barra-cobro-boton', id: 'ir-a-cobrar',
+      onclick: () => { const z = raiz.querySelector('.vender-der'); if (z) z.scrollIntoView({ behavior: 'smooth', block: 'start' }); } },
+    modo === 'venta' ? 'Ir a cobrar' : 'Ir a guardar'));
+
   // ---------------- Armado ----------------
   raiz.append(
     h('div', { class: 'vender-izq' },
@@ -699,9 +712,14 @@ export async function armarCarrito(vista, ctx, { modo, alTerminar = null }) {
       !cobra && modo === 'venta' && !porCola ? mensaje('info', 'Usted puede vender al crédito o hacer una cotización.',
         'El cobro en efectivo, tarjeta o transferencia lo hace el cajero.') : null,
       // Abajo y siempre a la vista en la computadora: el total grande y Cobrar.
-      h('div', { class: 'ticket-pie' }, totales, zonaError, botonCobrar)));
+      h('div', { class: 'ticket-pie' }, totales, zonaError, botonCobrar)),
+    barraCelular);
   vista.append(raiz);
   ajustarTicket(raiz.querySelector('.vender-der'));
+  if ('IntersectionObserver' in window) {
+    const ojo = new IntersectionObserver(([e]) => { raiz.classList.toggle('pie-visible', e.isIntersecting); });
+    ojo.observe(raiz.querySelector('.ticket-pie'));
+  }
   pintarTodo();
   pintarTurno();
   buscar.focus();

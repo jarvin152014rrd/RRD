@@ -4,7 +4,7 @@
 import { rpc, leer, escribir, nuevoId } from '../api.js';
 import { empresaId, perfilActual, puede, tieneModulo } from '../sesion.js';
 import { dinero, fecha, aCentavos, paraCampo } from '../formato.js';
-import { h, icono, aviso, cajaError, errorSimple, campo, conBoton, enlaceWhatsApp, titulo, filaIcono, chip, chipEstado, monto as cifra, estadoVacio, mensaje } from '../ui.js';
+import { h, icono, aviso, cajaError, errorSimple, campo, conBoton, enlaceWhatsApp, titulo, filaIcono, chip, chipEstado, monto as cifra, estadoVacio, mensaje, filtrosRapidos } from '../ui.js';
 import { hayEnMenu } from '../menu.js';
 import { clientes, filtrar, olvidarDatos, nucleoAlMenos } from '../datos.js';
 import { nombreForma } from '../comprobante.js';
@@ -23,8 +23,22 @@ export async function mostrar(vista, ctx) {
   const porId = new Map(saldos.map((s) => [s.cliente_id, s]));
   const buscar = h('input', { id: 'buscar-cliente', type: 'search', placeholder: 'Nombre, RTN o teléfono', autocomplete: 'off' });
   const zona = h('div', { class: 'lista' });
+  // App 0.15.0: filtros rápidos (Con atraso, Debe, Al día, Mayoristas). Solo cuentan clientes; los saldos son del servidor.
+  // Sin permiso para ver saldos, solo sale "Mayoristas" (si hay).
+  const verDeuda = saldos.length > 0 || verCxc() || verSaldos();
+  const estadoDe = (c) => { const s = porId.get(c.id); return !s || !s.saldo_centavos ? 'al_dia' : s.vencido_centavos ? 'atraso' : 'debe'; };
+  let filtro = 'todos';
+  const activos = lista.filter((c) => c.activo);
+  const n = (f) => activos.filter((c) => (f === 'mayorista' ? c.es_mayorista : estadoDe(c) === f)).length;
+  const filtros = lista.length > 1 ? filtrosRapidos({ id: 'filtro-clientes', etiqueta: 'Ver clientes', actual: filtro,
+    alCambiar: (f) => { filtro = f; pintar(); },
+    opciones: [{ id: 'todos', texto: 'Todos', n: lista.length, siempre: true, color: 'azul' },
+      ...(verDeuda ? [{ id: 'atraso', texto: 'Con atraso', n: n('atraso'), color: 'rojo' }, { id: 'debe', texto: 'Deben', n: n('debe'), color: 'dorado' },
+        { id: 'al_dia', texto: 'Al día', n: n('al_dia'), color: 'verde' }] : []),
+      { id: 'mayorista', texto: 'Mayoristas', n: n('mayorista'), color: 'azul' }] }) : null;
   const pintar = () => {
-    const vistos = filtrar(lista, buscar.value, ['nombre', 'rtn', 'telefono', 'codigo']);
+    const base = filtro === 'todos' ? lista : filtro === 'mayorista' ? activos.filter((c) => c.es_mayorista) : activos.filter((c) => estadoDe(c) === filtro);
+    const vistos = filtrar(base, buscar.value, ['nombre', 'rtn', 'telefono', 'codigo']);
     zona.replaceChildren(...(vistos.length ? vistos.slice(0, 200).map((c) => {
       const s = porId.get(c.id);
       return filaIcono({
@@ -46,7 +60,7 @@ export async function mostrar(vista, ctx) {
       puede('terceros.editar') && lista.length ? h('button', { type: 'button', class: 'boton boton-principal', id: 'nuevo-cliente',
         onclick: nuevo }, icono('mas'), 'Nuevo cliente') : null),
     // Sin clientes: enseña cómo empezar (solo con los botones que puede usar).
-    lista.length ? [campo('Buscar', buscar), zona]
+    lista.length ? [campo('Buscar', buscar), filtros, zona]
       : estadoVacio({ icono: 'clientes', titulo: 'Aún no tiene clientes',
         texto: 'Guarde a sus clientes para venderles al crédito, cobrarles y mandarles su comprobante por WhatsApp.',
         botones: [puede('terceros.editar') ? { texto: 'Agregar el primero', onclick: nuevo, icono: 'mas', id: 'nuevo-cliente' } : null,
