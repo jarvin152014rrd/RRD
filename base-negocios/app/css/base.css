@@ -746,3 +746,39 @@ html[data-tema="oscuro"] .boton.boton-cobrar { background: var(--color-cobrar); 
 .ticket-pie .suma { font-size: 14px; padding: 0; gap: 6px; justify-content: flex-start; color: var(--color-suave); }
 .ticket-pie .suma .monto { color: var(--color-texto); }
 .ticket-pie .totales > .total-barra, .ticket-pie .totales > .mensaje, .ticket-pie .totales > .vacio { flex: 1 1 100%; }
+
+/* ===================== App 0.15.0: listas compactas en la computadora (como las tablas de RRD) ===================== */
+/* Una fila = una línea: burbuja, nombre y detalle, monto/estado y los botones a la derecha (antes iban abajo).
+   Solo cuando lo de abajo son SOLO botones; si lleva una ayuda o formulario, queda como antes. En el celular, igual que antes. */
+@media (min-width: 900px) {
+  .fila-icono.con-abajo:has(> .fila-icono-abajo > .botones:only-child) { flex-wrap: nowrap; align-items: center; }
+  .fila-icono.con-abajo:has(> .fila-icono-abajo > .botones:only-child) > .fila-icono-abajo { flex: none; padding-left: 0; }
+  .fila-icono.con-abajo:has(> .fila-icono-abajo > .botones:only-child) > .fila-icono-abajo > .botones { margin: 0; flex-wrap: nowrap; }
+  .fila-icono.con-abajo:has(> .fila-icono-abajo > .botones:only-child) > .fila-icono-abajo .boton { min-width: 0; min-height: 40px; padding: 8px 16px; }
+  .fila-icono.con-abajo:has(> .fila-icono-abajo > .botones:only-child) > .fila-icono-derecha { min-width: 130px; }
+  .fila-icono { padding: 10px 8px; margin: 0 -8px; border-radius: 8px; }
+  .fila-icono:hover { background: var(--color-neutro-fondo); }
+  .fila-icono .burbuja { width: 40px; height: 40px; }
+}
+
+/* Subpestañas: en la computadora, si no caben, bajan a otra línea (antes se cortaban: "Cierr..."). */
+@media (min-width: 700px) {
+  .subpestanas { flex-wrap: wrap; overflow: visible; }
+}
+/* Celular: se deslizan de lado; una sombra al borde avisa que hay más. */
+@media (max-width: 699px) {
+  .subpestanas { -webkit-mask-image: linear-gradient(90deg, #000 85%, transparent); mask-image: linear-gradient(90deg, #000 85%, transparent); padding-right: 24px; }
+}
+/* Ajustes y otras pantallas con varias tarjetas angostas seguidas: dos columnas en la computadora (antes, media pantalla vacía). */
+@media (min-width: 1100px) {
+  .lista:has(> .tarjeta-angosta + .tarjeta-angosta) { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; }
+  .lista:has(> .tarjeta-angosta + .tarjeta-angosta) > * { grid-column: 1 / -1; }
+  .lista:has(> .tarjeta-angosta + .tarjeta-angosta) > .tarjeta-angosta { grid-column: auto; max-width: none; }
+}
+/* Botón para elegir archivo (logo, Excel, foto del recibo): con el estilo de los botones del programa. */
+.campo input[type=file] { padding: 6px; min-height: 52px; cursor: pointer; }
+input[type=file]::file-selector-button {
+  font: inherit; font-size: 15px; font-weight: 600; border-radius: 8px; padding: 8px 14px; margin-right: 12px; min-height: 38px; cursor: pointer;
+  border: 1px solid var(--color-principal-texto); background: var(--color-tarjeta); color: var(--color-principal-texto);
+}
+input[type=file]::file-selector-button:hover { background: var(--color-azul-fondo); }

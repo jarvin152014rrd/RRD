@@ -10,7 +10,7 @@ import { h, icono, aviso, conBoton, estadoVacio, cajaError, titulo, chip, mensaj
 import { descargarExcel } from '../excel.js';
 import { hayEnMenu } from '../menu.js';
 
-export const VERSION_APP = '0.14.0';
+export const VERSION_APP = '0.15.0';
 const ESTADO = { activa: 'Activa', en_gracia: 'En días de gracia', solo_lectura: 'Solo lectura (vencida)' };
 
 // "Descargar todo" (productos, categorías, clientes y proveedores: lo que el usuario puede ver).
