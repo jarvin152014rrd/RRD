@@ -1,0 +1,223 @@
+{
+  "id": "taller",
+  "nombre": "Taller mecánico",
+  "descripcion": "Mano de obra y repuestos en la misma orden de trabajo; datos del vehículo.",
+  "respuestas": {
+    "credito": "si",
+    "bancos": "si",
+    "personas": 3,
+    "cajas": 1,
+    "sucursales": 1,
+    "bodegas": 1,
+    "cai": "si",
+    "comisiones": "si",
+    "cotizaciones": "si",
+    "apartados": "no",
+    "inventario": "si",
+    "compras": "no",
+    "socios": "no",
+    "conciliar": "no",
+    "vende": "ambos"
+  },
+  "modulos_sugeridos": [
+    "contabilidad",
+    "ventas",
+    "inventario",
+    "dinero",
+    "comisiones"
+  ],
+  "perfil": "pequeno",
+  "paquete": "completo",
+  "regimen_fiscal": "fiscal_hn",
+  "limites": {
+    "usuarios": 4,
+    "cajas": 1,
+    "sucursales": 1,
+    "bodegas": 1
+  },
+  "categorias": [
+    "Mano de obra",
+    "Repuestos",
+    "Lubricantes",
+    "Llantas"
+  ],
+  "unidades": [
+    {
+      "codigo": "HORA",
+      "nombre": "Hora"
+    },
+    {
+      "codigo": "JGO",
+      "nombre": "Juego"
+    }
+  ],
+  "campos_extra": [
+    {
+      "donde": "orden",
+      "clave": "placa",
+      "etiqueta": "Placa del vehículo",
+      "tipo": "texto"
+    },
+    {
+      "donde": "orden",
+      "clave": "marca_modelo",
+      "etiqueta": "Marca y modelo",
+      "tipo": "texto"
+    },
+    {
+      "donde": "orden",
+      "clave": "kilometraje",
+      "etiqueta": "Kilometraje",
+      "tipo": "entero"
+    },
+    {
+      "donde": "producto",
+      "clave": "compatible",
+      "etiqueta": "Vehículos compatibles",
+      "tipo": "texto"
+    }
+  ],
+  "palabras": {
+    "vender": "Órdenes de trabajo",
+    "vender/nueva": "Nueva orden de trabajo",
+    "vender/ventas": "Órdenes del día",
+    "vender/cotizaciones": "Presupuestos",
+    "inventario": "Repuestos",
+    "inventario/productos": "Repuestos y mano de obra",
+    "barra/vender": "Orden"
+  },
+  "reportes": [
+    "Órdenes por mecánico",
+    "Repuestos más usados",
+    "Clientes que deben"
+  ],
+  "colores": {
+    "principal": "#1f2a33",
+    "acento": "#e07b24"
+  },
+  "demo": {
+    "negocio": "Taller El Pistón (demo)",
+    "usuarios": [
+      {
+        "rol": "cajero",
+        "nombre": "Rosa Martínez"
+      },
+      {
+        "rol": "vendedor",
+        "nombre": "Luis Ortega (mecánico)"
+      }
+    ],
+    "productos": [
+      {
+        "codigo": "MO-AFI",
+        "nombre": "Afinado de motor (mano de obra)",
+        "tipo": "servicio",
+        "precio": 80000,
+        "costo": 30000,
+        "categoria": "Mano de obra"
+      },
+      {
+        "codigo": "MO-FRE",
+        "nombre": "Cambio de pastillas de freno (mano de obra)",
+        "tipo": "servicio",
+        "precio": 45000,
+        "costo": 15000,
+        "categoria": "Mano de obra"
+      },
+      {
+        "codigo": "FIL-ACE",
+        "nombre": "Filtro de aceite",
+        "precio": 18000,
+        "costo": 11000,
+        "existencia": 25,
+        "categoria": "Repuestos"
+      },
+      {
+        "codigo": "PAS-DEL",
+        "nombre": "Pastillas de freno delanteras",
+        "precio": 95000,
+        "costo": 62000,
+        "existencia": 10,
+        "categoria": "Repuestos"
+      },
+      {
+        "codigo": "ACE-20W",
+        "nombre": "Aceite 20W-50 galón",
+        "precio": 78000,
+        "costo": 52000,
+        "existencia": 20,
+        "categoria": "Lubricantes"
+      }
+    ],
+    "clientes": [
+      {
+        "nombre": "Transportes Díaz",
+        "credito": 2000000,
+        "plazo": 30,
+        "telefono": "9911-2233"
+      },
+      {
+        "nombre": "Carlos Ponce"
+      }
+    ],
+    "ventas": [
+      {
+        "dias": 8,
+        "lineas": [
+          [
+            "MO-AFI",
+            1
+          ],
+          [
+            "FIL-ACE",
+            1
+          ],
+          [
+            "ACE-20W",
+            1
+          ]
+        ],
+        "pago": "efectivo"
+      },
+      {
+        "dias": 4,
+        "cliente": 0,
+        "lineas": [
+          [
+            "MO-FRE",
+            1
+          ],
+          [
+            "PAS-DEL",
+            1
+          ]
+        ],
+        "pago": "credito"
+      },
+      {
+        "dias": 1,
+        "lineas": [
+          [
+            "FIL-ACE",
+            2
+          ]
+        ],
+        "pago": "tarjeta"
+      },
+      {
+        "dias": 0,
+        "lineas": [
+          [
+            "MO-AFI",
+            1
+          ],
+          [
+            "ACE-20W",
+            1
+          ]
+        ],
+        "pago": "efectivo"
+      }
+    ]
+  }
+}

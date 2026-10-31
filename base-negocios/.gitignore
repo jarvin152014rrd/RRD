@@ -1,0 +1,20 @@
+# Base de datos local de pruebas (se crea sola con herramientas/probar.sh)
+.pgdata/
+# Temporales
+*.log
+*.tmp
+.tmp/
+.DS_Store
+# Respaldos que hace migrar.sh (pueden tener datos de clientes: nunca a git)
+respaldos/
+# Fichas de clientes (datos del cliente: nunca a git), salvo la de muestra
+clientes/*
+!clientes/ejemplo/
+clientes/ejemplo/*
+!clientes/ejemplo/ficha.json
+# App: configuración real de cada cliente (sale de personal/), pruebas del navegador
+app/config.js
+app-pruebas/node_modules/
+app-pruebas/capturas/
+# Paquetes para subir a Supabase y a Netlify (los arma herramientas/armar_*.sh; se regeneran)
+dist/

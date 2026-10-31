@@ -1,0 +1,43 @@
+/* Tema del cliente: SOLO colores y letras (salen de la ficha del cliente).
+   Cambiar este archivo no puede romper botones ni campos: controles.css se carga después. */
+:root {
+  --color-principal: #0f1f3d;   /* azul marino */
+  --color-principal-2: #1a2f52;
+  --color-acento: #c8972a;      /* dorado */
+  --color-fondo: #f4f2ee;       /* crema */
+  --color-tarjeta: #ffffff;
+  --color-linea: #e3e0d9;
+  --color-texto: #1a1a1a;
+  --color-suave: #4a4a4a;       /* gris oscuro: se lee bien */
+  --color-en-principal: #ffffff;
+  --color-en-principal-suave: #c9d2e3;
+  /* Colores que salen de la MARCA (js/marca.js los recalcula con contraste AA automático):
+     texto encima del color principal / del acento, el principal como letra sobre blanco y el foco. */
+  --color-principal-texto: #0f1f3d;
+  --color-en-acento: #0f1f3d;
+  --color-acento-icono: #b48826; /* el acento oscurecido: contraste 3 o más sobre blanco (íconos de títulos) */
+  --color-foco: #0f1f3d;        /* el acento por defecto no llega a 3 sobre blanco: el foco usa el azul marino */
+  --color-peligro: #a12a1e;
+  --color-peligro-fondo: #fbeae7;
+  --color-ok: #1e6b3a;
+  --color-ok-fondo: #e6f2ea;
+  --color-aviso: #7a5410;
+  --color-aviso-fondo: #fdf1dc;
+  /* Colores con SIGNIFICADO FIJO (app 0.5.0). No cambian con la marca del cliente.
+     verde = entra dinero / todo bien · rojo = sale dinero / problema
+     dorado = importante / hoy · azul = información. Cada uno con su fondo suave
+     (burbujas de ícono y chips). Texto sobre su fondo: contraste AA (4.5:1 o más). */
+  --color-verde: #1e6b3a;
+  --color-verde-fondo: #e3f1e7;
+  --color-rojo: #a12a1e;
+  --color-rojo-fondo: #fbe8e4;
+  --color-dorado: #7a5410;      /* dorado para LETRAS (el acento #c8972a es para rellenos) */
+  --color-dorado-fondo: #fcefd6;
+  --color-azul: #1a2f52;
+  --color-azul-fondo: #e4ebf6;
+  --color-neutro: #4a4a4a;
+  --color-neutro-fondo: #efebe4;
+  --color-barra-grafica: #b4c1d8;
+  --letra: 'IBM Plex Sans', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --letra-mono: 'IBM Plex Mono', ui-monospace, 'SFMono-Regular', Menlo, Consolas, monospace;
+}

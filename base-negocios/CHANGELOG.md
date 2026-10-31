@@ -1,0 +1,1129 @@
+# Cambios del núcleo
+
+Formato: versión (fecha) y lista de cambios. La versión vive en `VERSION_NUCLEO`
+y queda guardada en cada base al migrar (vista `version_esquema`).
+Números: MAYOR.MENOR.ARREGLO (ver `docs/CONVENCIONES.md`).
+
+## 0.20.0 (2026-10-29) — Vender sin internet (etapa 1), transferencias por confirmar y talonario de emergencia
+
+Migración nueva 056 (las 001-055 no se tocaron). 158 pruebas (nuevas 152 a 158; la 150 queda fija en 0.19.0). Todas
+pasan también con `probar.sh --paquete`. Para quien ya tiene 0.19.0 en Supabase: `dist/actualizar_supabase_0.20.0.sql`
+(168 KB, una sola pegada; ver `docs/SUPABASE.md`, "Actualizar de 0.19.0 a 0.20.0"). Diseño: `docs/SIN_INTERNET.md`
+(punto 17: lo que quedó distinto). Técnico: `nucleo/docs/sin_internet.md`. Decisiones en `docs/REQUISITOS.md`,
+"Decisiones del dueño 0.20.0".
+
+- **Equipos y números reservados:** `registrar_equipo`, `desactivar_equipo` (sus bloques quedan "por conciliar"; no se
+  anulan números), `reservar_bloque_numeros` (un bloque activo por caja y tipo, con el CAI de la caja; el candado de
+  `cai_rango` solo salta con la marca de la reserva), `bloques_del_equipo`, `devolver_bloque` (exige que todo lo del
+  equipo esté subido: `FALTAN_VENTAS_POR_SUBIR`), `conciliar_bloque` y `bloques_sin_internet`. Mientras hay un bloque
+  activo la caja no numera en línea (`BLOQUE_ACTIVO`) y el turno no cierra (`BLOQUE_SIN_DEVOLVER`; si el equipo lleva
+  48 h sin noticias, el bloque pasa a "por conciliar" con alerta). Números emitidos en `numero_emitido`.
+- **Foto del catálogo** (`preparar_sin_internet`): precios, impuestos, promociones, mayorista, clientes y existencias
+  con versión; al subir, el servidor calcula con la foto de esa venta (G5), no con la de hoy.
+- **Subir** (`subir_ventas_sin_internet`): en tandas, cada venta en su propia subtransacción, a nombre de quien la hizo,
+  con id_operacion (un reintento no duplica). Se revisa todo otra vez: precio, total, número, hora, usuario, permiso,
+  turno, mes y existencias (se aceptan en negativo con aviso). Lo que no cuadra queda **por resolver**
+  (`ventas_sin_internet_por_resolver`, `resolver_venta_sin_internet`: registrar con su fecha real o anular, con motivo).
+  Subir ventas de otro usuario: `ventas.subir_ajenas` (dueño), con motivo.
+- **Pagos sin internet (decisión del dueño):** efectivo y transferencia; tarjeta no. La transferencia exige referencia
+  y queda por confirmar. Nuevo `transferencias_por_confirmar` y `marcar_transferencia_no_llego` (deuda del cliente
+  "TRF-<factura>" o del cajero en Cuentas por cobrar a empleados; la venta ya no se anula); aviso de referencia repetida.
+- **Talonario de emergencia** (módulo nuevo `facturas_emergencia`, depende de ventas y fiscal_hn; también en el Armador
+  y la ficha): `registrar_talonario`, `desactivar_talonario`, `registrar_factura_talonario` (rango, no repetido, CAI
+  vigente, mes abierto), `anular_numero_talonario` y `talonarios` (usados, anulados, libres y huecos). El libro de
+  ventas muestra los números anulados del talonario y los anulados o no usados de un bloque como ANULADA.
+- Reglas de la empresa (`configurar_empresa`, solo el dueño): `sin_internet_horas` (24), topes por venta (L 10,000) y
+  por turno (L 50,000) y tamaño del bloque. Permisos nuevos: `ventas.sin_internet`, `ventas.resolver_sin_internet`,
+  `ventas.subir_ajenas`, `equipos.administrar`, `talonario.administrar`, `talonario.registrar`. Alerta `sin_internet`.
+
+## 0.19.0 (2026-10-26) — Decisiones del dueño: devolución con mayorista, estado de cuenta del socio y cambio exacto
+
+Migración nueva 055 (las 001-054 no se tocaron). 151 pruebas (nuevas 147 a 151; la 145 queda fija en 0.18.0). Todas
+pasan también con `probar.sh --paquete`. Para quien ya tiene 0.18.0 en Supabase: `dist/actualizar_supabase_0.19.0.sql`
+(una sola pegada; ver `docs/SUPABASE.md`, "Actualizar de 0.18.0 a 0.19.0"). Decisiones en `docs/REQUISITOS.md`,
+"Decisiones del dueño 0.19.0".
+
+- **Devolución parcial con precio mayorista por cantidad** (`nucleo/docs/devoluciones.md`): si un cliente que NO es
+  mayorista compró con precio mayorista por llegar a "desde cantidad" y lo que se QUEDA baja de esa cantidad, lo que
+  conserva pasa a precio normal y la diferencia se descuenta de lo que se le devuelve ("Ajuste por perder precio
+  mayorista: L X"). Sobre lo devuelto acumulado (varias devoluciones = una sola; al devolver todo, el ajuste vuelve).
+  Si el ajuste se come todo, `DEVOLUCION_INVALIDA` con la explicación. La nota de crédito lleva el neto (base e ISV):
+  ISV por pagar = ventas - notas, como siempre. Sin ajuste: cliente mayorista, garantías. La línea vendida guarda por
+  qué fue mayorista (`venta_linea.mayorista_por`, `mayorista_desde`); `devolucion` y `devolucion_linea` guardan el ajuste
+  (`ajuste_mayorista_centavos`). Lectura nueva `calcular_devolucion_previa`; `calcular_cambio_previo`,
+  `documento_nota_credito`, la respuesta de `registrar_devolucion` y `v_devolucion` traen el ajuste. Una sola cuenta
+  para todo: `interno.montos_devolucion` (registrar la vuelve a calcular con el candado puesto).
+- **Estado de cuenta del socio** (`nucleo/docs/fondos.md`): `estado_cuenta_socio(empresa, socio, desde?, hasta?)`
+  (`fondos.ver`): aportes, aportes anulados, repartos asignados, pagos recibidos (y anulados), saldo al empezar, saldo
+  corrido, total invertido y saldo por pagar; cuadra con 3.1.01.04 y 2.1.01.03 a la fecha de corte (todos los socios).
+  Usuario limitado a su sucursal: `SUCURSAL_NO_PERMITIDA`. Confirmado: una sola cuenta "Aportes de socios".
+- **Cambio exacto** (`nucleo/docs/devoluciones.md`): regla de la empresa `empresa.cambio_exacto`, encendida por defecto
+  (las empresas que ya existen y las nuevas). Un cambio de producto solo se hace por uno o varios productos que sumen
+  EXACTAMENTE lo devuelto; si no, `CAMBIO_NO_EXACTO` (dice cuánto falta o sobra) y se devuelve todo el dinero. Sin
+  pagos, diferencia ni cuenta de dinero en un cambio. En una venta al crédito, lo que la devolución rebajó de la deuda se
+  vuelve a deber en la venta nueva (el cliente debe lo mismo). El cambio por garantía con "precio de garantía" sigue
+  igual. La cambia solo el dueño: `configurar_empresa(empresa, '{"cambio_exacto": false}', motivo)` (vuelve el cambio
+  con diferencia de 0.16.0). `calcular_cambio_previo` trae `cambio_exacto`, `exacto`, `falta_centavos`,
+  `sobra_centavos`, `a_credito_centavos` y `puede_devolver_dinero`; ahora calcula la venta nueva con el cliente de la
+  venta (antes, con un cliente mayorista, el previo y el registro podían no coincidir). Error nuevo `CAMBIO_NO_EXACTO`.
+- **Mayorista y promociones no se suman:** confirmado por el dueño; ya estaba en 0.18.0 (sin cambios).
+- **Revisión de 0.19.0 (dentro de la misma 055):**
+  - Una devolución nueva sobre una línea con otra **pendiente de aprobación** se rechaza ("resuélvala primero"): si la
+    pendiente se rechazaba después, la nueva quedaba pagada de más con el ajuste mayorista.
+  - **Garantía** después de una devolución con ajuste: solo el valor proporcional de esas unidades (el ajuste ya cobrado
+    no se le devuelve al cliente); el "precio de garantía" de `resolver_reclamo_garantia` usa la misma cuenta.
+  - `calcular_cambio_previo` acepta `"reclamo_id"`: el previo del cambio por garantía coincide con lo que se guarda.
+  - El crédito "de vuelta" de un cambio (la deuda que la devolución rebajó) no pide aprobación de crédito ni cuenta para
+    el límite (`registrar_venta_base` de 054 reemplazado con ese único cambio), y la venta nueva **vence cuando vencía la
+    original** (la antigüedad no se reinicia).
+  - Línea de antes de 0.19.0 vendida con menos que "desde cantidad": mayorista "por cliente" (sin ajuste).
+- Pruebas: 147 (devolución con mayorista), 148 (estado de cuenta del socio), 149 (cambio exacto), 150 (de 0.18.0 a
+  0.19.0 como en Supabase) y 151 (revisión). Las pruebas 97, 99, 136 y 146 prueban el cambio con diferencia: apagan la regla al empezar.
+
+## 0.18.0 (2026-10-25) — Precio mayorista, garantías, cheques y antigüedad de saldos
+
+Migración nueva 054 (las 001-053 no se tocaron). 146 pruebas (nuevas 141 a 146; la 140 queda fija en 0.17.0). Todas
+pasan también con `probar.sh --paquete`. Para quien ya tiene 0.17.0 en Supabase: `dist/actualizar_supabase_0.18.0.sql`
+(una sola pegada; ver `docs/SUPABASE.md`, "Actualizar de 0.17.0 a 0.18.0").
+
+- **Precio mayorista** (`nucleo/docs/productos.md`, `ventas.md`): `producto.precio_mayorista_centavos` y
+  `cantidad_mayorista` (desde cuántas unidades); `tercero.es_mayorista` (cliente con precio mayorista siempre). Se usa
+  en `calcular_venta_previa` (ahora recibe `cliente_id`), `registrar_venta`, cotizaciones, apartados, devoluciones y
+  cambios. Es un PRECIO, no un descuento: no cuenta para el tope de descuentos, pero es la rebaja de la línea y no se
+  suma a promociones ni descuentos manuales (`DESCUENTO_DOBLE`). Sin elegir, gana lo mejor para el cliente (empate:
+  mayorista); el vendedor puede elegir con `"precio_tipo": "normal" | "mayorista"`. La línea guarda `precio_tipo` y el
+  precio normal. Nunca mayor que el precio normal (`PRECIO_MAYORISTA_INVALIDO`); por debajo del costo, aviso.
+  Columnas nuevas en la plantilla y el Excel de productos y clientes.
+- **Garantías** (`nucleo/docs/garantias.md`): `producto.dias_garantia`; la línea guarda `garantia_hasta` al emitir
+  y el comprobante dice "Garantía hasta dd/mm/aaaa". Reclamos `garantia_reclamo` (recibido, en revisión, resuelto o rechazado) con
+  historial; `buscar_garantia`, `registrar_reclamo_garantia`, `cambiar_estado_reclamo`, `resolver_reclamo_garantia`
+  (reparado, cambiado o devuelto; cambiado y devuelto con la devolución de siempre), `documento_reclamo_garantia`.
+  Fuera de plazo solo con `garantias.resolver` y motivo. Permisos nuevos `garantias.registrar` (dueño, admin, cajero,
+  vendedor) y `garantias.resolver` (dueño, admin). Errores `GARANTIA_VENCIDA` y `GARANTIA_INVALIDA`.
+- **Abonos con cheque** (`nucleo/docs/cheques.md`): forma `cheque` en `registrar_cobro` (número, banco emisor y
+  fecha; se acepta posfechado, pero no se deposita antes de su fecha). Va a la cuenta nueva "Cheques por depositar" (tipo
+  `cheques_por_depositar`, se crea sola). `depositar_cheque` (depósito normal en tránsito, se confirma como siempre) y
+  `registrar_cheque_rechazado` (deshace el depósito, anula el cobro: la deuda vuelve, y registra el cargo del banco
+  como gasto si se pide). Sale en `donde_esta_mi_dinero` y `proyeccion_flujo` (por la fecha del cheque); el depósito se
+  cuadra en la conciliación como cualquier otro. Errores `CHEQUE_INVALIDO`, `CHEQUE_POSFECHADO`, `CHEQUE_DEPOSITADO`. Las ventas al contado NO aceptan
+  cheque (decisión: solo abonos).
+- **Antigüedad de saldos** (`nucleo/docs/antiguedad.md`): `antiguedad_saldos(empresa, al, 'cxc'|'cxp')`: por cliente
+  (o proveedor) corriente, 1-30, 31-60, 61-90 y más de 90 días vencido a la fecha de corte, con totales; incluye saldos
+  iniciales, respeta la sucursal y dice si cuadra con la cuenta de Clientes (o Proveedores) de los libros.
+- **Revisión de 0.18.0 (dentro de la misma 054, sin nada grave):** cambio por garantía de lo mismo con "precio de
+  garantía" (vale lo que pagó el cliente; sin tope ni descuento doble; el cliente no paga ni recibe diferencia;
+  `venta_linea.precio_tipo = 'garantia'`); un reclamo cuya devolución o gasto pide aprobación no se cierra
+  (`APROBACION_REQUERIDA`); una venta pagada con un cheque sin confirmar no devuelve dinero ni saldo a favor
+  (`CHEQUE_POR_CONFIRMAR`); el rebote no tiene fecha anterior al depósito ni a su confirmación y anula el depósito en
+  tránsito con `cobros.anular` (sin `dinero.anular`); la sucursal del cheque sin caja es la de la factura que paga (el
+  usuario de otra sucursal no lo ve ni lo mueve); `v_cheque_recibido` la ve quien tiene `dinero.ver` sin `ventas.ver`;
+  la regla mayorista <= normal se revisa al final de la fila del Excel (se pueden bajar los dos) y el Excel avisa
+  precio o mayorista bajo el costo; `DESCUENTO_DOBLE` del mayorista en palabras para el usuario.
+- Pruebas: 141 (mayorista), 142 (garantías), 143 (cheques), 144 (antigüedad), 145 (de 0.17.0 a 0.18.0 como en
+  Supabase: dos veces sin daño, sin la 053 lo dice claro, un error a mitad no deja nada, bitácora íntegra) y 146
+  (revisión: mayorista en apartado, cotización convertida y cambio; precio de garantía con precio que subió, que bajó y
+  con promoción; aprobación; cheque sin confirmar; fecha y permiso del rebote; sucursal en cheques y garantías).
+
+## 0.17.0 (2026-10-24) — Fotos de productos livianas, con interruptor
+
+Migración nueva 053 (las 001-052 no se tocaron). 140 pruebas (nuevas 139 y 140; la 135 queda fija en 0.16.0). Todas
+pasan también con `probar.sh --paquete`. Para quien ya tiene 0.16.0 en Supabase: `dist/actualizar_supabase_0.17.0.sql`
+(una sola pegada, unos 37 KB; ver `docs/SUPABASE.md`, "Actualizar de 0.16.0 a 0.17.0"). Detalle: `nucleo/docs/productos.md`.
+
+- **Interruptor por empresa** `empresa.fotos_productos`, **apagado por defecto**: `activar_fotos_productos(empresa,
+  activo, motivo)` (solo el dueño, `empresa.configurar`, bitácora) y la ficha del cliente (`"opciones":
+  {"fotos_productos": true}` en `vista_previa_ficha` / `aplicar_ficha`; Armador, `ficha.py`, `nuevo_cliente.sh` y el
+  SQL del primer cliente). `mi_perfil` lo devuelve en `empresa` (reemplaza la de 032, misma firma).
+- **Ruta de la foto en el producto:** `producto.foto_ruta` y `foto_miniatura_ruta` (`<empresa>/<producto>/<nombre>.webp|jpg`,
+  revisado por CHECK); `v_producto` las devuelve al final. **`poner_foto_producto(empresa, producto, {ruta, miniatura} |
+  null, id_operacion)`** (`productos.editar`): poner o cambiar con fotos encendidas, quitar siempre; historial
+  `producto_foto` (foto anterior, nunca se borra ni edita), bitácora con motivo, reintento seguro. Errores nuevos
+  `FOTOS_APAGADAS` y `FOTO_INVALIDA`.
+- **Supabase Storage:** bucket privado `fotos-productos` (WEBP/JPEG, 1 MB) y 4 políticas en `storage.objects` (leer:
+  usuarios de la empresa; subir/cambiar: `productos.editar` con licencia y módulo; borrar: `productos.editar` y solo
+  archivos que ningún producto ni el historial usan; todo con fotos encendidas; nunca otra empresa) con los ayudantes
+  `empresas_fotos_productos(accion)` (una vez por consulta), `ruta_foto_producto_valida(ruta)` y
+  `foto_producto_en_uso(ruta)` (solo responden por empresas del usuario). Se crean por SQL si el rol puede; si no, la
+  migración NO falla y `estado_fotos_storage()` dice qué falta, revisando nombre, operación y regla de cada política
+  (clics en `docs/SUPABASE.md`). Revisión de 0.17.0 (dentro de la misma 053): borrar con fotos encendidas y sin
+  romper el historial, subir con licencia y módulo, LISTO más estricto, rutas solo de sus empresas.
+- **Paquete:** `verificar_instalacion.sql` y la actualización muestran la columna `fotos_productos` (LISTO o qué
+  falta); `FALTA_VERSION_ANTERIOR` nombra la versión ("la migración 052 (núcleo 0.16.0)", sacado de este CHANGELOG).
+- **Simuladores:** `simular_supabase.sql` y `mini_supabase.sql` traen lo mínimo de Storage (`storage.buckets` y
+  `storage.objects` con RLS; en el mini, de otro dueño). `herramientas/servidor_app.js` imita subir, bajar con token y
+  borrar (la fila va a `storage.objects` como el usuario; tamaño y tipo contra el bucket).
+- Pruebas: 139 (políticas A/B, vendedor sin `productos.editar`, fotos apagadas, rutas ajenas, poner/cambiar/quitar con
+  historial y bitácora, interruptor y ficha) y 140 (de 0.16.0 a 0.17.0 como en Supabase: dos veces sin daño, sin la
+  052 lo dice claro, un error a mitad no deja nada ni el bucket, bitácora íntegra; y un Supabase donde el rol no puede
+  crear el bucket ni las políticas: termina, dice qué falta y con los clics queda LISTO).
+
+## 0.16.0 (2026-10-22) — Cada sucursal recibe solo lo suyo; totales en el servidor
+
+Migración nueva 052 (las 001-051 no se tocaron). 138 pruebas (nuevas 133 a 138). Todas pasan también con
+`probar.sh --paquete`. Para quien ya tiene 0.15.0 en Supabase: `dist/actualizar_supabase_0.16.0.sql` (una sola
+pegada; ver `docs/SUPABASE.md`, "Actualizar de 0.15.0 a 0.16.0").
+
+- **Usuario limitado a su sucursal: el dato ya no llega al navegador** (`nucleo/docs/sucursales.md`). RLS nueva en
+  `compra_linea`, `pago_proveedor`, `pago_proveedor_anulacion`, `cxp_saldo_inicial` (de toda la empresa: solo sin
+  restricción) y las 5 tablas de la conciliación; así `v_cxp_documento`, `v_cxp_proveedor` y `v_conciliacion`
+  quedan filtradas. Filtradas también `v_comision_vendedor`, `donde_esta_mi_dinero`, `estado_fondos` (saldo de la
+  cuenta del fondo), `proyeccion_flujo` (sin comisiones ni dividendos de la empresa) y `ver_conciliacion`. El dueño
+  y quien no tiene restricción reciben exactamente lo mismo que antes (prueba 135 compara antes y después).
+- **Pagos a proveedores:** `pagar_proveedor` y `anular_pago_proveedor` exigen la sucursal de la compra; un saldo
+  inicial de proveedor solo lo paga quien trabaja con todas las sucursales (`SUCURSAL_NO_PERMITIDA`).
+- **Lado de clientes (revisión de 0.16.0, dentro de la misma 052):** RLS en `cxc_saldo_inicial` (de toda la
+  empresa), `cxc_aplicacion`, `cxc_condonacion`, `cobro_pago`, `saldo_favor` y `saldo_favor_uso`;
+  `condonar_saldo_cxc` exige la sucursal de la venta. Las reglas dejan pasar primero a quien ve toda la empresa.
+  En `donde_esta_mi_dinero`, el banco destino de un depósito de otra sucursal va en null.
+- **Cobro "a la más vieja" de un usuario limitado:** solo a ventas al crédito de sus sucursales (salta las demás y
+  los saldos iniciales); "aplicar" a una venta de otra sucursal o a un saldo inicial: `SUCURSAL_NO_PERMITIDA`.
+- **`guardar_preferencias_alertas`** rechaza (`SIN_PERMISO`) los tipos que el puesto no ve.
+- **Lecturas de totales nuevas** (`nucleo/docs/totales.md`): `totales_compras` (comprado, contado, crédito, por
+  pagar y vencido), `totales_gastos` (gastado y en espera) y `mas_vendido` (cantidad e importe, restando
+  devoluciones). Respetan empresa, permiso y sucursal; cuadran con la suma de filas (prueba 133).
+- **`cerrar_mes` y `reabrir_periodo` aceptan `id_operacion` opcional** al final (las llamadas de antes siguen
+  igual). Reintento = misma respuesta con `duplicado`; tabla `periodo_operacion` (prueba 134).
+- **NO se hizo (decisión técnica):** estado de resultados / balance / `saldo_cuentas` por sucursal: los libros no
+  asignan cada asiento a una sucursal y el resultado saldría incompleto o descuadrado. Para comparar sucursales:
+  `reporte_sucursales`.
+- **Faltantes de la app (decisión del dueño: dentro de la MISMA 052, para pegar un solo archivo):**
+  - **Cambio de producto con diferencia a favor** (`devoluciones.md`): si el producto nuevo vale menos, la diferencia
+    puede quedar como saldo a favor del cliente o en un VALE (consumidor final), además de devolverse en dinero
+    (`"cambio": {"diferencia": "dinero" | "saldo_favor"}`, cada una solo si el dueño la permite). Lectura nueva
+    `calcular_cambio_previo` (no guarda; lo devuelto, lo que rebaja la deuda, el total nuevo, la diferencia y las
+    opciones; sin costos). `registrar_devolucion` de 038 pasó a `interno.registrar_devolucion_base` sin cambios.
+  - **Anular un reparto:** el núcleo ya lo tenía (`anular_distribucion`, 0.10.0; `MES_CON_REPARTO` ya deja reabrir
+    después). Sin cambios en el núcleo; prueba nueva 137 con el camino completo (pagos a socios primero, reabrir,
+    cerrar versión 2 y repartir otra vez).
+  - **Aporte de capital de un socio** (`fondos.md`): `registrar_aporte_socio`, `anular_aporte_socio`,
+    `aportes_socios`; tabla `socio_aporte`; cuenta nueva del sistema 3.1.01.04 "Aportes de socios" (patrimonio,
+    controlada por `fondos`); permiso nuevo `fondos.aportes` (dueño; lo puede dar al admin). Asiento Dr cuenta de
+    dinero / Cr 3.1.01.04 con rastro; sucursal de la cuenta que recibe; no es ganancia (el estado de resultados no
+    cambia) y en el flujo de efectivo es la entrada "Aportes de capital de socios".
+  - Revisión (dentro de la 052): en un cambio, `cuenta_dinero_id` o la diferencia que sale en dinero exigen
+    `devolver_dinero`; `fondos.aportes` solo para dueño y admin; si 3.1.01.04 ya tiene asientos del cliente, la del
+    sistema va en la siguiente libre; `aportes_socios` acepta `desde`/`hasta`. La 135 además crea un aporte real en la
+    base actualizada (con la 3.1.01.04 del cliente ocupada).
+  - Pruebas 136 (cambio), 137 (anular reparto y reabrir) y 138 (aportes). Se ajustó la 123 (el dueño tiene ahora 7
+    permisos de fondos). La 135 sigue igual: el dueño ve exactamente lo mismo antes y después de actualizar.
+- **Paquete:** `armar_instalacion.sh` deja también `dist/actualizar_supabase_<versión>.sql` (solo lo nuevo, revisa
+  que esté la migración anterior, todo-o-nada, termina con "ACTUALIZADO A <versión>"; se parte si pasa de 200 KB).
+  La instalación nueva queda en 14 partes y `verificar_instalacion.sql` espera 52 migraciones.
+
+## 0.15.0 (2026-10-12) — Listo para Supabase real (etapa 6)
+
+Migración nueva 051 (las 001-050 no se tocaron). 132 pruebas (nueva 132). Todas pasan también con
+`probar.sh --paquete` (instalación como en Supabase real, sin simulador).
+
+- **Revisión de compatibilidad con Supabase real** (detalle en `docs/SUPABASE.md`, "Para el técnico"): las
+  migraciones no crean roles ni el esquema auth, no usan pgcrypto, todo queda de `postgres` (probado con un dueño
+  sin superusuario), `interno` no se expone, RLS en todas las tablas de public y anon sin ningún permiso. Única
+  diferencia que pedía código: revocar sesiones de otro usuario.
+- `revocar_sesiones_auth(usuario)` (solo service_role): borra sus sesiones de Supabase Auth (y en cascada sus
+  refresh tokens). Doble candado: solo si alguien con permiso hizo `cerrar_sesion_usuario` en los últimos 10
+  minutos. Si la base no deja borrar, devuelve -1 (el cierre de 0.13.1 sigue valiendo). La usa la Edge Function
+  `cerrar-sesion-remota`.
+- **Paquete para el SQL Editor:** `herramientas/armar_instalacion.sh` → `dist/instalar_supabase_parteNN.sql`
+  (≤ 200 KB, `MAX_KB`), cada parte todo-o-nada, salta lo instalado por su huella (misma que `migrar.sh`), rechaza
+  partes fuera de orden, bases sin Supabase, rol equivocado y bases con un núcleo más nuevo;
+  `verificar_instalacion.sql` ("TODO BIEN", versión, migraciones).
+- **Primer cliente:** `herramientas/exportar_supabase.sh` (y `ficha.py primer_cliente`; también el Armador) →
+  SQL que crea la empresa con la ficha, licencia y límites y el User UID del dueño; no se repite (`YA_CREADA`).
+- **Edge Functions** `supabase/functions/crear-usuario` y `cerrar-sesion-remota` (TypeScript sin librerías).
+- **Pruebas:** `probar.sh --paquete` (mini Supabase: `nucleo/pruebas/mini_supabase.sql`, cada parte en UNA
+  petición con `herramientas/sql_una_peticion.py`, repetir no cambia nada, fuera de orden se rechaza, primer
+  cliente una sola vez, `migrar.sh` reconoce la base). `probar_app.sh` prueba además las Edge Functions reales
+  contra el emulador y la app de `armar_app.sh` con sus cabeceras.
+
+## 0.14.0 (2026-10-12) — El cajero cobra abonos; descuento con ISV; marca del negocio (para la app 0.3.0)
+
+Migración nueva 050 (las 001-049 no se tocaron). 131 pruebas (nueva 131, cifras a mano en sus comentarios).
+Se ajustaron las pruebas 19, 31 y 69: las listas exactas de permisos ahora incluyen los permisos nuevos.
+
+- **Permiso nuevo `cobros.ver_saldos`** (dueño, admin y cajero; plantilla y empresas existentes) y
+  `cxc_para_cobrar(empresa, cliente?)`: lo que debe cada cliente (y sus facturas pendientes si se indica el
+  cliente) para cobrar sin `ventas.ver`. Sin costos ni ganancias. Usuario restringido por sucursal: solo ventas
+  al crédito de sus sucursales y ningún saldo inicial (como `resumen_hoy`). El cobro sigue con `registrar_cobro`.
+- `calcular_venta_previa` agrega `bruto_con_isv_centavos` y `descuento_con_isv_centavos` por línea y
+  `subtotal_con_isv_centavos` / `descuento_con_isv_centavos` en total (subtotal − descuento = total). La de 049
+  queda como `interno.calcular_venta_previa_049`, sin cambios.
+- **Marca del negocio:** `empresa.marca` / `marca_anterior`, `marca_empresa(empresa)` (cualquiera de la empresa) y
+  `configurar_marca(empresa, datos, motivo)` (permiso nuevo `empresa.marca`: dueño y admin): nombre comercial, logo
+  (PNG/JPG/WEBP hasta 200 KB) y colores; `{"volver_anterior": true}`. No toca nombre legal ni RTN.
+
+## 0.13.2 (2026-10-12) — Cálculo previo de la venta (para la app 0.2.0)
+
+Migración nueva 049 (las 001-048 no se tocaron). 130 pruebas (nueva 130, cifras a mano en sus comentarios).
+
+- `calcular_venta_previa(empresa, {"lineas","descuento_factura","fecha"?})`: calcula la venta con la MISMA regla
+  de `registrar_venta` (`interno.calcular_venta`) sin guardar nada, para que la pantalla muestre total, ISV y
+  vuelto sin calcular dinero en el navegador. Con varias promociones y sin elegir, usa y marca
+  (`promocion_sugerida_id`) la que más descuenta; la venta de verdad sigue exigiendo la elegida
+  (`PROMOCION_A_ELEGIR` no cambia). Trae `tope_descuento_porcentaje` y `descuento_pide_aprobacion` (total o
+  por línea). Sin costo estimado para quien no tiene `inventario.costos`. Permiso `ventas.vender` o `ventas.cotizar`.
+
+## 0.13.1 (2026-10-06) — Correcciones de la revisión de 0.13.0
+
+Migración nueva 048 (las 001-047 no se tocaron). 129 pruebas (nueva 129: sus 5 partes fallan contra 0.13.0 y pasan
+con 0.13.1, con las cifras hechas a mano en sus comentarios). Se ajustó la prueba 121 (ver "Cambios que rompen").
+El simulador local ahora tiene `auth.sessions` y los usuarios de prueba llevan `session_id` en el token.
+
+**Importante**
+- **Cerrar sesión ya no se salta al renovar el token:** la sesión se reconoce por el `session_id` del token de
+  Supabase (no cambia al renovar) y la hora en que se inició (`auth.sessions.created_at`) contra la del cierre.
+  Sesión anterior al cierre, que ya no existe o de otro usuario = `SESION_CERRADA`. Sin `session_id` (o sin poder
+  leer `auth.sessions`): la regla anterior con `iat`. `interno.revisar_acceso` y `mi_estado_sesion` reemplazadas
+  (misma firma); nueva `interno.sesion_anterior_al_cierre`.
+- **Un mes con reparto de utilidades vigente no se reabre** (`MES_CON_REPARTO`): primero `anular_distribucion`.
+  Trigger `reabrir_sin_reparto` en `periodo` (vale por cualquier camino).
+- **Usuarios restringidos por sucursal:** `resumen_hoy`, `alertas_activas` y `exportar_plantilla` solo cuentan sus
+  sucursales (ventas, dinero, existencias de sus bodegas, cajas, turnos y bancos). Criterio de cuentas por cobrar:
+  ventas al crédito EMITIDAS en sus sucursales (sin saldos iniciales de clientes, que no tienen sucursal); igual en
+  cuentas por pagar con las compras. La ganancia de hoy y del mes (de toda la empresa) se les oculta. Nueva clave
+  `solo_mis_sucursales` en `resumen_hoy`. Dueño y no restringidos: igual que antes. Reemplazadas (misma firma):
+  `interno.ventas_del`, `interno.alertas_de`, `public.resumen_hoy`, `public.exportar_plantilla`.
+
+**Menores**
+- Conciliación tipo "otro": la contrapartida no puede ser una cuenta que controla un módulo (`CUENTA_INVALIDA`,
+  como `usar_fondo`). Hoy ninguna de esas cuentas es de ingresos, costos o gastos: la regla queda vigilada.
+- Conciliación: importar el estado de cuenta, emparejar, deshacer, marcar anteriores, crear diferencias y cerrar
+  exigen la sucursal de la cuenta de banco (`SUCURSAL_NO_PERMITIDA`; triggers en `conciliacion` y
+  `banco_movimiento`, `interno.conciliacion_para_escribir` reemplazada).
+
+**Errores nuevos:** `MES_CON_REPARTO`.
+
+**Cambios que rompen (para quien ya usaba 0.13.0 en pruebas)**
+- Prueba 121: reabría enero con su reparto vigente (y avisaba `reparto_version_anterior` al volver a cerrar); ahora
+  comprueba que da `MES_CON_REPARTO`. Esa advertencia solo puede salir en meses reabiertos antes de 0.13.1.
+
+**Pendiente (honesto):** Edge Function que revoque los tokens de Supabase Auth al cerrar sesión (etapa de
+pantallas); confirmar en el Supabase real que el dueño de las funciones lee `auth.sessions` (si no, queda la regla
+del `iat`); estados, libros ISV, `donde_esta_mi_dinero` y cierres siguen sin filtrar por sucursal; no se repitió la
+prueba de volumen (los filtros nuevos no corren para el dueño ni para usuarios sin restricción).
+
+## 0.13.0 (2026-10-04) — Etapa 3b-2b: sucursales y centro de control del dueño
+
+Migración nueva 047 (las 001-046 no se tocaron). 128 pruebas (nueva 128, con las cifras hechas a mano en sus comentarios;
+ninguna anterior cambió). Guías: `nucleo/docs/sucursales.md` y `nucleo/docs/control.md`.
+
+**Usuarios por sucursal** — `asignar_sucursales_usuario(empresa, usuario, sucursales, motivo)` (usuarios.administrar; lista
+vacía = todas; nunca al dueño ni al proveedor; nadie a sí mismo; el admin restringido no amplía su alcance). En el servidor:
+políticas RLS restrictivas y vistas del sistema filtradas (ventas, cobros, turnos, gastos, cajas, bodegas, existencias, kardex,
+cuentas y rastro del dinero...) y un trigger en cada venta, cobro, turno, gasto, apartado, devolución, compra, kardex y rastro
+del dinero (`SUCURSAL_NO_PERMITIDA`), así vale para toda RPC.
+
+**Reportes por sucursal** — `reporte_sucursales(empresa, desde, hasta)`: ventas, ventas sin ISV, costo, ganancia, gastos y dinero
+por sucursal, fila "de toda la empresa" y total, con participación en ventas; cada parte con su permiso.
+
+**Entre sucursales** — `enviar_dinero_sucursal` / `recibir_dinero_sucursal`: el dinero queda en tránsito ("Envíos entre
+sucursales") hasta que el destino lo recibe; asientos y rastro; se anula antes de recibir con `anular_operacion_dinero`
+(operacion_dinero.tipo nuevo `envio_sucursal`). Mercadería: el traslado ya dejaba salida y llegada en el kardex; nuevo
+`confirmar_recepcion_traslado` (tabla `traslado_recepcion`). `pendientes_entre_sucursales` lista lo que falta recibir.
+
+**Precios por sucursal (opcional)** — `activar_precios_sucursal` (solo dueño), `fijar_precio_sucursal` (productos.precios; NULL =
+vuelve al general), `precio_en_sucursal`. La venta usa el precio de la sucursal de su caja (`interno.caja_de_venta` y
+`interno.producto_de` reemplazadas, misma firma). Historial en `producto_precio.sucursal_id`.
+
+**Centro de control** — `vigilancia_empleados` (ventas, ganancia solo con costos, descuentos, anulaciones pedidas, diferencias de
+caja, horario de uso desde la bitácora), `bitacora_legible` (filtros persona, fechas, tipo; textos sencillos; páginas),
+`cerrar_sesion_usuario` (el servidor rechaza la sesión anterior con `SESION_CERRADA` usando el `iat` del token),
+`configurar_horario_acceso` por puesto (`FUERA_DE_HORARIO` al operar; el dueño nunca), `mi_estado_sesion` para la app.
+`interno.exigir_escritura`, `exigir_lectura` y `exigir_miembro` reemplazadas (misma firma) para revisar sesión y horario.
+Desactivar usuario: ya era al instante (confirmado en la prueba).
+
+**Volumen** — `herramientas/prueba_volumen.sh` (20,000 ventas reales; fuera de probar.sh: tarda ~8 min). Con 20,000 ventas
+(base local, mejor de 3): resumen_hoy 411 ms, alertas_activas 20 ms, estado_resultados de un mes 126 ms, libro_ventas de un mes
+547 ms, reporte_sucursales de 90 días 20 ms, vigilancia_empleados de 30 días 674 ms. Hallazgo: registrar cada venta se volvía más
+lento con el volumen (24 ms al inicio, ~50 ms a las 17,000) porque la revisión del id_operacion recorría tablas enteras; con índices
+en todas las columnas `*id_operacion` y un índice del saldo de dinero, las 20,000 ventas bajaron de 760 s a 463 s. Otros índices
+nuevos: bitácora por usuario, ventas por sucursal y por quien emitió.
+
+**Tablas nuevas:** `usuario_sucursal`, `traslado_recepcion`, `producto_precio_sucursal`, `horario_acceso`. **Columnas:**
+`empresa.precios_por_sucursal`, `producto_precio.sucursal_id`, `usuario_empresa.sesion_cerrada_en/_por`.
+**Errores nuevos:** `SUCURSAL_NO_PERMITIDA`, `SESION_CERRADA`, `FUERA_DE_HORARIO`. **Permisos:** ninguno nuevo (se usan los de siempre).
+
+**Decisiones tomadas (a confirmar con el dueño)**
+- Restringido = solo esas sucursales; lo de toda la empresa (banco sin sucursal) se sigue viendo.
+- Ventas del empleado = las que él registró (no el vendedor asignado). Horario de uso = lo que guardó (no lo que consultó).
+- El horario bloquea operar, no consultar. Sin turnos que pasen la medianoche.
+- La mercadería trasladada cuenta en el destino desde que sale; la recepción es una confirmación (sin bodega "en camino").
+
+**Pendiente (honesto):** los reportes de toda la empresa (estados, libros ISV, resumen_hoy, alertas, dónde está mi dinero) no se
+filtran por sucursal (dar esos permisos solo a usuarios sin restricción); envíos sin recibir aún no salen en alertas; revocar los
+tokens de Supabase Auth al cerrar sesión (Edge Function de la etapa de pantallas); el revisor debe revisar 0.13.0 (esta sesión no
+tiene los agentes constructor-maestro, revisor ni asesor-negocio).
+
+## 0.12.0 (2026-10-04) — Etapa 3b-2a: Excel de ida y vuelta
+
+Migración nueva 046 (las 001-045 no se tocaron). 127 pruebas (nueva 127; se ajustó la 31: el admin tiene `excel.importar`).
+Guía para la app: `nucleo/docs/excel.md`.
+
+**Excel (046)** — el servidor trabaja con JSON; la app convierte xlsx <-> JSON.
+- `exportar_plantilla(empresa, hoja)`: columnas (clave, título, editable o gris, tipo, valores válidos y descripción para la
+  hoja Instrucciones) y filas actuales. Hojas: `productos` (con campos extra como columnas y grises: costo promedio, valor y
+  margen solo con `inventario.costos`, existencia total, precio con y sin ISV, última venta y compra), `clientes_proveedores`
+  (grises: saldo y vencido por cobrar/pagar, último cobro/pago), `categorias`, `existencias_iniciales`, `saldos_iniciales`,
+  `conteo_fisico` (a ciegas).
+- `importar_vista_previa(empresa, hoja, filas)`: no guarda nada; por fila: crear / actualizar / sin cambios / error, con los
+  errores en palabras sencillas con fila y columna, y resumen. Revisa con las reglas reales: aplica cada fila y al final deshace todo.
+- `importar_aplicar(empresa, hoja, filas, id_operacion, motivo)`: todo o nada (un error = no se guarda nada); reintento con el
+  mismo id = mismo resultado (`duplicado`). Usa por dentro crear/editar producto, cambiar precio (historial con el motivo),
+  crear/editar tercero (límites de crédito), crear/desactivar/reactivar categoría, `cargar_saldo_inicial` (una carga por bodega y
+  fecha, una sola vez contra Saldos de apertura) y `registrar_saldo_inicial_cxc/cxp`.
+- Reglas: código = llave; celda vacía conserva; nunca borra (Activo = No desactiva); grises se ignoran; montos en lempiras con 2
+  decimales -> centavos; fechas AAAA-MM-DD; impuesto por código; Sí/No; llave repetida en el archivo = error.
+- **Conteo físico**: no cambia existencias; por bodega crea `conteo_fisico` + aprobación tipo `conteo_fisico`. Al aprobar
+  (`resolver_aprobacion`, admin o dueño con `inventario.ajustar`; nunca el que lo subió, salvo el dueño) se ajusta la DIFERENCIA
+  contada sobre la existencia de ese momento.
+
+**Clientes y proveedores con código:** columna nueva `tercero.codigo` (llave del Excel, no cambia). Los que ya existían quedaron
+T00001, T00002... por empresa en orden de creación; los nuevos sin código reciben el siguiente.
+
+**`resolver_aprobacion`**: misma firma; la de 041 pasa a `interno.resolver_aprobacion_041` y la pública despacha `conteo_fisico`.
+
+**Tablas nuevas:** `importacion_excel`, `conteo_fisico`. **Permiso nuevo:** `excel.importar` (dueño, admin).
+**Errores nuevos:** `EXCEL_CELDA`, `EXCEL_DESHACER` (interno; no llega al usuario).
+
+**Decisiones tomadas (a confirmar con el dueño)**
+- Categorías y unidades que no existen = error claro (no se crean solas desde productos): las categorías se suben antes en su
+  hoja; las unidades se crean en Ajustes.
+- Conteo físico a ciegas (el Excel no trae la existencia del sistema) y el ajuste aprobado aplica la diferencia, no la cantidad.
+- En clientes, "tipo" solo agrega papeles (cliente/proveedor); quitar uno se hace en la app.
+- Saldo inicial ya cargado con otro monto = error (se anula y se vuelve a subir); nunca se reemplaza solo.
+
+**Pendiente (honesto):** descripción, proveedor principal y ubicación del producto no existen como columnas (se pueden usar
+campos extra); campos extra para clientes y proveedores; la hoja "Existencias por sucursal" de solo lectura; el revisor debe
+revisar 0.12.0 (esta sesión no tiene los agentes constructor-maestro, revisor ni asesor-negocio).
+
+## 0.11.0 (2026-10-04) — Etapa 3b-1: conciliación bancaria, libros de ISV, alertas y "¿cuánto gané hoy?"
+
+Migraciones nuevas 043-045 (las 001-042 no se tocaron). 126 pruebas (nuevas 124-126, con las cifras hechas a mano
+en sus comentarios). Los libros de ISV los **debe validar un contador hondureño** antes de presentarlos a la SAR.
+
+**Conciliación bancaria (043, módulo `conciliacion` -> dinero, `conciliacion.md`)** — `importar_estado_cuenta`
+(filas JSON que la app saca del CSV: fecha, descripción, referencia, monto con signo; solo bancos; la misma fila no se
+repite; reintento), emparejamiento automático por monto y fecha ± N días (gana la referencia y la fecha más cercana)
+y `emparejar_conciliacion`, `emparejar_manual`, `deshacer_emparejamiento` (motivo; solo abierta; no se borra),
+`marcar_conciliados_anteriores` (primera conciliación), `registrar_diferencia_banco` (comisión 6.2.01.02, intereses
+6.2.01.01 / 4.2.01.01 u otra cuenta de resultados; asiento + rastro + pareja), `cerrar_conciliacion` (mes terminado,
+en orden, solo si banco = sistema − pendientes del sistema + pendientes del banco; guarda la foto), `ver_conciliacion`,
+`v_conciliacion`. Tablas `conciliacion`, `banco_importacion`, `banco_movimiento`, `conciliacion_pareja`, `banco_diferencia`.
+
+**Libros de ISV (044, `libros_isv.md`)** — `libro_ventas`, `libro_compras`, `libros_isv` (contabilidad.ver): fecha,
+número, CAI, RTN, nombre, gravado 15 % / 18 % / otra tasa, exento, exonerado, ISV y total; notas de crédito y
+anulaciones de meses anteriores en negativo, anulada en el mismo mes en cero; `columnas` y `filas` para CSV/Excel;
+`cuadre` contra `isv_mes` (débito y crédito) y contra las ventas netas de los libros.
+
+**Alertas y "Mi negocio hoy" (045, `alertas.md`)** — `alertas_activas(empresa)`: lista uniforme (tipo, gravedad,
+título, mensaje sencillo, qué hacer, enlace, datos) de CAI, cierre de mes atrasado, cuentas en negativo, depósitos sin
+confirmar, diferencias de arqueo, aprobaciones, créditos vencidos, pagos fijos, mercadería por acabarse, conciliación,
+licencia y límites del plan, según los permisos de cada usuario (el cajero no ve dinero, bancos, créditos ni costos).
+Preferencias por usuario: `alerta_tipo`, `alerta_preferencia`, `mis_preferencias_alertas`,
+`guardar_preferencias_alertas`. `resumen_hoy(empresa)` (pedido del dueño): ventas y ganancia de hoy contra ayer,
+ganancia del mes contra el mes pasado (completo y a la misma fecha), dinero disponible, te deben (vencido aparte),
+debes; sin `inventario.costos` la ganancia va en null con `costos_ocultos`.
+
+**Permisos:** `conciliacion.ver` (dueño, admin, contador), `conciliacion.conciliar` y `conciliacion.registrar` (dueño,
+admin). Alertas y resumen: cualquier usuario de la empresa (cada parte con su permiso).
+
+**Cuentas (usos nuevos, ya estaban en la plantilla):** `comisiones_bancarias` 6.2.01.02, `intereses_pagados` 6.2.01.01,
+`intereses_ganados` 4.2.01.01.
+
+**Errores nuevos:** `CONCILIACION_CERRADA`, `CONCILIACION_NO_CUADRA`, `CONCILIACION_EN_ORDEN`, `NO_EMPAREJA`, `YA_CONCILIADO`.
+
+**Herramientas:** `ficha.py` y `personal/ficha.schema.json` aceptan `"conciliacion"`; `docs/PAQUETES.md`.
+
+**Decisiones tomadas (a confirmar con el dueño)**
+- Emparejamiento uno a uno; tolerancia de 3 días por defecto (0 a 15). Una conciliación cerrada no se reabre.
+- El saldo inicial de la cuenta de dinero es la apertura (no queda pendiente en la conciliación).
+- "Ventas de hoy" = total con ISV de las ventas emitidas y no anuladas; "ganancia de hoy" = ventas sin ISV − costo;
+  "ganancia del mes" = ventas − costo − gastos del 1 a hoy (de los libros).
+- Cierre de mes atrasado: el mes pasado se da hasta el día 10; un mes más viejo sin cerrar es alerta grave.
+- Licencia: avisa 15 días antes. Límites: al 80 % (igual que `lista_clientes.sh`).
+
+**Cambios que rompen (para quien ya usaba 0.10.0 en pruebas)**
+- Permiso nuevo `conciliacion.ver` para admin, contador y el proveedor con soporte (y `conciliar`/`registrar` para el
+  admin): se ajustaron las pruebas 19, 31, 48, 57 y 69. Dependencia nueva conciliacion -> dinero (10): 88, 93 y 101.
+
+**Pendiente (honesto):** emparejar varias filas del banco contra un movimiento; anular un movimiento creado desde la
+conciliación; CAI del proveedor en compras (columna vacía en el libro de compras); formato oficial de la SAR; la
+conciliación no se sumó a la prueba 89 (no controla cuentas; su cuadre de dinero = libros está en la 124); no se
+consultó a los agentes constructor-maestro, revisor ni asesor-negocio (esta sesión no los tiene): el revisor debe
+revisar 0.11.0.
+
+## 0.10.0 (2026-10-04) — Etapa 3a: cierre de mes con foto, estados por mes, fondos y proyección
+
+Migraciones nuevas 040-042 (las 001-039 no se tocaron). 123 pruebas (nuevas 120-123; la 89 ahora con 25
+combinaciones y cierre de enero en cada una). Las cifras de las pruebas están hechas a mano en sus comentarios.
+Formatos según NIIF para PYMES: **un contador hondureño debe validar la presentación** (resultados, balance,
+flujo, ISV) antes de entregarlos a terceros.
+
+**Cierre de mes completo (040, `cierres.md`)** — `cerrar_mes(empresa, año, mes, motivo?)` (`periodos.cerrar`):
+descuadre contable = no cierra (`DESCUADRE_CONTABLE`); bloquea con `cerrar_periodo` (en orden) y guarda una FOTO
+inmutable (tablas `cierre` y `cierre_detalle`): saldos de cuentas, estado de resultados, balance, flujo directo,
+CxC por cliente con antigüedad, CxP, inventario por producto/bodega, cuentas de dinero, saldo a favor y anticipos,
+comisiones por pagar e ISV del mes, todo a la fecha de fin del mes. Advertencias que no bloquean: depósitos en
+tránsito, turnos abiertos, aprobaciones pendientes, transferencias por confirmar, cuentas en negativo y alertas de
+cuadre. Reabrir (como siempre) deja la foto superada (trigger en `periodo`, cualquier camino); cerrar otra vez =
+versión siguiente. `historial_cierres`, `ver_cierre`.
+
+**Selector de meses y exportación (040, `estados.md`)** — `estado_resultados`, `balance_general`, `flujo_efectivo`,
+`saldos_cuentas_mes`, `cuentas_por_cobrar_mes`, `cuentas_por_pagar_mes`, `inventario_mes`, `dinero_mes`, `isv_mes`
+(`contabilidad.ver`): mes cerrado = la foto; abierto = en vivo y "PRELIMINAR". Comparativo con el mes anterior y el
+mismo mes del año anterior. Estado de resultados con **utilidad cobrada** (decisión abajo) frente a la facturada.
+`exportar_mes`: todo el paquete en JSON (centavos, fechas ISO, sin emojis; la app arma PDF/Excel).
+
+**Fondos y reparto de utilidades (041, módulo `fondos` -> dinero, `fondos.md`)** — `socio` (`guardar_socio`),
+`fondo` con su reserva 3.2.02.NN, meta en monto o meses de pagos fijos y cuenta de dinero opcional (`crear_fondo`,
+`editar_fondo`), regla que suma 100 % (`guardar_regla_distribucion`). `distribuir_utilidades(empresa, año, mes,
+datos, motivo, id)`: solo mes cerrado con foto, una vez por mes, base = utilidad cobrada (negativa no se reparte),
+asiento Dr 3.3.01.02 / Cr reservas / Cr 2.1.01.03 Dividendos por pagar, separación física opcional con rastro;
+`anular_distribucion`. `usar_fondo` (comprobante obligatorio, cuenta de salida y destino, aprobación del dueño:
+rama `uso_fondo` en `resolver_aprobacion`; libera la reserva a 3.3.01.01). `pagar_dividendos` /
+`anular_pago_dividendos`. `estado_fondos`, `v_fondo_movimiento`, `v_distribucion`, `v_dividendo_socio`.
+
+**Proyección de flujo (042, `proyecciones.md`)** — `proyeccion_flujo(empresa, 30|60|90, 'semana')`.
+
+**Cuentas nuevas:** 2.1.01.03 Dividendos por pagar a socios (uso `dividendos_por_pagar`, controlada por fondos);
+usos `utilidades_ejercicio` (3.3.01.02) y `utilidades_acumuladas` (3.3.01.01); 3.2.02 "Reservas de fondos" y sus
+subcuentas se crean al crear el primer fondo.
+
+**Permisos:** `fondos.ver` (dueño, admin, contador), `fondos.configurar`, `fondos.distribuir` y `fondos.aprobar`
+(SOLO el dueño, lo vigila `validar_rol_permiso`), `fondos.usar` y `fondos.pagar_dividendos` (dueño; el dueño puede
+dar `usar` a otro puesto y lo sigue aprobando él). Cerrar: dueño y admin (como antes). El contador lee todo.
+
+**Errores nuevos:** `DESCUADRE_CONTABLE`, `MES_ABIERTO`, `MES_SIN_CIERRE`, `SIN_UTILIDAD_COBRADA`, `YA_DISTRIBUIDO`,
+`PORCENTAJES_INVALIDOS`, `SIN_REGLA_DISTRIBUCION`, `FONDO_INSUFICIENTE`, `DISTRIBUCION_USADA`.
+
+**Herramientas:** `ficha.py` y `personal/ficha.schema.json` aceptan `"fondos"`; `docs/PAQUETES.md` (fondos en el
+paquete completo). Pruebas: `preparar_datos.sql` trae `pruebas.preparar_enero()` y `pruebas.crear_contador()`.
+
+**Decisiones tomadas (a confirmar con el dueño; las de dinero marcadas [DINERO])**
+- [DINERO] Utilidad cobrada = utilidad neta − aumento de la utilidad por cobrar (saldo × margen / total de cada
+  factura al crédito); los saldos iniciales de clientes no cuentan; una condonación resta solo su ISV.
+- [DINERO] Reparto solo de un mes cerrado con foto; el asiento usa la fecha indicada (hoy por defecto) en un mes
+  abierto posterior. Si después se reabre y cambia el mes, el reparto queda y el nuevo cierre lo advierte.
+- [DINERO] Usar un fondo libera su reserva a Utilidades acumuladas y el gasto pasa por resultados del mes.
+- [DINERO] Proyección conservadora: CxP vencidas, comisiones y dividendos por pagar en la semana 1; cobros vencidos
+  no se asumen; POS por liquidar va con lo "no disponible aún".
+- Descuadre que bloquea = debe ≠ haber o balance sin cuadrar; un módulo que no cuadra con su cuenta es "alerta de
+  cuadre" (no bloquea), como pide REQUISITOS.
+
+**Cambios que rompen (para quien ya usaba 0.9.2 en pruebas)**
+- Permiso nuevo `fondos.ver` para admin, contador y el proveedor con soporte: se ajustaron las pruebas 19, 31, 48,
+  57 y 69. Dependencia nueva fondos -> dinero (9): pruebas 88, 93 y 101.
+- Se reemplazaron con la misma firma: `public.resolver_aprobacion`, `interno.revisar_activacion_modulo`,
+  `interno.validar_rol_permiso`, `interno.empresa_de_documento`. `cerrar_periodo` y `reabrir_periodo` no cambian.
+
+**Pendiente (honesto):** el uso de un fondo ya aplicado no se anula (se corrige con otro asiento del contador);
+no hay cierre anual (el resultado de años anteriores se muestra en patrimonio sin asiento de cierre); el formato del
+ISV para la SAR y la presentación NIIF los debe validar un contador; no se consultó a los agentes
+constructor-maestro, revisor ni asesor-negocio (esta sesión no los tiene): el revisor debe revisar 0.10.0.
+
+## 0.9.2 (2026-10-03) — Correcciones de la revisión de 0.9.1
+
+Migración nueva 039 (las 001-038 no se tocaron). 119 pruebas (nuevas 114-119; las 114 a 118 fallan contra 0.9.1 y
+pasan con 0.9.2, con las cifras hechas a mano en sus comentarios; la 119 actualiza una base 0.9.1 con datos).
+
+**Importante**
+- **Vendedor heredado (114):** la regla de `vendedor_id` (activo y con puesto que vende) vale solo cuando el vendedor
+  se elige en el momento. Al completar un apartado o convertir una cotización se respeta el vendedor del documento
+  guardado aunque hoy esté dado de baja o su puesto solo cotice (antes quedaban trabados con `DATO_INVALIDO`). Su
+  comisión se genera igual y el dueño decide al liquidar (`pagar_comisiones` funciona con el usuario inactivo).
+
+**Menores**
+- **Cuenta de salida elegida (115):** `anular_cobro(..., fecha?, cuenta_salida_id?)` y
+  `resolver_aprobacion(..., fecha?, cuenta_salida_id?)` (solo al aprobar la anulación de una venta): el efectivo sale
+  de la caja fuerte, un banco, la caja chica o la caja del turno propio (`interno.cuenta_salida_elegida`); sigue
+  prohibido el turno de otro cajero (`TURNO_AJENO`) y hace falta el permiso de anular. Devolver dinero de una
+  devolución y el anticipo de un apartado ya pedían la cuenta.
+- **Porcentaje de comisión guardado (116):** columna nueva `venta.comision_porcentaje`, se llena al emitir (trigger
+  `comision_al_emitir`) y se usa al devengar; un cambio hecho hoy ya no toca las ventas de hoy no cobradas. Las ventas
+  de antes (sin porcentaje) siguen la regla anterior (119).
+- **Destino de devolución en la aprobación (117):** `definir_destino_devolucion` pone el destino actual en el texto de
+  la solicitud (`| Destino: ...`) y, con doble aprobación, reinicia la primera aprobación (`aprobacion_reiniciada`).
+  Sin cambio real no toca nada.
+- **Tolerancia del tope por línea (118):** 2 centavos (antes 1). Revisado con 237 facturas de 4 líneas (con y sin ISV
+  incluido) y cada monto de descuento de 1 centavo hasta el tope (5 % y 10 %): con 1 centavo de tolerancia, 252 casos
+  pedían aprobación solo por el redondeo; con 2, ninguno. Un descuento de línea 3 centavos sobre el tope la sigue pidiendo.
+
+**Cambios que rompen (para quien ya usaba 0.9.1 en pruebas)**
+- `public.anular_cobro` y `public.resolver_aprobacion` se reemplazaron (DROP + CREATE) con un parámetro opcional más
+  al final; las llamadas de antes (4 o 5 argumentos) funcionan igual.
+- Se reemplazaron con la misma firma: `interno.descuento_linea_sobre_tope`, `interno.proteger_venta`,
+  `interno.recalcular_comision`, `interno.proteger_aprobacion`, `interno.anular_venta_base`,
+  `interno.registrar_venta_base`, `public.definir_destino_devolucion`.
+
+**Pendiente (honesto):** una comisión de un vendedor dado de baja que el dueño decide no pagar no tiene función para
+anularla (la corrige el contador con un asiento); al reiniciar una primera aprobación su `id_operacion` queda libre
+(un reintento viejo con ese id cuenta como una aprobación nueva del destino actual); no se consultó a los agentes
+constructor-maestro y revisor (esta sesión no los tiene): el revisor debe confirmar estas correcciones.
+
+## 0.9.1 (2026-10-03) — Correcciones de la revisión de la etapa 2
+
+Migración nueva 038 (las 001-037 no se tocaron). 113 pruebas (nuevas 102-113; cada una falla contra 0.9.0
+y pasa con 0.9.1, con las cifras hechas a mano en sus comentarios).
+
+**Grave**
+- **Saldo a favor ajeno (102):** la venta ya no acepta `"saldo_favor_id"` desde la app (`DATO_INVALIDO`); solo el
+  cambio de producto usa por dentro su propio lote. `interno.usar_saldo_favor_lote` exige que el lote sea de la
+  misma empresa y del mismo cliente de la venta (`VALE_INVALIDO`).
+
+**Importantes**
+- **Costos anidados (103):** `interno.ocultar_costos` limpia los costos en todos los niveles (nuevo
+  `interno.quitar_claves`); el cajero ya no ve `costo_centavos` de la venta nueva de un cambio de producto.
+- **Devoluciones en partes (104):** base, ISV y costo por cantidad ACUMULADA (lo de todo lo devuelto menos lo ya
+  devuelto). 10 kg a L 11.50 + ISV devueltos de 0.5 en 0.5: cada nota 86 u 87 de ISV, al final exacto.
+- **Tope de descuento por línea (105):** `interno.descuento_linea_sobre_tope` (1 centavo de tolerancia) al vender,
+  al apartar y al aprobar (`TOPE_APROBACION`; el dueño sin tope).
+- **Comisión sobre lo cobrado (106, decisión del dueño):** `interno.base_comision` resta la parte sin ISV de lo
+  condonado.
+- **Efectivo de anulaciones y devoluciones (107, decisión del dueño):** sale del turno abierto de quien hace la
+  operación, a su nombre, con referencia al turno original (columna nueva `dinero_movimiento.turno_origen_id`;
+  `interno.cuenta_salida_efectivo`). Nadie saca dinero del turno de otro cajero (`TURNO_AJENO`, error nuevo); sin
+  turno propio con turnos obligatorios: `SIN_TURNO_ABIERTO`. Aplica a `anular_cobro`, anular venta,
+  `registrar_devolucion` / aprobarla y `cancelar_apartado` (devolver).
+
+**Menores**
+- **Vales vencidos (108):** `dar_baja_vales_vencidos(empresa, {"vales"?, "fecha"?}, motivo, id_operacion)`, permiso
+  nuevo `cobros.baja_vales` (solo el dueño), tabla `saldo_favor_baja`, cuenta nueva 4.2.01.04 Vales vencidos no
+  reclamados (uso `vales_vencidos`), error nuevo `SIN_VALES_VENCIDOS`.
+- **Devolución pendiente atascada (109):** `definir_destino_devolucion(devolucion, {"destino","cuenta_dinero_id"},
+  motivo)` y se vuelve a aprobar; el error al aprobar lo explica.
+- **Descuento de factura en monto (110):** exacto al centavo (ajusta la última línea que puede).
+- **`vendedor_id` (111):** solo usuarios activos de la empresa con puesto que vende (`ventas.vender`).
+- **Porcentaje de comisión (112):** no retroactivo (`desde` >= hoy, `FECHA_INVALIDA`).
+- `comisiones.md` avisa al dueño: con base "ganancia" el vendedor puede deducir el costo.
+- Prueba 113: actualizar desde 0.9.0 con datos (turno cerrado, devolución atascada, vale vencido).
+
+**Cambios que rompen (para quien ya usaba 0.9.0 en pruebas)**
+- `fijar_porcentaje_comision` con `desde` pasado da `FECHA_INVALIDA`: las pruebas 98 y 99 usan hoy; la 89 (ventas
+  de enero) usa el ayudante de pruebas nuevo `pruebas.porcentaje_comision_anterior`.
+- Anular un cobro cuyo efectivo está en el turno abierto de otro cajero da `TURNO_AJENO`: la prueba 94 ahora cierra
+  ese turno y el admin abre el suyo antes de anular.
+- La venta ya no acepta `"saldo_favor_id"` desde la app: la prueba 100 paga con el código del vale (`"vale"`).
+- Se reemplazaron con la misma firma: `interno.rastrear_dinero`, `interno.calcular_venta`,
+  `interno.registrar_venta_base`, `interno.usar_saldo_favor_lote`, `interno.venta_de_cambio`, `public.anular_cobro`,
+  `interno.anular_venta_base`, `interno.proteger_devolucion`, `interno.aplicar_devolucion`,
+  `public.registrar_devolucion`, `public.crear_apartado`, `public.cancelar_apartado`, `public.resolver_aprobacion`,
+  `interno.ocultar_costos`, `interno.base_comision`, `public.fijar_porcentaje_comision`.
+
+**Pendiente (honesto):** una baja de vales vencidos no se anula (si fue un error, se corrige con un asiento
+del contador); no se consultó a los agentes constructor-maestro y revisor (esta sesión no los tiene): el revisor
+debe confirmar estas correcciones antes de la etapa 3.
+
+## 0.9.0 (2026-10-03) — Etapa 2b-2b: cobros, saldo a favor, apartados, devoluciones y comisiones
+
+Migraciones nuevas 033-037 (las 001-032 no se tocaron). 101 pruebas (nuevas 94-101).
+
+**Cobros y saldos iniciales de clientes (033)** — `registrar_cobro`: a una factura o consolidado (la más
+vieja primero o las elegidas con `"aplicar"`), efectivo (turno según la empresa), tarjeta, transferencia por
+confirmar (`confirmar_transferencia_cobro`), mixto y saldo a favor. Nunca más del saldo sin decisión
+(`COBRO_EXCEDE_SALDO`); con `"excedente":"saldo_favor"` lo que sobra queda a favor del cliente; `"tipo":"anticipo"`.
+`anular_cobro` (patrón "anular un abono": motivo, contra-asiento, el dinero sale de la misma cuenta, saldos
+restaurados). `condonar_saldo_cxc` / `anular_condonacion` (permiso `cobros.condonar`, motivo, cuenta 6.1.02.12).
+`registrar_saldo_inicial_cxc` / `anular_saldo_inicial_cxc` (solo el dueño; contra Saldos de apertura).
+Tabla `cxc_aplicacion`: todo lo que rebaja una factura. Ganchos de 2b-2a conectados:
+`interno.cobros_vigentes_venta`, `saldo_cxc_cliente`, `total_cxc` (con saldos iniciales); la venta con cobros
+no se anula (`VENTA_CON_COBROS`). Lecturas: `v_cxc_documento` (con saldos iniciales y columnas nuevas al final
+`condonado_centavos`, `devuelto_centavos`), `v_cobro`, `v_cobros_por_caja`, `v_saldo_favor`,
+`estado_cuenta_cliente` (037), `consultar_vale`.
+
+**Saldo a favor y vales (033)** — lotes `saldo_favor` (pasivo 2.1.04.02, controlado por ventas) y sus usos
+`saldo_favor_uso`. Sin cliente = vale `VALE-XXXXXXXXXX` con vencimiento opcional (`vale_dias_vigencia`).
+Forma de pago `saldo_favor` en ventas y cobros (se consume al emitir, con el lote bloqueado).
+
+**Apartados (034, módulo `apartados` -> ventas, inventario)** — `crear_apartado` (requiere cliente; precios
+fijos; reserva existencias: `EXISTENCIA_RESERVADA` para ventas y traslados; anticipo inicial como pasivo
+2.1.04.01 con rastro), `abonar_apartado`, `completar_apartado` (factura CAI con forma `anticipo`),
+`cancelar_apartado` (anticipo a saldo a favor, devuelto o a elegir: `apartado_cancelacion`); vencido
+(`apartado_dias_vigencia`, 30) ya no reserva. `v_apartado`.
+
+**Devoluciones y notas de crédito (035, dentro de ventas)** — `registrar_devolucion`: parcial o total por
+línea (cantidad <= vendida - ya devuelta), inventario al costo de la venta, revierte ingreso (4.1.01.04) e
+ISV, nota de crédito con CAI propio (`nota_credito`) o interna (NC-...); primero rebaja la CxC y lo ya pagado
+va a dinero, saldo a favor (vale sin cliente) o cambio de producto (venta nueva enlazada; se cobra o devuelve
+la diferencia). Tipos permitidos por el dueño (`devolucion_tipos`). Tope `devolucion` por puesto y aprobación
+(`resolver_aprobacion` con rama nueva). `documento_nota_credito`, `v_devolucion`. Una venta con devoluciones
+no se anula (`VENTA_CON_DEVOLUCIONES`).
+
+**Comisiones (036, módulo `comisiones` -> ventas)** — `configurar_comisiones` (interruptor y base ganancia |
+precio sin ISV; solo el dueño), `fijar_porcentaje_comision` (historial), devengo al quedar cobrada completa y
+ajustes solos con devoluciones, cobros anulados y anulaciones (aunque ya se hayan pagado), `pagar_comisiones` /
+`anular_pago_comisiones` (Dr 2.1.03.04 / Cr cuenta de dinero, con rastro). `v_comision`,
+`v_comision_vendedor`, `v_mis_comisiones` (el vendedor ve solo lo suyo, sin costos).
+
+**Cierre (037)** — `configurar_empresa`: `vale_dias_vigencia`, `apartado_dias_vigencia`, `apartado_cancelacion`,
+`devolucion_tipos`. `MODULO_CON_SALDO` para ventas (también Saldos a favor), apartados y comisiones. Con el
+módulo apagado se puede anular cobros, condonaciones, saldos iniciales de clientes, cancelar apartados, anular
+pagos de comisiones y confirmar transferencias de cobros. Asistente: el paso "clientes" dice cuántos saldos
+iniciales hay (y se marca solo también con ellos).
+
+**Cuentas nuevas** (siguiente código libre si ya eran del cliente): 2.1.04.02 Saldos a favor de clientes,
+6.1.02.12 Saldos condonados, 4.1.01.04 Devoluciones sobre ventas, 2.1.03.04 Comisiones por pagar, 6.1.01.04
+Comisiones sobre ventas. Usos nuevos: `saldo_favor`, `condonacion_cxc`, `apertura_cxc`, `anticipo_clientes`,
+`devolucion_ventas`, `comisiones_por_pagar`, `gasto_comisiones`.
+
+**Permisos:** `cobros.anular`, `cobros.condonar` (dueño, admin), `ventas.saldo_inicial` (dueño),
+`ventas.devolver` (dueño, admin, cajero), `apartados.registrar` (dueño, admin, cajero, vendedor),
+`apartados.cancelar` (dueño, admin), `comisiones.configurar` (dueño), `comisiones.ver` (dueño, admin,
+contador), `comisiones.pagar` (dueño, admin).
+
+**`id_operacion` como datos:** `interno.id_operacion_uso` (tabla, columna, tipo); las etapas nuevas solo
+agregan filas (`interno.tipo_operacion_2b` pregunta al final a `interno.tipo_operacion_2b2`).
+
+**Pruebas nuevas:** 94 cobros, 95 saldo a favor y vales, 96 apartados, 97 devoluciones, 98 comisiones,
+99 cuadre global ampliado, 100 concurrencia (dos cobros a la misma factura y el mismo vale a la vez),
+101 actualizar desde 0.8.0. La 89 tiene 20 combinaciones (con apartados y comisiones) y su cuadre incluye
+saldo a favor, anticipos, comisiones e ISV = ventas - notas de crédito.
+
+**Cambios que rompen (para quien ya usaba 0.8.0 en pruebas)**
+- Permisos nuevos para dueño, admin, cajero, vendedor, contador y el proveedor con soporte: se ajustaron las
+  pruebas 19, 31, 48, 57, 69 y 87. Dependencias nuevas (8): pruebas 88 y 93.
+- Empresas nuevas traen 6.1.02.12 "Saldos condonados a clientes": la prueba 32 usa ahora 6.1.02.20.
+- `interno.registrar_venta_base` tiene un sexto parámetro opcional (apartado); `interno.emitir_venta`,
+  `interno.anular_venta_base`, `resolver_aprobacion`, `configurar_tope_rol`, `configurar_empresa`,
+  `estado_arranque`, `revisar_activacion_modulo`, `tipo_operacion_2b`, `empresa_de_documento`,
+  `cobros_vigentes_venta`, `saldo_cxc_cliente`, `total_cxc` y `v_cxc_documento` se reemplazaron con la misma
+  firma (la vista con columnas nuevas al final). `venta_pago` acepta las formas `saldo_favor` y `anticipo`
+  (columnas nuevas `vale`, `saldo_favor_id`).
+
+**Pendiente (honesto):** qué hacer con un vale vencido (hoy sigue en el pasivo y no se usa); devolver en
+efectivo un saldo a favor sin una venta o apartado; penalidad al cancelar un apartado; anular una nota de
+crédito (hoy no se anula: se corrige con otra venta); una devolución con "ventas" apagado no se registra;
+un cambio de producto sobre el tope no queda pendiente; las leyendas de la nota de crédito y el trato fiscal
+del anticipo los debe validar un contador; no se consultó a los agentes constructor-maestro y revisor (esta
+sesión no los tiene).
+
+## 0.8.0 (2026-10-03) — Módulos sin romper los números, ficha del proveedor, límites y decisiones de ventas
+
+Migraciones nuevas 030-032 (las 001-029 no se tocaron). 93 pruebas (nuevas 88-93).
+
+**Dependencias entre módulos como datos (030)** — tabla `modulo_dependencia`: inventario, dinero y
+ventas -> contabilidad; compras -> inventario; fiscal_hn -> ventas. No se activa un módulo sin lo que
+necesita ni se apaga uno que otro activo usa (`MODULO_DEPENDENCIA` dice cuál); se revisa al final de
+cada sentencia (trigger de restricción). Ventas ya NO exige inventario: sin él solo vende servicios
+(un bien da `MODULO_INACTIVO`); sin dinero solo vende al crédito. El catálogo (productos, categorías,
+unidades, precios) también se edita con solo "ventas" (`interno.modulo_alterno`).
+
+**Apagar = solo impide lo nuevo (030)** — `interno.exigir_escritura` deja pasar, con el módulo apagado
+(si estuvo activo), las correcciones de `interno.modulo_apagado_permite`: anular compras, pagos y
+saldos iniciales de proveedores, documentos de inventario, operaciones de dinero, gastos y ventas
+(solicitar y aprobar), cancelar ventas pendientes, anular cotizaciones, cerrar un turno abierto,
+resolver diferencias, confirmar depósitos y transferencias. Las cuentas del módulo (1.1.03.01,
+1.1.02.01, 2.1.01.01, 1.1.02.04) siguen sin asientos manuales aunque esté apagado
+(`modulo_activo.estuvo_activo`). Nunca se borra nada.
+
+**Decisiones del dueño sobre ventas (031)** — nunca descuento sobre descuento: con varias promociones
+vigentes quien vende elige una (`"promocion_id"` por línea; si no, `PROMOCION_A_ELEGIR` con la lista;
+`PROMOCION_INVALIDA` si no aplica); una línea con promoción no admite descuento manual y el descuento
+de factura va solo a las líneas sin otro descuento (`DESCUENTO_DOBLE`). `promociones_aplicables(...)`.
+`empresa.vendedor_cobra` (falso por defecto; solo el dueño con `configurar_empresa`, motivo y
+bitácora; perfil pequeño = true; respeta turnos). Confirmados sin cambios: topes de descuento 5 % /
+10 % / 20 %, el admin aprueba créditos y anulaciones hasta L 5,000, cotizaciones de 15 días.
+
+**Límites del contrato y solicitudes (032)** — `limite_contrato` (usuarios, cajas, sucursales,
+bodegas; null = sin límite) que escribe solo el proveedor; crear o reactivar de más da
+`LIMITE_CONTRATO` ("Llegaste al máximo de tu plan. Solicita una ampliación a tu proveedor."); los
+desactivados y el usuario del proveedor no cuentan; bajar un límite no desactiva nada.
+`solicitud_proveedor`, `solicitar_al_proveedor` (dueño y admin, aun con licencia vencida),
+`responder_solicitud_proveedor` (llave del proveedor). `mi_perfil()` trae `limites` (límite y uso) y
+`empresa.vendedor_cobra`. Permiso nuevo `proveedor.solicitar`.
+
+**Ficha del proveedor (032 y herramientas)** — `vista_previa_ficha` / `aplicar_ficha` (solo
+service_role): módulos en el orden de las dependencias, perfil, licencia y límites, todo o nada, con
+bitácora. Ficha formato 2 en `clientes/<cliente>/ficha.json` (ignorada por git salvo
+`clientes/ejemplo/ficha.json`; `personal/ficha.schema.json` acepta los dos formatos).
+`herramientas/aplicar_ficha.sh` (valida, vista previa, prueba y deshace, confirma con el identificador
+del cliente, respaldo cifrado, aplica; `--solo-mostrar`), `herramientas/lista_clientes.sh` (paquete,
+módulos, licencia, núcleo, uso/límite con `(!)` al 80 %, solicitudes pendientes; sin acceso muestra
+la ficha), `herramientas/ficha.py` (lo usan las tres). `nuevo_cliente.sh` acepta el formato 2 y pone
+licencia y límites en la misma transacción. `conexion.sh`: `CONEX_SIN_PEDIR_CLAVE=1`.
+
+**Pruebas nuevas:** 88 dependencias y apagado, 89 combinaciones de módulos con cuadre global (14),
+90 promociones y vendedor que cobra, 91 límites y solicitudes, 92 herramientas de la ficha,
+93 actualizar desde 0.7.0 con datos.
+
+**Cambios que rompen (para quien ya usaba 0.7.0 en pruebas)**
+- Una línea con promoción + descuento manual, o el descuento de factura sobre líneas con otro
+  descuento, ahora da `DESCUENTO_DOBLE` o se reparte solo en las líneas libres; con dos promociones
+  vigentes hay que mandar `promocion_id`. Se ajustó la prueba 80 (cifras rehechas a mano).
+- Activar compras sin inventario o fiscal_hn sin ventas, o apagar inventario/ventas con compras/
+  fiscal_hn activos, ahora da `MODULO_DEPENDENCIA`: se ajustaron las pruebas 45, 74 y 85.
+- El admin tiene un permiso más (`proveedor.solicitar`) y el perfil un cambio más (`vendedor_cobra`):
+  se ajustaron las pruebas 31 y 74.
+- `calcular_venta`, `registrar_venta_base`, `configurar_empresa`, `cambios_perfil`, `guardar_perfil`,
+  `perfiles_negocio`, `mi_perfil`, `resolver_aprobacion`, `exigir_escritura`,
+  `revisar_cuenta_controlada` y `tipo_operacion_2b` se reemplazaron con la misma firma.
+
+**Ventas pendientes y módulos apagados (031):** aprobar una venta pendiente la emite, así que pide
+"inventario" (si lleva bienes) y "dinero" (si se cobra al contado) como una venta nueva
+(`resolver_aprobacion` reemplazada con la misma firma); rechazarla o cancelarla sí se puede.
+
+**Pendiente (honesto):** aviso automático al proveedor de las solicitudes (hoy en
+`lista_clientes.sh`); la doble revisión de límites con dos personas a la vez no tiene prueba de
+concurrencia propia (la protege el candado de la fila de límites).
+
+## 0.7.0 (2026-10-03) — Etapa 2b-2a: ventas, CAI, impuestos como datos y servicios
+
+Migraciones nuevas 026-029 (las 001-025 no se tocaron). 87 pruebas (nuevas 77-87).
+
+**Impuestos como datos (026)** — tabla `impuesto` por empresa (código, nombre, porcentaje, clase
+gravado/exento/exonerado, cuentas por pagar y de crédito fiscal), sembrada por país
+(`interno.plantilla_impuesto`; Honduras: ISV15, ISV18, EXENTO, EXONERADO). `producto.tipo_impuesto`
+y `compra_linea.tipo_impuesto` apuntan a la tabla (mismos códigos de antes). `configurar_impuesto`
+(solo el dueño), `precio_con_tasa`, `precio_impuesto`. Compras, gastos (`"impuesto"`) y ventas calculan con la tabla.
+
+**Servicios (026)** — `producto.tipo` bien | servicio; un servicio no mueve kardex; costo estimado
+opcional en `servicio_costo` (solo con `inventario.costos`, nunca va a los libros);
+`empresa.permite_servicios`; unidades SERV, HORA, SES, MES; `v_producto` con tipo e impuesto.
+
+**Régimen fiscal de Honduras (027, módulo `fiscal_hn`)** — `cai_rango` por caja y tipo de documento,
+`registrar_cai` / `desactivar_cai` / `reactivar_cai`, numeración del servidor dentro del rango de
+ESA caja (sin repetir ni saltar), `SIN_CAI` / `CAI_VENCIDO` / `CAI_AGOTADO`, `cai_alertas` y
+`v_cai_rango` (días y % configurables), leyendas y datos fiscales en el documento. Despacho por
+régimen (`interno.numero_fiscal`, un solo régimen activo). Sin régimen: ticket interno.
+
+**Ventas (028)** — `registrar_venta` todo o nada (documento, kardex a costo promedio, asiento y
+rastro); efectivo (turno), tarjeta (POS por liquidar), transferencia (por confirmar →
+`confirmar_transferencia_venta`), crédito (CxC con vencimiento), mixto; consumidor final;
+promociones por categoría (`crear_promocion`, `editar_promocion`), descuento por artículo y por
+factura prorrateado; topes de descuento por puesto (`configurar_tope_descuento`) y de crédito y
+anulación (`configurar_tope_rol` acepta `credito` y `anulacion_venta`); venta pendiente sin mover
+nada; `cancelar_venta`; crédito `segun_limite` | `siempre_aprobacion`; anulación solicitada
+(`solicitar_anulacion_venta`) y aprobada con motivo; el dinero sale de la misma cuenta.
+`resolver_aprobacion` despacha gasto, venta y anulación, con **doble aprobación** (también gastos).
+Clientes 1.1.02.01 controlada por el módulo (`MODULO_CON_SALDO` al activar con saldo).
+`configurar_empresa`: `credito_politica`, `documento_venta_modo`, `cai_dias_alerta`,
+`cai_porcentaje_alerta`, `leyenda_factura`, `cotizacion_dias_vigencia`, `cotizacion_precios`,
+`permite_servicios`. El paso "primera venta" del asistente se marca solo.
+
+**Cotizaciones y lecturas (029)** — `crear_cotizacion`, `anular_cotizacion`,
+`convertir_cotizacion_a_venta` (respeta precios cotizados si está vigente o recalcula, según
+configuración); `v_venta`, `v_venta_linea`, `v_venta_pago`, `v_ventas_por_dia`,
+`v_ventas_por_vendedor`, `v_ventas_por_caja`, `v_cxc_documento`, `v_cxc_cliente` (antigüedad),
+`v_cotizacion`, `documento_venta` (total en letras) y `seguir_venta`.
+
+**Permisos:** `ventas.ver`, `ventas.vender`, `ventas.cobrar`, `ventas.cotizar`, `ventas.aprobar`,
+`ventas.solicitar_anulacion`, `ventas.anular`, `ventas.promociones`, `cai.administrar`,
+`impuestos.configurar` (solo dueño). Vendedor: vende, cotiza y solicita; cajero: además cobra;
+admin: todo de ventas con topes; contador: `ventas.ver`. Módulo nuevo `fiscal_hn`.
+
+**Ganchos para 2b-2b:** `interno.cobros_vigentes_venta` (hoy 0), `interno.saldo_cxc_cliente`,
+`interno.total_cxc`, `v_cxc_documento.cobrado_centavos`.
+
+**Cambios que rompen (para quien ya usaba 0.6.0 en pruebas)**
+- Admin, cajero, vendedor, contador y el proveedor con soporte tienen permisos nuevos: se ajustaron
+  las pruebas 19, 31, 48, 57 y 69. El error de un impuesto que no existe es `IMPUESTO_INVALIDO`
+  (antes `DATO_INVALIDO`): se ajustó la prueba 35.
+- `resolver_aprobacion`, `configurar_tope_rol`, `configurar_empresa`, `registrar_compra`,
+  `registrar_gasto`, `crear_producto`, `editar_producto`, `estado_arranque`, `mover_inventario`,
+  `buscar_producto_por_codigo` y `v_producto` / `v_aprobacion` se reemplazaron con la misma firma
+  (las vistas, con columnas nuevas al final).
+
+## 0.6.0 (2026-10-03) — Etapa 2b-1.1: arranque fácil para cualquier tamaño de negocio
+
+Migración nueva 025 (las 001-024 no se tocaron). 76 pruebas (nuevas 72-76).
+
+**Saldo negativo por cuenta de dinero**
+- `cuenta_dinero.politica_saldo_negativo`: `no_permitir` (defecto, como antes),
+  `permitir_con_alerta` (alerta "Revise el saldo inicial" mientras esté en
+  negativo) o `sobregiro_hasta` con `sobregiro_limite_centavos`.
+- `configurar_saldo_negativo(empresa, cuenta, politica, limite, motivo)`: solo
+  el dueño, con motivo y bitácora; no pasa a una política más estricta si la
+  cuenta ya está por debajo. Tránsito siempre `no_permitir`.
+- `interno.rastrear_dinero` revisa solo la cuenta de la que SALE dinero (una
+  entrada nunca se rechaza). El rastro sigue obligatorio.
+- `donde_esta_mi_dinero` trae `alertas` y, por cuenta, `politica_saldo_negativo`
+  y `alerta`; `v_cuenta_dinero` tiene columnas nuevas al final.
+
+**Turnos de caja obligatorios o no** — `empresa.turnos_obligatorios` (defecto
+true) en `configurar_empresa` (solo el dueño). Sin turnos obligatorios el
+efectivo entra a la caja sin turno: `interno.cuenta_efectivo_cobro(empresa, caja?)`
+para los cobros de 2b-2; `interno.exigir_turno_abierto` devuelve un turno vacío.
+
+**Perfiles por tamaño** (`interno.plantilla_perfil`, `_modulo`, `_tope`):
+`perfiles_negocio()`, `vista_previa_perfil(empresa, perfil)` y
+`aplicar_perfil(empresa, perfil, motivo)` (solo el dueño; bitácora). Nunca
+borran datos ni activan o desactivan módulos (eso es del proveedor según el
+plan). Banderas nuevas en `empresa`: `perfil`, `contabilidad_visible`,
+`doble_aprobacion` (también en `configurar_empresa` y en `mi_perfil()->'empresa'`).
+`crear_empresa_inicial` acepta `"perfil"` (ficha.schema.json y ficha.ejemplo.json);
+sin `"modulos"` en la ficha activa los que sugiere el perfil.
+
+**Asistente de arranque:** `estado_arranque(empresa)` (7 pasos con estado
+hecho/saltado/pendiente y porcentaje; "hecho" sale de los datos reales),
+`marcar_paso_arranque(empresa, paso, 'saltado'|'pendiente')`, tabla
+`arranque_paso`, permiso nuevo `arranque.gestionar` (dueño y admin).
+`empezar_cuenta_en_cero(empresa, cuenta)` (solo el dueño). Nunca bloquea operar.
+
+**Valores iniciales confirmados:** admin registra y aprueba gastos hasta
+L 5,000.00; arqueo a ciegas; solo la moneda de la empresa (prueba 75).
+
+**Pendiente (honesto):** `doble_aprobacion` solo se guarda; se aplicará en las
+aprobaciones de 2b-2. El paso "primera venta" se marcará solo con el módulo de ventas.
+
+**Cambios que rompen:** ninguno para la app. El admin tiene un permiso más
+(`arranque.gestionar`): se ajustó la prueba 31.
+
+## 0.5.0 (2026-10-03) — Etapa 2b-1: dinero (y correcciones de la revisión de 0.4.0)
+
+Migraciones nuevas 021-024 (las 001-020 no se tocaron). 71 pruebas.
+
+**Correcciones de la revisión de 0.4.0 (021 y herramientas)**
+- A. Una factura cargada como saldo inicial ya no entra como compra si el
+  proveedor llega con el uuid en MAYÚSCULAS (se compara como uuid, con el candado).
+- B. Activar un módulo toma primero el candado de la empresa: nadie mete un
+  asiento a la cuenta controlada mientras se compara libros contra módulo.
+- C. Las RPC revisan el `id_operacion` otra vez DESPUÉS de `bloquear_libros`
+  (`interno.reservar_operacion`). Antes, un asiento manual y una compra con el
+  mismo id al mismo tiempo podían pasar los dos (el asiento devolvía el de la compra).
+- D. `conexion.sh`: "base local" es solo el socket de `.pgdata` del proyecto
+  (o `BASE_LOCAL_SOCKET`); `localhost` ya no permite `SIN_PREGUNTAR`/`SIN_RESPALDO`.
+- E. `nuevo_cliente.sh` pasa la ficha por la entrada estándar de psql, no como argumento.
+- F. El motor de inventario bloquea el producto antes que su saldo y nunca deja
+  una existencia con decimales en un producto sin decimales (ni al anular);
+  quitar "decimales" bloquea los saldos antes de revisar.
+
+**Cuentas de dinero y rastro (022)**
+- `cuenta_dinero` (caja, banco con número enmascarado, caja chica con fondo
+  fijo, POS por liquidar, transferencias por confirmar, tránsito): crear una
+  crea su subcuenta 1.1.01.NN; esa subcuenta no acepta asientos manuales.
+- `dinero_movimiento`: una fila por cada línea que toca una cuenta de dinero
+  (contrapartida, usuario, equipo, referencia, turno). Sin ella el asiento no
+  se confirma (`MOVIMIENTO_SIN_RASTRO`). Ninguna cuenta queda en negativo.
+- `trasladar_dinero` (depósito en tránsito, retiro, reposición de caja chica,
+  traslado), `confirmar_deposito`, `anular_operacion_dinero`,
+  `registrar_saldo_inicial_dinero` (solo dueño), `agregar_adjunto`
+  (comprobantes en Storage con huella sha256, solo agregar).
+- Lecturas: `donde_esta_mi_dinero`, `estado_cuenta_dinero`, `v_cuenta_dinero`,
+  `v_deposito_transito` (alerta con `dias_alerta_transito`, nueva clave de `configurar_empresa`).
+- Compras: `registrar_compra` acepta `cuenta_dinero_id`; `pagar_proveedor`
+  tiene un último parámetro opcional `p_cuenta_dinero_id`; pagos, compras de
+  contado y sus anulaciones dejan rastro.
+
+**Turnos de caja (023):** `abrir_turno`, `cerrar_turno` (arqueo con conteo por
+denominación), `resolver_diferencia` (al cajero, a gasto u otros ingresos),
+`mi_turno`, `v_turno_caja`, `v_diferencia_cajero`. Cuentas nuevas 1.1.02.04,
+1.1.02.05, 4.2.01.03, 6.1.02.11 (siguiente código libre si ya eran del cliente).
+
+**Gastos (024):** categorías, `registrar_gasto` (ISV crédito fiscal con
+factura y RTN), topes por puesto (`configurar_tope_rol`), aprobaciones
+genéricas (`resolver_aprobacion`), `anular_gasto`, `cuadre_caja_chica`,
+pagos fijos (`crear_pago_fijo`, `editar_pago_fijo`, `registrar_pago_fijo`,
+`pagos_fijos_proximos`, `reporte_pagos_fijos`).
+
+**Permisos y módulo:** módulo nuevo `dinero`. Permisos `dinero.ver`,
+`dinero.administrar`, `dinero.trasladar`, `dinero.anular`,
+`dinero.saldo_inicial` (solo dueño), `adjuntos.agregar`, `caja.turno`,
+`caja.supervisar`, `gastos.registrar`, `gastos.aprobar`, `gastos.anular`,
+`aprobaciones.ver`. Admin: todo menos saldos iniciales; contador: `dinero.ver`
+y `aprobaciones.ver`; cajero: `caja.turno` y `adjuntos.agregar`; vendedor: nada de dinero.
+
+**Cambios que rompen (para quien ya usaba 0.4.0 en pruebas)**
+- `pagar_proveedor` tiene 9 parámetros (el último opcional): las llamadas de
+  antes funcionan igual, pero quien la referencie por su firma de 8 debe usar la nueva.
+- Empresas NUEVAS traen 6.1.02.11 "Faltantes de caja" (y 1.1.02.04/05,
+  4.2.01.03): una subcuenta propia del cliente toma el siguiente número.
+- `SIN_PREGUNTAR`/`SIN_RESPALDO` ya no aceptan `localhost`.
+- Se ajustaron las pruebas 19, 31, 32, 48 y 57 (permisos nuevos, código
+  6.1.02.11 ocupado, última migración).
+
+## 0.4.0 (2026-10-03) — Correcciones de la revisión de la etapa 2a
+
+Migraciones nuevas 017-020 (las 001-016 no se tocaron). 57 pruebas.
+
+**Compras y cuentas por pagar (019)**
+- `anular_pago_proveedor(pago, motivo, id_operacion, fecha?)`: contra-asiento a
+  la MISMA cuenta de dinero, mes abierto, una sola vez, nunca con fecha anterior
+  al pago; la factura recupera su saldo. Sin pagos vigentes, `anular_compra` ya
+  funciona. Patrón documentado para los cobros de 2b (CONVENCIONES).
+- Saldos iniciales de proveedores: `registrar_saldo_inicial_cxp` /
+  `anular_saldo_inicial_cxp` (permiso `compras.saldo_inicial`, solo dueño).
+  Salen en `v_cxp_documento` / `v_cxp_proveedor` y se pagan con `pagar_proveedor`.
+- `v_cxp_documento`: columnas nuevas al final `origen`, `documento_id`,
+  `fecha_documento` (la antigüedad se cuenta desde la fecha de la factura).
+- Activar inventario o compras con saldo en 1.1.03.01 / 2.1.01.01 que el
+  módulo no explica se rechaza (`MODULO_CON_SALDO`) con el procedimiento P-07.
+
+**Inventario (018)**
+- Cuenta nueva 3.3.01.03 "Saldos de apertura" (patrimonio): la carga inicial
+  va contra ella (antes 3.1.01.01). Si el código ya era del cliente, se usa el
+  siguiente libre (3.3.01.04...).
+- `anular_documento_inventario(documento, motivo, id_operacion, fecha?)` para
+  carga inicial, ajuste y traslado, solo sin movimientos posteriores
+  (`MOVIMIENTOS_POSTERIORES`). Una carga anulada se puede volver a cargar.
+- Costo promedio en orden de registro: una entrada con fecha anterior a la
+  última salida del producto en esa bodega se rechaza (`ENTRADA_FECHA_ATRASADA`)
+  salvo permiso `inventario.fecha_atrasada` (solo dueño).
+- 0 unidades = L 0.00: el valor que sobre pasa a 5.1.01.02 con una línea
+  `ajuste_costo` en el kardex y su asiento.
+- `permite_fracciones` no se apaga con existencias fraccionarias.
+- `desactivar_sucursal` rechaza si sus bodegas tienen existencias o valor.
+  Nuevas: `reactivar_sucursal`, `reactivar_caja`, `reactivar_bodega`,
+  `reactivar_categoria`, `reactivar_campo_extra`.
+
+**Seguridad (017)**
+- Rol `contador`: solo lectura (contabilidad, reportes, bitácora, terceros,
+  compras, existencias CON costos). Solo el dueño lo crea; nunca recibe
+  permisos de movimiento ni de administrar.
+- Permiso `terceros.ver` (financiero): el proveedor ya no ve clientes ni
+  proveedores (ni límites de crédito) sin acceso de soporte vigente.
+- RLS: el filtro por permiso se calcula una vez por consulta
+  (`empresa_id = ANY (ARRAY(SELECT empresas_con_permiso(...)))`) e índices nuevos.
+- `id_operacion` por tipo: un reintento solo se reconoce si es del mismo tipo
+  de operación; si no, `ID_OPERACION_USADO` (antes un asiento manual con el id
+  de una compra devolvía el asiento de la compra como "duplicado").
+- `anular_asiento`: la fecha no puede ser anterior al asiento original.
+- Ajustes, traslados, cargas y anulaciones no devuelven costos a quien no
+  tiene `inventario.costos` (vienen en null con `"costos_ocultos": true`).
+
+**Precio con o sin ISV (020, decisión del dueño)**
+- `producto.precio_incluye_isv` y `empresa.precio_incluye_isv_defecto`
+  (true; lo cambia solo el dueño con `configurar_empresa`). El precio se
+  guarda tal como se escribe. `public.precio_isv()` y vista `v_producto` con
+  precio sin y con ISV (ISV por línea, redondeo a centavo, mitades hacia arriba).
+  El historial de precios guarda la marca.
+
+**Herramientas y procedimientos**
+- `migrar.sh` y `nuevo_cliente.sh`: muestran el servidor completo y avisan si
+  usan una DATABASE_URL de la terminal; se confirma escribiendo la referencia
+  del proyecto de Supabase o el nombre de la empresa que ya está en la base.
+- La clave nunca va como argumento de psql/pg_dump: pgpass temporal (600) que
+  se borra; si falta, se pide con `read -s`. `SIN_PREGUNTAR`/`SIN_RESPALDO`
+  solo con base local.
+- Respaldos CIFRADOS (age con llave pública, o gpg AES256); nuevos
+  `respaldar.sh` y `restaurar.sh` (en base nueva, todo o nada, con revisión).
+- PROCEDIMIENTOS: P-03 reescrito, P-06 simulacro de restauración, P-07
+  activar un módulo con saldos previos; nota honesta sobre el acceso técnico
+  del proveedor (service_role / clave postgres).
+
+**Cambios que rompen (para quien ya usaba 0.3.0 en pruebas)**
+- Carga inicial de inventario: el haber va a 3.3.01.03 (antes 3.1.01.01).
+  Las cargas viejas no se tocan; al anularlas vuelven contra 3.1.01.01.
+- Productos creados antes de 0.4.0 quedan con `precio_incluye_isv = false`
+  (su precio era sin ISV). Los nuevos toman el defecto de la empresa (true).
+- Leer `tercero` pide `terceros.ver` (se dio a dueño, admin, cajero, vendedor).
+- `pago_proveedor.compra_id` puede venir vacío (pago de un saldo inicial:
+  `saldo_inicial_id`). `pagar_proveedor` acepta el id de la compra o del saldo inicial.
+- `migrar.sh` ya no deja respaldos sin cifrar; pide frase o llave (P-03).
+- Se ajustaron las pruebas 19, 20, 31, 36 y 39 (permisos nuevos, respaldo cifrado, cuenta de apertura).
+
+## 0.3.0 (2026-10-03) — Etapa 2a
+
+Migraciones nuevas 012-016 (las 001-011 no se tocaron). 43 pruebas.
+
+**Roles (decisión del dueño, 012)**
+- El admin, por defecto: agrega y desactiva usuarios cajero y vendedor
+  (crear o desactivar administradores es solo del dueño), sucursales, cajas y
+  bodegas; catálogos, precios, clientes y proveedores; crédito hasta el tope
+  del dueño; compras, pagos, ajustes y traslados.
+- El admin nunca nombra ni toca dueños ni administradores, no toca al
+  proveedor y no da (ni cambia o desactiva a alguien con) un rol con permisos
+  que él no tiene.
+- Solo del dueño, sin poder delegarse: `permisos.editar`, `periodos.reabrir`,
+  `soporte.otorgar`, `empresa.configurar`.
+- `configurar_empresa`: tope de límite de crédito y permitir existencia negativa.
+- Contraseñas: quedan en Supabase Auth; alta con clave temporal y
+  restablecer por Edge Function (pendiente, ver `nucleo/docs/usuarios.md`).
+
+**Clientes y proveedores (013):** una tabla `tercero` con roles, RTN
+validado, teléfono, correo, límite de crédito (centavos) y plazo. Crear,
+editar, desactivar y reactivar; historial en bitácora.
+
+**Productos (014):** unidades, categorías (3 niveles), campos extra
+validados por empresa, productos con código interno y de barras únicos,
+ISV15/ISV18/EXENTO, precio en centavos, historial de precios con motivo.
+
+**Inventario (015):** bodegas; kardex solo-agregar con costo promedio
+ponderado y saldos por bodega actualizados en la misma transacción con
+candado; existencia negativa solo con configuración o permiso (con alerta);
+ajustes por conteo físico con asiento; traslados; carga inicial con asiento
+de apertura; búsqueda por código de barras; vistas `v_existencia` y `v_kardex`.
+
+**Compras (016):** compras al contado o crédito (documento + kardex + asiento
+en una transacción), ISV crédito fiscal, anulación con contra-movimiento y
+contra-asiento, pagos a proveedores sin pasar el saldo; el dinero sale de la
+caja o banco elegido (subcuenta de 1.1.01) y la anulación vuelve a ella; vistas
+`v_cxp_documento` y `v_cxp_proveedor` con antigüedad.
+
+**Cuadre con la contabilidad:** con inventario o compras activos, las
+cuentas 1.1.03.01 y 2.1.01.01 no aceptan asientos manuales
+(`CUENTA_CONTROLADA`), y `anular_asiento` no anula asientos de un módulo.
+
+**Cambios que rompen (para quien ya usaba 0.2.0 en pruebas)**
+- El admin ya tiene `usuarios.administrar` y `sucursales.administrar`;
+  cajero y vendedor tienen `inventario.ver` y `terceros.editar` (se dan
+  también a las empresas ya instaladas).
+- Asientos manuales a 1.1.03.01 / 2.1.01.01 se rechazan si el módulo
+  inventario / compras está activo.
+- Se ajustaron las pruebas 19, 31 y 32 a los permisos nuevos.
+
+## 0.2.0 (2026-10-03) — Etapa 1.5
+
+Las migraciones 001-007 se corrigieron directamente (ningún cliente las tenía
+instaladas); lo nuevo va en 008-011.
+
+**Seguridad y auditoría**
+- Bitácora con huella encadenada (sha256 por fila + huella anterior, por
+  empresa) y `verificar_bitacora()` que detecta filas editadas, borradas o
+  metidas a la fuerza.
+- El proveedor ya no ve cifras (asientos, saldos, bitácora) por defecto ni
+  recibe permisos por la tabla de roles. Nuevo acceso de soporte temporal:
+  el dueño lo da con motivo y vencimiento (máx. 30 días), vence solo, se
+  puede revocar y queda en bitácora (`otorgar_acceso_soporte`,
+  `revocar_acceso_soporte`).
+- `cambiar_permiso_rol` exige motivo (mín. 5 letras), que queda en bitácora.
+- Permisos nuevos: `usuarios.administrar`, `sucursales.administrar`,
+  `catalogo.editar`, `soporte.otorgar`. Columna `permiso.es_financiero`.
+
+**Contabilidad**
+- Fecha contable entre `empresa.fecha_inicio` y hoy + `dias_futuro_max`
+  (3 por defecto, configurable 0-31).
+- Cierre de meses en orden; meses anteriores sin movimientos se cierran
+  solos; no se cierra el mes en curso ni futuros; se reabre solo el último
+  cerrado.
+- Al registrar se exige sucursal activa (error claro si no hay ninguna).
+- `saldo_cuentas(empresa, desde, hasta)`: saldo inicial, movimiento y saldo final.
+- Registrar, anular, cerrar y reabrir se ordenan con el mismo candado por
+  empresa (sin números repetidos ni huecos con varias personas a la vez).
+
+**Empresa e instalación**
+- `empresa`: `moneda` ISO 4217 (defecto HNL), `pais` ISO 3166 (defecto HN),
+  `rubro`, `fecha_inicio`, `dias_futuro_max`; zona horaria validada.
+- `hoy_local()` usa la zona horaria de la empresa.
+- `crear_empresa_inicial(ficha jsonb)` valida la ficha campo por campo.
+  `personal/ficha.schema.json` (JSON Schema) y `herramientas/nuevo_cliente.sh`.
+- Fechas exportadas en ISO 8601 (`iso()` para fecha y hora en UTC).
+
+**App**
+- `mi_perfil()`: usuario, empresa, rol, permisos, módulos y estado de licencia
+  (activa / en gracia / solo lectura, con días).
+- Administración: agregar/desactivar usuarios, crear/desactivar sucursales y
+  cajas, crear subcuentas.
+- Catálogo de errores (`error_catalogo`): mensaje sencillo y qué hacer.
+
+**Herramientas**
+- `migrar.sh`: muestra a qué base se conecta, `--solo-mostrar`, pide
+  escribir el nombre de la base, respaldo previo con pg_dump en `respaldos/`.
+- `probar.sh`: también corre pruebas `.sh`; la versión esperada sale de
+  `VERSION_NUCLEO`. 32 pruebas.
+
+**Cambios que rompen (para quien ya usaba 0.1.0 en pruebas)**
+- `crear_empresa_inicial(nombre, rtn, dueño, proveedor)` ahora es
+  `crear_empresa_inicial(ficha jsonb)`.
+- `cambiar_permiso_rol` tiene un quinto parámetro obligatorio: `motivo`.
+- `hoy_local()` ahora acepta la empresa: `hoy_local(empresa)`.
+- La ficha usa `nombre` en vez de `nombre_comercial`.
+
+## 0.1.0 — Etapa 1
+
+- Esquema base: empresa, sucursal, caja (punto de emisión), roles, permisos
+  editables por empresa, usuarios por empresa, módulos y licencia.
+- Bitácora solo-agregar; nada se borra ni se edita (ni el superusuario).
+- Catálogo de cuentas NIIF para PYMES.
+- Meses contables: cerrar y reabrir con motivo.
+- Asientos de partida doble con `id_operacion` (sin duplicados), anulación
+  por contra-asiento, numeración sin huecos.
+- RLS: cada quien ve solo su empresa. Licencia vencida = solo lectura.
+- `probar.sh` y `migrar.sh`. 16 pruebas.

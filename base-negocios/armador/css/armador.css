@@ -1,0 +1,79 @@
+/* Armador del proveedor: usa tema.css, base.css y controles.css de la app (mismos colores y letra).
+   Aquí solo lo propio del Armador. */
+.armador-sello { font-size: 13px; color: var(--color-en-principal-suave); border: 1px solid var(--color-en-principal-suave);
+  border-radius: 10px; padding: 2px 8px; white-space: nowrap; }
+.pasos { display: flex; flex-direction: column; gap: 20px; }
+.paso-numero { display: inline-flex; width: 28px; height: 28px; border-radius: 50%; background: var(--color-principal);
+  color: var(--color-en-principal); align-items: center; justify-content: center; font-size: 15px; margin-right: 8px; flex: none; }
+.paso-cabeza { display: flex; align-items: center; margin: 0 0 12px; }
+.rubros { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; }
+.rubro { text-align: left; border: 2px solid var(--color-linea); background: var(--color-tarjeta); border-radius: 12px;
+  padding: 14px; cursor: pointer; font: inherit; color: var(--color-texto); min-height: 44px; display: flex; flex-direction: column; gap: 4px; }
+.rubro strong { color: var(--color-principal); font-size: 16px; }
+.rubro span { color: var(--color-suave); font-size: 14px; }
+.rubro[aria-pressed="true"] { border-color: var(--color-acento); box-shadow: 0 0 0 2px var(--color-acento) inset; }
+.pregunta { display: flex; flex-direction: column; gap: 6px; padding: 10px 0; border-bottom: 1px solid var(--color-linea); }
+.pregunta:last-child { border-bottom: none; }
+.pregunta-texto { font-weight: 600; font-size: 15px; }
+.pregunta .ayuda { margin: 0; }
+.segmentos { display: flex; flex-wrap: wrap; gap: 6px; }
+.segmento { min-height: 44px; padding: 8px 14px; border-radius: 8px; border: 1px solid var(--color-linea); background: var(--color-tarjeta);
+  font: inherit; font-size: 15px; cursor: pointer; color: var(--color-texto); }
+.segmento[aria-pressed="true"] { background: var(--color-principal); color: var(--color-en-principal); border-color: var(--color-principal); font-weight: 600; }
+.pregunta input[type=number] { max-width: 120px; }
+.sugerencias { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 6px; }
+.sugerencias strong { color: var(--color-principal); }
+.interruptores { display: flex; flex-direction: column; }
+.interruptor { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 0;
+  border-bottom: 1px solid var(--color-linea); min-height: 52px; }
+.interruptor:last-child { border-bottom: none; }
+.interruptor-texto { display: flex; flex-direction: column; }
+.interruptor-texto small { color: var(--color-suave); font-size: 14px; }
+.interruptor.falta .interruptor-texto strong { color: var(--color-peligro); }
+.switch { position: relative; width: 56px; height: 32px; flex: none; }
+.switch input { position: absolute; inset: 0; opacity: 0; margin: 0; cursor: pointer; width: 100%; height: 100%; }
+.switch span { position: absolute; inset: 0; border-radius: 16px; background: #c9c5bc; transition: background .15s; pointer-events: none; }
+.switch span::after { content: ''; position: absolute; top: 3px; left: 3px; width: 26px; height: 26px; border-radius: 50%;
+  background: #ffffff; transition: transform .15s; box-shadow: 0 1px 2px rgba(0,0,0,.2); }
+.switch input:checked + span { background: var(--color-ok); }
+.switch input:checked + span::after { transform: translateX(24px); }
+.switch input:focus-visible + span { outline: 3px solid var(--color-acento); outline-offset: 2px; }
+.switch input:disabled + span { opacity: .75; }
+.estado-sino { font-size: 14px; font-weight: 600; min-width: 24px; text-align: right; }
+.cuatro { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; }
+.colores { display: flex; gap: 16px; flex-wrap: wrap; align-items: flex-end; }
+.colores input[type=color] { width: 64px; height: 44px; padding: 2px; border-radius: 8px; border: 1px solid var(--color-linea); background: #fff; }
+/* Vista previa del menú del cliente */
+.vista-previa { position: sticky; top: 12px; display: flex; flex-direction: column; gap: 12px; }
+.vp-app { border-radius: 12px; overflow: hidden; border: 1px solid var(--color-linea); background: var(--color-fondo); }
+.vp-app .encabezado { padding: 0 16px; }
+.vp-app .pestanas { gap: 14px; flex-wrap: wrap; }
+.vp-app .pestana { font-size: 14px; min-height: 40px; padding: 8px 2px; }
+.vp-app .marca-nombre { font-size: 16px; }
+.vp-app .marca-logo img { width: 36px; height: 36px; border-radius: 8px; object-fit: cover; }
+.vp-cuerpo { padding: 12px 16px 16px; display: flex; flex-direction: column; gap: 10px; }
+.vp-grupo h3 { font-size: 15px; margin: 0 0 6px; }
+.vp-grupo .chips { margin: 0; }
+.chip { font-size: 14px; padding: 4px 10px; border-radius: 14px; background: var(--color-tarjeta); border: 1px solid var(--color-linea); display: inline-flex; align-items: center; gap: 6px; }
+.chip .icono { width: 16px; height: 16px; color: var(--color-suave); }
+.problemas { display: flex; flex-direction: column; gap: 8px; }
+.diferencias { white-space: pre-wrap; font-family: var(--letra-mono); font-size: 14px; background: var(--color-fondo);
+  border: 1px solid var(--color-linea); border-radius: 8px; padding: 12px; margin: 0; max-height: 420px; overflow: auto; }
+.resultado dl { display: grid; grid-template-columns: max-content 1fr; gap: 6px 14px; margin: 8px 0 0; }
+.resultado dt { color: var(--color-suave); }
+.resultado dd { margin: 0; font-weight: 600; word-break: break-all; }
+.uso { white-space: nowrap; }
+.uso.cerca { color: var(--color-peligro); font-weight: 700; }
+.palabras { display: flex; flex-direction: column; gap: 8px; }
+.palabra-fila { display: grid; grid-template-columns: minmax(140px, 1fr) minmax(160px, 1.2fr); gap: 10px; align-items: center; }
+.palabra-fila label { font-size: 14px; color: var(--color-suave); }
+@media (max-width: 699px) {
+  .palabra-fila { grid-template-columns: 1fr; gap: 4px; }
+  .vista-previa { position: static; }
+}
+/* Campos fuera de .campo: mismo aspecto que los de la app (44 px, letra 16 px). */
+.pregunta input[type=number], .palabra-fila input, .palabras select {
+  font: inherit; font-size: 16px; min-height: 44px; padding: 10px 12px; border: 1px solid #8a8780; border-radius: 8px;
+  background: #ffffff; color: #1a1a1a; width: 100%;
+}
+.palabras select { max-width: 420px; }

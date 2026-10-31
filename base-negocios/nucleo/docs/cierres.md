@@ -1,0 +1,54 @@
+# Cierre de mes con foto (040_cierre_mes) — parte de "contabilidad"
+
+> Formatos según NIIF para PYMES. **Un contador hondureño debe validar la presentación**
+> (estado de resultados, balance, flujo e ISV) antes de entregarlos a terceros.
+
+## Cerrar — `cerrar_mes(empresa, año, mes, motivo?)` (`periodos.cerrar`: dueño y admin)
+
+1. **Descuadre contable = NO cierra** (`DESCUADRE_CONTABLE`): el debe no es igual al haber
+   hasta el fin del mes, un asiento no cuadra o el balance no cuadra. No se guarda nada.
+2. Bloquea el mes con `cerrar_periodo` (igual que antes: en orden `MES_ANTERIOR_ABIERTO`,
+   solo meses terminados `MES_NO_TERMINADO`; los meses vacíos de antes se cierran solos).
+3. Guarda la **foto inmutable** (`cierre` + `cierre_detalle`), una sección por estado:
+   `estado_resultados`, `balance_general`, `flujo_efectivo`, `saldos_cuentas`,
+   `cuentas_por_cobrar` (por cliente con antigüedad 0-30/31-60/61-90/+90 y vencido),
+   `cuentas_por_pagar`, `inventario` (por producto y bodega), `dinero` (cada cuenta:
+   inicial, entradas, salidas, final), `saldo_favor` (saldos a favor / vales y anticipos),
+   `comisiones` (por vendedor) e `isv` (débito, crédito, a pagar). Todo "a la fecha de fin
+   del mes" aunque se cierre días después (una anulación cuenta en su fecha).
+4. Devuelve las **advertencias** (no bloquean): `depositos_en_transito`, `turnos_abiertos`,
+   `aprobaciones_pendientes`, `transferencias_por_confirmar`, `cuentas_en_negativo`,
+   `alerta_cuadre` (diferencias de arqueo sin resolver; un módulo que no cuadra con su
+   cuenta) y, con fondos, `reparto_version_anterior`.
+
+Reintento seguro: si el mes ya está cerrado con su foto devuelve la misma (`ya_estaba`).
+Un mes cerrado antes de 0.10.0 (o con `cerrar_periodo`) se puede pasar por `cerrar_mes`
+para guardarle la foto sin abrirlo.
+
+## Reabrir (`reabrir_periodo`, solo el dueño, motivo, en orden)
+
+**0.13.1:** un mes con reparto de utilidades vigente NO se reabre (`MES_CON_REPARTO`): primero se anula
+el reparto (`anular_distribucion`) y después se reabre. Lo revisa un trigger en `periodo` (vale por
+cualquier camino). Por eso la advertencia `reparto_version_anterior` solo puede salir en meses que se
+reabrieron antes de 0.13.1.
+
+Pasos para reabrir un mes con reparto (app 0.10.0: Dinero > Fondos y socios > "Anular reparto"): 1) si ya se
+pagó a algún socio de ese reparto, anular esos pagos; 2) anular el reparto con su motivo; 3) reabrir el mes
+(prueba 137). Ver `fondos.md`.
+
+Al reabrir, la foto vigente queda **superada** (con quién, cuándo y el motivo); nunca se
+borra. Al volver a cerrar se crea la **versión siguiente**. `historial_cierres(empresa,
+año?, mes?)` lista las versiones; `ver_cierre(cierre)` muestra cualquiera completa.
+
+Ejemplo (prueba 120): enero cerrado (v1) con un depósito en tránsito de 50,000 como
+advertencia; febrero cerrado, reabierto ("Falta una factura"), se agrega un gasto de
+1,000 y se cierra otra vez: v1 superada con utilidad 8,087 y v2 vigente con 7,087.
+
+## `id_operacion` opcional (0.16.0)
+
+`cerrar_mes(empresa, año, mes, motivo?, id_operacion?)` y `reabrir_periodo(empresa, año, mes, motivo,
+id_operacion?)`. Sin id: igual que antes (el reintento ya era seguro por el estado del mes: `ya_estaba`).
+Con id: el mismo id devuelve la misma respuesta con `"duplicado": true` sin hacer nada más; el mismo id para
+otro mes o para la otra operación da `ID_OPERACION_USADO`. Cada operación con id queda en la tabla
+`periodo_operacion` (no se edita ni se borra; la lee quien tiene `contabilidad.ver`). Las funciones de
+siempre pasaron a `interno.cerrar_mes_base` / `interno.reabrir_periodo_base` sin cambios.

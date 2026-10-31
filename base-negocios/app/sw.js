@@ -1,0 +1,56 @@
+// Service worker: guarda SOLO el "cascarón" (HTML, CSS, JS, íconos) para instalar
+// y abrir rápido. Los datos (/rest/, /auth/, /storage/, /functions/) SIEMPRE van al servidor: el
+// service worker no los toca. Las fotos de productos las guarda la app (js/fotos.js) en su propia caché
+// "fotos-<empresa>", que se borra al salir; al activar una versión nueva solo se borran cascarones viejos.
+// Al cambiar cualquier archivo del cascarón, suba VERSION. La lista debe tener TODOS los archivos de la app (app 0.14.0:
+// sin internet la app abre solo con lo guardado aquí); la prueba app-pruebas/probar_cascaron.mjs la compara con la carpeta.
+const VERSION = 'cascaron-0.14.0';
+const CASCARON = [
+  './', 'index.html', 'manifest.webmanifest', 'config.js',
+  'css/tema.css', 'css/base.css', 'css/controles.css',
+  'js/app.js', 'js/api.js', 'js/iconos.js', 'js/sesion.js', 'js/menu.js', 'js/menu_datos.js', 'js/formato.js', 'js/errores.js', 'js/ui.js',
+  'js/calculo_local.js', 'js/sin_internet.js',
+  'js/datos.js', 'js/fotos.js', 'js/formularios.js', 'js/comprobante.js', 'js/imprimible.js', 'js/marca.js', 'js/excel.js', 'js/reportes.js', 'vendor/xlsx.bundle.js',
+  'js/pantallas/entrar.js', 'js/pantallas/inicio.js', 'js/pantallas/alertas.js',
+  'js/pantallas/aprobaciones.js', 'js/pantallas/pendientes.js', 'js/pantallas/en_construccion.js', 'js/pantallas/mas.js',
+  'js/pantallas/dinero_donde.js', 'js/pantallas/dinero_gastos.js', 'js/pantallas/dinero_depositos.js', 'js/pantallas/dinero_pagos_fijos.js',
+  'js/pantallas/dinero_fondos.js', 'js/pantallas/dinero_banco.js', 'js/pantallas/dinero_proyeccion.js',
+  'js/pantallas/dinero_transferencias.js', 'js/pantallas/vender_por_resolver.js', 'js/pantallas/talonario.js', 'js/pantallas/aj_sin_internet.js',
+  'js/pantallas/vender.js', 'js/pantallas/ventas_dia.js', 'js/pantallas/cotizaciones.js', 'js/pantallas/devoluciones.js',
+  'js/pantallas/caja_turno.js', 'js/pantallas/caja_dinero.js', 'js/pantallas/caja_gasto.js',
+  'js/pantallas/clientes.js', 'js/pantallas/me_deben.js',
+  'js/pantallas/compras.js', 'js/pantallas/compras_proveedores.js', 'js/pantallas/compras_pagos.js',
+  'js/pantallas/inv_productos.js', 'js/pantallas/inv_existencias.js', 'js/pantallas/inv_conteo.js', 'js/pantallas/inv_movimientos.js',
+  'js/pantallas/inv_traslados.js', 'js/pantallas/inv_excel.js',
+  'js/pantallas/aj_negocio.js', 'js/pantallas/aj_usuarios.js', 'js/pantallas/aj_cajas.js', 'js/pantallas/aj_impuestos.js',
+  'js/pantallas/aj_reglas.js', 'js/pantallas/aj_datos.js',
+  'js/pantallas/rep_gane.js', 'js/pantallas/rep_ventas.js', 'js/pantallas/rep_valorizado.js', 'js/pantallas/rep_empleados.js',
+  'js/pantallas/rep_bitacora.js', 'js/pantallas/rep_cierre.js', 'js/pantallas/rep_antiguedad.js', 'js/pantallas/garantias.js',
+  'iconos/icono.svg', 'iconos/icono-192.png', 'iconos/icono-512.png',
+];
+
+self.addEventListener('install', (e) => {
+  e.waitUntil(caches.open(VERSION).then((c) => c.addAll(CASCARON)).then(() => self.skipWaiting()));
+});
+
+self.addEventListener('activate', (e) => {
+  e.waitUntil(caches.keys()
+    .then((ks) => Promise.all(ks.filter((k) => k.startsWith('cascaron-') && k !== VERSION).map((k) => caches.delete(k))))
+    .then(() => self.clients.claim()));
+});
+
+self.addEventListener('fetch', (e) => {
+  const url = new URL(e.request.url);
+  if (e.request.method !== 'GET' || url.origin !== location.origin) return;     // POST y otros sitios: directo
+  if (/\/(rest|auth|storage|functions)\//.test(url.pathname)) return;           // datos y fotos: nunca aquí
+  if (e.request.headers.has('Authorization')) return;                           // con token: nunca en caché
+  // Cascarón: responde de la caché al instante y la actualiza por detrás.
+  e.respondWith(caches.open(VERSION).then(async (cache) => {
+    const guardado = await cache.match(e.request, { ignoreSearch: true });
+    const deRed = fetch(e.request).then((r) => {
+      if (r.ok) cache.put(e.request, r.clone());
+      return r;
+    }).catch(() => guardado);
+    return guardado || deRed;
+  }));
+});

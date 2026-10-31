@@ -1,0 +1,486 @@
+# Requisitos acordados con el dueño del proyecto
+
+Lista viva de lo que se decidió en las conversaciones. Cada etapa nueva debe
+revisar este archivo antes de empezar. Si algo cambia, se actualiza aquí.
+
+## Reglas generales
+
+- Un solo programa (PWA) para computadora y celular, con un solo "cerebro":
+  toda la lógica de dinero vive en el servidor.
+- Al entrar, el programa reconoce el puesto (dueño, admin, cajero, vendedor,
+  contador, proveedor) y muestra solo lo permitido. El servidor también lo bloquea.
+- Activar y desactivar en vez de borrar: usuarios, productos, cajas, cuentas,
+  fondos, pagos fijos, alertas, módulos.
+- Menú por pestañas y subpestañas por tema. Ajustes siempre al final.
+- **Sin emojis en PDFs ni en documentos impresos o descargables.**
+- Sin internet: solo venta rápida y cobro, con cola local, id_operacion y
+  rango CAI por caja. Todo lo demás requiere conexión.
+  Diseño (0.19.0, sin programar): `docs/SIN_INTERNET.md`, con las decisiones
+  que debe tomar el dueño.
+
+## Autoservicio (el cliente no depende del proveedor)
+
+Principios: vista previa, confirmación, bitácora y posibilidad de revertir en
+cada cambio de Ajustes. El dueño pone los límites; el admin opera dentro de ellos.
+
+Solo dueño: datos fiscales (RTN), activar/desactivar módulos pagados, crear o
+desactivar administradores, tabla de permisos y puestos nuevos, horarios de
+acceso por puesto, topes (crédito, descuento, monto que pide aprobación,
+aprobaciones del admin), comisiones, reglas de distribución de utilidades y
+fondos, reabrir meses, acceso de soporte del proveedor, descarga total de datos,
+usuario contador.
+
+Admin (dentro de los topes): usuarios vendedor/cajero, restablecer contraseñas
+(no la del dueño), cerrar sesión a distancia, CAI, sucursales/cajas/bodegas,
+catálogos, productos, precios (individual y masivo por %), listas de precios,
+promociones con fechas, campos extra, clientes y límites de crédito, formas de
+pago, bancos, pagos fijos, metas de venta, aprobaciones hasta su tope, cierre
+de mes, alertas y reportes programados, Excel de ida y vuelta.
+
+Topes de gasto (0.5.0, valor inicial a confirmar con el dueño): el admin
+registra sin aprobación y aprueba hasta L 5,000.00; los demás puestos piden
+aprobación siempre. El dueño los cambia por puesto.
+
+Extras: panel "Mi negocio hoy", modo vacaciones (admin a cargo con límites y
+fechas), rol contador de solo lectura, deshacer el último cambio de Ajustes,
+página "Mi cuenta" (plan, módulos, próximo pago, pedir módulo).
+
+Rol contador (hecho en 0.4.0): solo lectura de contabilidad, reportes,
+bitácora, clientes y proveedores, compras y existencias. SÍ ve costos y valor
+del inventario (los necesita para el balance y el costo de ventas). Solo el
+dueño lo crea; nunca recibe permisos que muevan los libros.
+
+## Ayuda dentro del programa
+
+- NO lleva botón "?" ni videos de ayuda (decisión del dueño).
+
+## Rastreo del dinero (obligatorio)
+
+- Cada lugar con dinero es una cuenta con nombre: cajas de efectivo (por
+  turno y cajero), cada cuenta bancaria registrada (banco, número, tipo,
+  moneda), caja chica, tarjeta/POS por liquidar, transferencias por confirmar,
+  dinero en tránsito.
+- Todo movimiento indica de qué cuenta sale y a cuál entra. Si es banco, se
+  elige cuál de las cuentas bancarias registradas. No existe una salida de
+  dinero sin destino ni una entrada sin origen.
+- Depósitos de efectivo al banco y retiros de efectivo del banco: una sola
+  operación (sale de una cuenta y entra a la otra), con comprobante. Depósito
+  no confirmado = dinero en tránsito con alerta.
+- Cada movimiento guarda usuario, fecha y hora del servidor, caja o equipo,
+  referencia y foto del comprobante.
+- Arqueo por turno y cajero, cuadre de caja chica, conciliación bancaria con
+  CSV del banco, prueba diaria automática de cuadre.
+- Reportes: "¿Dónde está mi dinero hoy?", estado de cuenta de cualquier cuenta
+  por fechas o mes, "seguir una venta" (venta, cobro, caja, depósito, banco),
+  flujo de dinero del mes.
+- Hecho en 0.5.0 (sin ventas todavía): cuentas de dinero con su subcuenta,
+  rastro de cada entrada y salida, depósito / retiro / reposición / traslado
+  en una operación, depósito en tránsito con alerta (3 días por defecto, lo
+  cambia el dueño), comprobantes (foto o PDF, solo agregar), gastos, caja
+  chica con cuadre, pagos fijos, "¿dónde está mi dinero?" y estado de cuenta.
+  Pendiente: conciliación con CSV del banco, prueba diaria automática,
+  "seguir una venta", flujo del mes y cuentas en otra moneda (USD).
+
+## Fondos y distribución de utilidades
+
+- Fondos configurables, cada uno activable/desactivable: reinversión,
+  emergencias y los que cree el dueño (por ejemplo: impuestos, aguinaldos,
+  equipo nuevo).
+- Al cerrar el mes, el dueño decide (o aplica su regla guardada) qué
+  porcentaje de la utilidad va a cada fondo y cuánto a los socios.
+- La distribución se calcula sobre la utilidad COBRADA (dinero que de verdad
+  entró), mostrando también la utilidad facturada. Nunca repartir lo que aún
+  se debe (error conocido de RRD).
+- Meta opcional por fondo (por ejemplo: emergencias = 3 meses de pagos fijos).
+- Asignar a un fondo es un asiento de patrimonio (utilidades a reserva). Si el
+  dueño quiere separar el dinero físicamente, se hace además un traslado a la
+  cuenta bancaria elegida para ese fondo.
+- Usar un fondo exige: qué fondo, para qué, de qué cuenta física sale el dinero
+  (caja, caja chica o cuál banco), comprobante y aprobación del dueño.
+- Estado de cada fondo: saldo, aportes, usos y su rastro completo.
+- Hecho en 0.10.0 (módulo `fondos`, necesita dinero): socios, fondos con meta (monto o meses
+  de pagos fijos) y cuenta de dinero opcional, regla guardada que suma 100 %, reparto de la
+  utilidad COBRADA de un mes cerrado (una vez, anulable), separación física opcional, uso con
+  comprobante y aprobación del dueño, pago de dividendos. Ver nucleo/docs/fondos.md.
+
+## Proyecciones
+
+- Flujo de caja proyectado (30, 60, 90 días, vista semanal): dinero disponible
+  hoy + cobros esperados de cuentas por cobrar según vencimiento − pagos de
+  cuentas por pagar según vencimiento − pagos fijos.
+- Cobros vencidos se muestran aparte (no se asume que entran).
+- Alerta si alguna semana proyectada queda en negativo.
+- Hecho en 0.10.0: `proyeccion_flujo` (30/60/90 días por semana; también comisiones y
+  dividendos por pagar). Ver nucleo/docs/proyecciones.md.
+
+## Inventario y productos
+
+- Código de barras por cámara del celular y lector USB en computadora.
+- Excel de ida y vuelta: descargar la base actualizada (con campos extra),
+  editar y subir con vista previa de errores. Nunca borra; vacío conserva el
+  valor anterior; columna código como llave. Un solo Excel con hojas Productos,
+  Existencias por sucursal, Clientes, Categorías.
+- Plantillas por rubro como datos, no como código.
+
+### Precio e ISV
+
+- Cada producto tiene impuesto (15%, 18% o Exento) y la marca "precio incluye
+  ISV" (Sí/No). El valor por defecto lo elige el dueño en Ajustes
+  (recomendado: Sí). El programa calcula la otra cifra.
+- Hecho en 0.4.0. Regla: el precio se guarda como se escribe; el ISV se
+  calcula por línea (cantidad x precio) y se redondea a centavo, mitades
+  hacia arriba. Productos de antes de 0.4.0 quedaron "sin ISV".
+- Costo promedio (0.4.0): en orden de registro; no se registran entradas con
+  fecha anterior a la última salida del producto en esa bodega, salvo el dueño.
+
+### Columnas del Excel
+
+Columnas azules = editables (se importan). Columnas grises = solo
+información (se exportan y se ignoran al subir). Montos en lempiras con 2
+decimales; fechas AAAA-MM-DD; celda vacía conserva el valor; nunca borra.
+
+- Productos (editable): código (llave, no cambia), código de barras, nombre,
+  descripción, categoría, subcategoría, unidad, se vende con decimales,
+  impuesto, precio de venta, precio incluye ISV, existencia mínima, proveedor
+  principal, ubicación, activo, campos extra.
+  Solo información: costo promedio, existencia total, valor del inventario,
+  margen %, precio con y sin ISV, última venta, última compra.
+- Clientes y proveedores (editable): código, tipo, nombre o razón social, RTN,
+  teléfono, correo, dirección, límite de crédito, plazo en días, activo,
+  campos extra. Solo información: saldo actual, saldo vencido, último pago.
+- Categorías: nombre, categoría padre, activo.
+- Carga inicial (una sola vez): existencias iniciales (código, sucursal,
+  bodega, cantidad, costo) y saldos iniciales de clientes y proveedores
+  (documento, fecha, vencimiento, monto).
+- Conteo físico: se descarga, se llena con lo contado y se sube; el programa
+  calcula diferencias y crea ajustes que aprueba admin o dueño. Nunca cambia
+  la existencia directamente.
+- Hoja Instrucciones con cada columna y sus valores válidos.
+
+## Celular
+
+Resumen del negocio, venta rápida, consultar precio y existencia, conteo de
+inventario con cámara, recibir mercadería, cobrar abonos, gasto con foto del
+comprobante, aprobaciones y alertas.
+
+## Cierre de mes
+
+Selector de cualquier mes anterior con estado de resultados, flujo, saldos de
+clientes, inventario valorizado y balance, descargables en PDF y Excel. Cerrar
+bloquea sin borrar. Reabrir: solo dueño, con motivo, en orden.
+Hecho en 0.10.0: `cerrar_mes` con foto inmutable y versiones, advertencias, estados por mes
+(foto o preliminar) con comparativo y exportación JSON para PDF/Excel (la app arma el PDF).
+Un contador hondureño debe validar los formatos. Ver nucleo/docs/cierres.md y estados.md.
+
+## Ventas, caja y comisiones (decisiones para la etapa 2b)
+
+- Turno de caja POR CAJERO: cada cajero abre y cierra su turno con arqueo.
+  (Hecho en 0.5.0. Aclarado: una caja tiene un solo turno abierto a la vez y
+  el cajero no ve el esperado hasta cerrar, conteo a ciegas.)
+- Diferencia en el arqueo: queda como "diferencia pendiente"; el dueño o el
+  admin decide, con motivo, si se cobra al cajero (cuenta por cobrar a
+  empleado) o se envía a gasto.
+- Venta al crédito CONFIGURABLE en Ajustes: según límite del cliente (pide
+  aprobación si lo pasa o si es cliente nuevo) o siempre con aprobación.
+- Anular venta: el vendedor solo la solicita; aprueba admin o dueño con
+  motivo, mientras el mes esté abierto. La factura conserva su número y queda
+  ANULADA.
+- Cliente NO obligatorio: sin cliente la venta queda como "Consumidor final".
+  El crédito, el apartado y el saldo a favor sí requieren cliente.
+- Devoluciones: el dueño activa en Ajustes cuáles permite: devolver dinero
+  (de la caja o banco elegido), cambio por otro producto (se cobra o devuelve
+  la diferencia) y nota de crédito. Nota de crédito sin cliente = vale con
+  código para una próxima compra.
+  (0.19.0, decisión del dueño: el cambio ya NO lleva diferencia; ver "Decisiones del dueño 0.19.0".)
+- Extras incluidos: cotizaciones (no mueven inventario ni dinero; se
+  convierten en venta) y apartados con anticipo (reservan mercadería).
+- Descuentos de tres tipos: por categoría (promociones con fecha de inicio y
+  fin), por artículo y por factura. Tope por puesto; si se pasa, pide
+  aprobación en el momento.
+- Comisiones: interruptor de encendido/apagado; porcentaje por empleado; base
+  elegida por el dueño: sobre la GANANCIA (precio sin ISV menos costo,
+  recomendado) o sobre el precio sin ISV. Nunca sobre el ISV. Se ganan cuando
+  la venta está cobrada completa y se ajustan con devoluciones.
+- Hecho en 0.7.0 (etapa 2b-2a): ventas todo-o-nada con efectivo, tarjeta,
+  transferencia, crédito y mixto; descuentos de tres tipos con tope por puesto y
+  aprobación (doble aprobación aplicada en ventas y gastos); crédito según
+  límite o siempre con aprobación; anulación solicitada y aprobada con motivo
+  (el dinero vuelve a la misma cuenta); cotizaciones; CxC con antigüedad;
+  "seguir una venta"; primera venta del asistente. Pendiente 2b-2b: cobros,
+  saldos iniciales de clientes, apartados, devoluciones / notas de crédito,
+  comisiones.
+- Decisiones del dueño (hechas en 0.8.0):
+  - Promociones: nunca descuento sobre descuento. Si a una línea le aplican
+    varias promociones, quien vende elige una (`promocion_id`; sin elegir:
+    PROMOCION_A_ELEGIR con la lista). Una línea con promoción no admite
+    descuento manual. El descuento de factura se reparte solo entre las líneas
+    sin otro descuento (las demás quedan fuera). Ninguna línea con más de un
+    descuento.
+  - Vendedor que cobra: configurable por empresa (`vendedor_cobra`, falso por
+    defecto); solo el dueño lo cambia, con motivo y bitácora; el perfil
+    pequeño lo sugiere en sí. Respeta los turnos obligatorios o no.
+  - Confirmados sin cambios: topes de descuento (cajero y vendedor 5 %; admin
+    10 % y aprueba hasta 20 %), el admin aprueba créditos y anulaciones hasta
+    L 5,000.00, cotizaciones de 15 días (configurables).
+- Hecho en 0.9.0 (etapa 2b-2b): cobros a una factura o consolidados (la más
+  vieja primero o las elegidas) con efectivo/turno, tarjeta, transferencia por
+  confirmar, mixto y saldo a favor; nunca más del saldo sin decidir (el
+  excedente pasa a saldo a favor); condonación explícita con permiso y motivo;
+  anular cobro con motivo (el dinero sale de la misma cuenta); la venta con
+  cobros no se anula; saldos iniciales de clientes contra Saldos de apertura;
+  estado de cuenta, antigüedad y cobros por caja/cajero. Saldo a favor y vales
+  (pasivo 2.1.04.02; vale sin cliente con código y vencimiento configurable).
+  Apartados (módulo propio: reservan existencias, anticipos como pasivo
+  2.1.04.01, se completan como factura, cancelar según el dueño). Devoluciones
+  dentro de ventas (tipos que activa el dueño; nota de crédito con CAI o
+  interna; inventario al costo de la venta; primero rebaja la CxC, nunca
+  dinero y rebaja por lo mismo; cambio de producto enlazado; tope y
+  aprobación). Comisiones (módulo propio: interruptor, % por empleado, base
+  ganancia o precio sin ISV; se devengan al cobrar completa; se ajustan con
+  devoluciones aunque ya se hayan pagado; pago por período con asiento y
+  rastro; el vendedor ve solo las suyas). A CONFIRMAR con el dueño: los tres
+  tipos de devolución permitidos por defecto; tope de devolución (admin
+  L 5,000, cajero siempre con aprobación); apartado de 30 días con anticipo a
+  saldo a favor al cancelar; base de comisión "ganancia".
+- Hecho en 0.9.1 (revisión de la etapa 2): nadie paga con el saldo a favor de
+  otro cliente u otra empresa; el cajero no ve costos (tampoco anidados); las
+  devoluciones en partes cuadran al centavo; el tope de descuento vale por
+  línea; DECIDIDO POR EL DUEÑO: la comisión es solo sobre lo cobrado (se resta
+  lo condonado) y el efectivo de anulaciones y devoluciones sale del turno
+  abierto de quien hace la operación, a su nombre, con referencia al turno
+  original (nadie saca dinero del turno de otro cajero). Además: baja de vales
+  vencidos (solo el dueño, a otros ingresos), destrabar una devolución
+  pendiente, descuento de factura en monto exacto, vendedor solo con puesto que
+  vende y porcentaje de comisión no retroactivo.
+
+## Arranque fácil para cualquier tamaño de negocio
+
+Objetivo: que un negocio pequeño, mediano o grande cargue sus datos y empiece
+a dar seguimiento el primer día, sin trabas.
+
+- Saldo negativo configurable POR CUENTA de dinero: no permitir (por defecto),
+  permitir con alerta ("revisa el saldo inicial"), o sobregiro autorizado hasta
+  un monto. Cargar saldos iniciales NO es obligatorio para empezar.
+- Perfiles por tamaño (pequeño, mediano, grande): solo configuraciones de
+  inicio (módulos, turnos obligatorios o no, aprobaciones, contabilidad
+  visible o no, menú). Mismo núcleo para todos. Se pueden cambiar después.
+- Asistente de arranque con avance: datos del negocio, usuarios, cajas y
+  bancos con saldo inicial (o empezar en cero), productos, clientes con
+  saldos, proveedores con saldos, primera venta. Cada paso se puede saltar y
+  el programa recuerda lo pendiente sin bloquear.
+- Valores iniciales aprobados: admin registra y aprueba gastos hasta L 5,000;
+  arqueo a ciegas; solo lempiras por ahora (dólares más adelante).
+- Hecho en 0.6.0: saldo negativo por cuenta (solo el dueño, con motivo),
+  turnos obligatorios o no por empresa, perfiles pequeno/mediano/grande como
+  datos (vista previa y aplicar, solo el dueño; nunca tocan módulos ni datos),
+  asistente de arranque de 7 pasos y "empezar en cero". Valores iniciales
+  confirmados (L 5,000, arqueo a ciegas, solo la moneda de la empresa).
+  Pendiente: la doble aprobación solo se guarda; se aplicará en 2b-2. El paso
+  "primera venta" se marcará solo cuando exista ventas (2b-2).
+
+## Mercado amplio: productos, servicios y otros países
+
+- El catálogo maneja BIENES y SERVICIOS con el mismo control de ventas,
+  cobros, descuentos, comisiones y reportes. Un servicio no mueve inventario;
+  puede tener costo estimado para medir margen y comisiones. Una factura puede
+  mezclar bienes y servicios (ej.: taller: mano de obra + repuestos).
+- Impuestos como datos configurables por empresa (código, nombre, tasa,
+  cuentas), sembrados para Honduras con ISV 15 %, ISV 18 % y exento. Otro país
+  solo cambia datos.
+- Lo fiscal propio de Honduras (CAI, formato SAR, leyendas) va aislado como
+  régimen "fiscal_hn" activable. Sin régimen fiscal se usa numeración interna.
+- Módulos futuros pensados para servicios (se venden aparte): órdenes de
+  trabajo, citas/agenda, cobros recurrentes (mensualidades, membresías).
+- Hecho en 0.7.0: servicios (sin kardex; costo estimado que solo ven quienes
+  ven costos y nunca va a los libros; bandera permite_servicios), tabla de
+  impuestos por empresa sembrada por país (Honduras también con EXONERADO) que
+  usan ventas, compras y gastos, y módulo "fiscal_hn" (CAI) con ticket interno
+  cuando no hay régimen. Un contador debe validar las reglas y leyendas fiscales.
+
+## Versiones y venta
+
+- NO hay versiones, planes ni desbloqueos dentro del programa, ni mensajes
+  de "pásate a otra versión". El cliente solo ve los módulos que tiene.
+- Los paquetes son una guía de venta del proveedor (docs/PAQUETES.md). El
+  proveedor elige módulos y perfil al instalar y fija el precio en su
+  contrato de servicio. Agregar un módulo después = el proveedor lo activa.
+- Mercado objetivo: negocios pequeños y medianos que van empezando y tienen
+  dificultades con la administración y el rastro del dinero.
+
+## Encender y apagar módulos sin romper los números (NO NEGOCIABLE)
+
+- Cualquier combinación de módulos activos debe dar siempre números
+  correctos: debe = haber, dinero = cuentas, kardex = inventario contable,
+  CxC y CxP = sus cuentas.
+- Dependencias entre módulos guardadas como datos: no se activa un módulo sin
+  los que necesita (ej.: comisiones requiere ventas) y no se apaga uno del
+  que dependen otros activos.
+- Apagar un módulo solo impide operaciones nuevas; lo ya registrado sigue en
+  reportes y contabilidad. Nunca borra datos.
+- Prueba automática de combinaciones de módulos (incluido apagar a mitad de
+  mes) con cuadre global en cada una. Si una falla, no se entrega.
+- Hecho en 0.8.0: tabla `modulo_dependencia` (inventario, dinero y ventas ->
+  contabilidad; compras -> inventario; fiscal_hn -> ventas). Ventas no exige
+  inventario (sin él solo vende servicios) ni dinero (sin él solo vende al
+  crédito). Apagado: se rechaza lo nuevo; se permiten lecturas, reportes,
+  contabilidad y correcciones (anular compras, pagos, gastos, ventas,
+  documentos de inventario y operaciones de dinero; cerrar un turno abierto;
+  confirmar depósitos y transferencias). Las cuentas del módulo siguen sin
+  asientos manuales aunque esté apagado. Pagar a proveedores o aprobar ventas
+  y gastos pendientes con el módulo apagado: no (son operaciones nuevas).
+  Prueba 89: 14 combinaciones con cuadre global. Ver nucleo/docs/modulos.md.
+- Hecho en 0.9.0: módulos `apartados` (necesita ventas e inventario) y
+  `comisiones` (necesita ventas); prueba 89 con 20 combinaciones (también
+  apagarlos y encenderlos a mitad de mes).
+
+## Edición fácil para el proveedor
+
+- Una ficha por cliente (clientes/<nombre>/ficha.json) legible: negocio,
+  paquete, perfil, módulos con sí/no, licencia.
+- Un comando (aplicar_ficha.sh): vista previa de cambios, confirmación con el
+  nombre del cliente, respaldo y aplicación. Nunca borra datos.
+- Lista general de clientes: paquete, módulos, vencimiento de licencia y
+  versión del núcleo.
+- Más adelante: panel web del proveedor con lo mismo por clics.
+- Hecho en 0.8.0: `clientes/<cliente>/ficha.json` (formato 2, ignorado por git
+  salvo `clientes/ejemplo/`), `aplicar_ficha.sh` (vista previa con prueba y
+  deshacer, confirmación con el identificador del cliente, respaldo cifrado,
+  todo o nada, bitácora; `--solo-mostrar`), `lista_clientes.sh` (consulta la
+  base si hay acceso sin preguntar; si no, muestra la ficha) y
+  `nuevo_cliente.sh` con el mismo formato (el de antes sigue sirviendo).
+
+## Límites del contrato controlados por el proveedor (ingreso por crecimiento)
+
+- La ficha de cada cliente define límites: usuarios, cajas, sucursales,
+  bodegas (y otros que se necesiten). El servidor los hace cumplir; dueño y
+  admin crean hasta ese número.
+- Al llegar al límite: mensaje "Llegaste al máximo de tu plan. Solicita una
+  ampliación a tu proveedor." No se muestran planes ni precios.
+- Botón "Solicitar ampliación" (y "Solicitar módulo"): crea una solicitud con
+  lo que el cliente necesita y notifica al proveedor.
+- El proveedor cambia el número en la ficha y aplica con aplicar_ficha.sh.
+  La lista de clientes muestra quién está cerca de su límite.
+- Nunca se bloquea el trabajo diario ni se pierden datos por un límite; solo
+  se impide agregar más.
+- Hecho en 0.8.0: tabla `limite_contrato` (usuarios, cajas, sucursales,
+  bodegas; null = sin límite) que solo escribe el proveedor; LIMITE_CONTRATO
+  al crear o reactivar de más (desactivados y el usuario del proveedor no
+  cuentan); bajar un límite no desactiva nada; `solicitud_proveedor` con
+  `solicitar_al_proveedor` (dueño y admin) y respuesta del proveedor;
+  `mi_perfil()` trae límite y uso. Pendiente: aviso automático al proveedor
+  (hoy lo ve en lista_clientes.sh). Ver nucleo/docs/limites.md.
+
+## Crecimiento del negocio
+
+- Usuarios restringidos por sucursal (el dueño ve todo).
+- Reportes por sucursal y consolidados.
+- Traslados de dinero y mercadería entre sucursales con rastro.
+- Precios por sucursal (opcional).
+- Prueba de volumen (cientos de miles de ventas) para confirmar velocidad.
+- Aviso al proveedor cuando la base se acerque al límite de su plan de
+  Supabase.
+
+## Centro de control del dueño
+
+- Panel en vivo: ventas de hoy vs meta, ayer y mes pasado; dónde está el
+  dinero; quién debe y a quién se debe; cajas abiertas y quién está; ganancia
+  del mes.
+- Alertas al celular: diferencias de arqueo, descuentos/anulaciones/créditos
+  sobre tope, depósitos en tránsito, inventario bajo, CAI por vencer, pagos
+  fijos por vencer, cuentas en negativo, movimientos fuera de horario.
+- Aprobaciones con un toque desde el celular, con motivo.
+- Vigilancia por empleado: ventas y ganancia, descuentos dados, anulaciones
+  pedidas, diferencias de caja acumuladas, horario de uso.
+- Bitácora legible con filtros (persona, fecha, tipo).
+- Control remoto: cerrar sesión, desactivar usuario al instante, bloquear
+  acceso fuera de horario.
+- Reportes automáticos diario y semanal.
+
+## El Armador (herramienta del proveedor para armar cada programa)
+
+Visión del dueño: la base es una herramienta para ARMAR programas a la medida.
+El proveedor visita al cliente, analiza su negocio y decide qué encender. El
+cliente solo ve lo suyo (resuelve el riesgo "esto es muy grande para mí").
+
+- Pantalla con clics solo para el proveedor (no archivo + comando): marcar
+  módulos, límites, perfil, rubro; vista previa del menú del cliente; botón
+  Crear / Aplicar (usa por dentro la ficha y aplicar_ficha).
+- Cuestionario guiado para la visita que SUGIERE módulos según respuestas
+  (ej.: ¿vende al crédito? → Créditos; ¿varios cobran? → Turnos). El
+  proveedor decide al final.
+- Plantillas por rubro (ferretería, salón, taller, tienda, restaurante):
+  módulos, categorías, campos extra, palabras del rubro ("orden de trabajo",
+  "cita", "mesa"), reportes típicos.
+- Modo demostración con datos falsos por rubro, para vender.
+- Entregar con los datos del cliente ya cargados (Excel), su nombre y logo.
+- Menú del cliente solo con lo suyo: sin opciones grises ni bloqueadas.
+- Lista de clientes: ficha, módulos, versión, límites y lo que pagan.
+- Regla de oro: un solo programa para todos; lo único que cambia es la ficha.
+  Nada de código a la medida de un solo cliente: lo nuevo se agrega como
+  módulo para todos.
+
+- Hecho en armador 0.1.0 (app 0.3.1): `armador/` + `herramientas/servidor_armador.js` (127.0.0.1, clave del
+  proveedor), 5 plantillas por rubro como datos, cuestionario que sugiere y explica, vista previa del menú por
+  puesto, Crear / Aplicar con las herramientas de siempre, demo por rubro y lista de clientes. Pendiente: pedir
+  los datos de cada orden (placa, mesa...) en Vender y probar contra Supabase real (ver armador/LEEME.md).
+
+Mejoras de la vista previa aprobadas por el dueño (asesor-negocio):
+"¿Cuánto gané hoy/este mes?" en grande; palabras sencillas en vez de
+contables; modo sencillo con pocas pestañas; letra 14-15 px y grises más
+oscuros; celular con forma de pago y cálculo del vuelto; cobrar por WhatsApp a
+quien debe; sello "funciona sin internet"; frase de cierre "Ganaste X,
+cobraste Y, te toca Z"; promoción sugerida automáticamente pero quien vende
+puede cambiarla (regla del dueño: nunca se suman).
+
+## Cheques (decisión del dueño, 0.18.0)
+
+- El cheque NO se acepta en ventas de contado: un cheque puede rebotar el mismo
+  día y el producto ya se habría entregado. Solo sirve para abonar a una deuda
+  que ya existe (venta al crédito).
+- Mientras el banco no confirme el cheque, a ese cliente no se le devuelve
+  dinero ni se le deja saldo a favor por esa venta.
+- Si el cheque rebota, el cobro se revierte y el cliente vuelve a deber; el
+  cargo del banco puede registrarse como gasto.
+
+## Decisiones del dueño 0.19.0 (hechas en la migración 055, núcleo 0.19.0; app 0.13.0)
+
+- **A1. Devolución parcial con precio mayorista por cantidad.** Si un cliente que NO es mayorista compró a precio
+  mayorista por llegar a "desde cantidad" y después devuelve unidades, y lo que se queda baja de esa cantidad, lo que
+  conserva se recalcula a precio normal: la diferencia (precio normal − precio mayorista, por las unidades que se queda)
+  se descuenta de lo que se le devuelve. Nunca da negativo: si el ajuste se come todo, se rechaza con un mensaje claro.
+  La pantalla y el comprobante lo explican: "Ajuste por perder precio mayorista: L X". Con varias devoluciones seguidas
+  se calcula sobre lo devuelto acumulado (si al final devuelve todo, el ajuste vuelve). Asientos e ISV netos.
+  Decisiones técnicas (A CONFIRMAR con el dueño): el precio normal es el de la venta, sin promociones; en una
+  **garantía** no hay ajuste (el producto vino malo); el cliente mayorista (por cliente) nunca tiene ajuste.
+- **A2. Mayorista y promociones no se suman.** CONFIRMADO. Ya estaba así desde 0.18.0.
+- **A3. Cuentas de socios.** CONFIRMADO: una sola cuenta contable "Aportes de socios" (3.1.01.04), con el detalle por
+  socio en el sistema. Nuevo: estado de cuenta por socio (aportes, aportes anulados, repartos de utilidad asignados,
+  pagos recibidos, saldo por pagar y total invertido) con rango de fechas, que cuadra con la contabilidad; en la app,
+  Dinero > Fondos y socios > "Estado de cuenta", con Excel e Imprimir.
+- **A4. Cambio de producto.** Regla del dueño: solo se cambia por UNO O VARIOS productos cuyo total sea EXACTAMENTE
+  igual al valor devuelto, o se hace la DEVOLUCIÓN COMPLETA DEL DINERO. No hay diferencia en dinero ni saldo a favor en
+  un cambio, ni cambios por mayor valor pagando la diferencia. Hecho como regla de la empresa `cambio_exacto`,
+  **encendida por defecto** (para la empresa del dueño y para las nuevas); otro cliente que quiera el cambio con
+  diferencia de antes la apaga (solo el dueño, con motivo). El cambio por garantía con "precio de garantía" sigue igual.
+  Decisión técnica: en una venta al crédito sin pagar, la parte que la devolución rebajó de la deuda se vuelve a deber
+  en la venta nueva, sin pedir aprobación de crédito y con el mismo vencimiento (el cliente debe lo mismo que antes).
+  El dueño enciende o apaga la regla en Ajustes > Reglas y topes (con motivo). En la app: contador "Falta L X / Sobra L X", el botón se
+  activa solo con la cuenta exacta y al lado "Devolver todo el dinero".
+
+## Decisiones del dueño 0.20.0 (hechas en la migración 056, núcleo 0.20.0; app 0.14.0)
+
+Diseño completo: `docs/SIN_INTERNET.md` (punto 14 y punto 17). Guía para el cajero y el dueño: `docs/SIN_INTERNET_GUIA.md`.
+
+- **B1. Vender sin internet (etapa 1).** Sí, de contado, con la cola del equipo, números reservados por caja y equipo
+  (también facturas con CAI) y todo revisado otra vez por el servidor al subir. Lo que no cuadra queda "por resolver"
+  para el supervisor. Solo usuarios con el permiso `ventas.sin_internet` (dueño y administrador; a los cajeros lo da el
+  dueño). Tiempo máximo 24 horas y topes (L 10,000 por venta y L 50,000 por turno), configurables por el dueño.
+- **B2. Formas de pago sin internet: efectivo y transferencia. Tarjeta NO.** La transferencia exige el número de
+  referencia (y el banco si se sabe) y queda "por confirmar" en la cuenta puente. Se confirma en Dinero >
+  Transferencias por confirmar. Si **no llegó**, la venta queda como deuda del cliente o, si fue a Consumidor final,
+  del cajero que la cobró (con aviso, motivo y bitácora). Una referencia repetida se avisa. La conciliación bancaria la
+  empareja.
+- **B3. Talonario de emergencia** (módulo `facturas_emergencia`): facturas de imprenta escritas a mano cuando el sistema
+  no se puede usar; después se pasan al sistema con su número y fecha, revisando rango, que no se repita, la vigencia del
+  CAI y que el mes esté abierto; los números arruinados se anulan. **A CONFIRMAR con el contador:** cómo se pide al SAR
+  el CAI de un talonario de imprenta y su punto de emisión.

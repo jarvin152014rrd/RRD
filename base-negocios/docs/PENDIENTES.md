@@ -1,0 +1,301 @@
+# Pendientes (núcleo 0.20.0, 158 pruebas OK; también con probar.sh --paquete)
+
+Estado: etapa 2 terminada. Las correcciones de la revisión de la etapa 2 están
+HECHAS en la migración 038 (núcleo 0.9.1) y las de la revisión de 0.9.1 en la
+migración 039 (núcleo 0.9.2), cada una con su prueba (falla contra la versión
+anterior y pasa con la nueva). Falta que el revisor las confirme antes de la
+etapa 3.
+
+## Vender sin internet, etapa 1 (HECHO en 0.20.0, migración 056, pruebas 152-158; app 0.14.0)
+
+Diseño y diferencias: `docs/SIN_INTERNET.md` (punto 17). Guía: `docs/SIN_INTERNET_GUIA.md`. Técnico: `nucleo/docs/sin_internet.md`.
+
+- HECHO: equipos, bloques de números por caja y equipo (con CAI), foto del catálogo, subida en tandas con revisión
+  completa, "por resolver", devolver el bloque al cerrar el turno, equipo desactivado -> bloque por conciliar.
+- HECHO (decisión del dueño) [DINERO]: sin internet efectivo y transferencia (con referencia, por confirmar); tarjeta no.
+  "No llegó" deja la deuda al cliente o al cajero.
+- HECHO (decisión del dueño): módulo `facturas_emergencia` (talonario de imprenta).
+- A CONFIRMAR (contador): cómo se pide el CAI de un talonario de imprenta; cómo se reportan al SAR los números de un
+  bloque "no usados" y los anulados (salen en el libro de ventas como ANULADA).
+- A CONFIRMAR (dueño) [DINERO]: tope por turno L 50,000 por defecto; la venta con transferencia "no llegó" ya no se anula.
+- FALTA: pantalla para pasar ventas desde las copias en papel de un equipo perdido (hoy: conciliar y registrar como venta
+  normal); hoja imprimible de arqueo sin internet (M4); catálogo por partes (hoy entero, con "sin cambios" por versión).
+- FALTA (dueño): pegar `dist/actualizar_supabase_0.20.0.sql` en su Supabase (después de 0.19.0). **NO PROBADO en un
+  Supabase real** (solo en el mini Supabase de la prueba 157).
+- FALTA: que el revisor revise 0.20.0.
+
+## Decisiones del dueño 0.19.0 (HECHO en 0.19.0, migración 055, pruebas 147-150; app 0.13.0)
+
+- HECHO y CONFIRMADO (dueño) [DINERO]: devolución parcial con precio mayorista por cantidad: lo que se queda baja de
+  "desde cantidad" -> se recalcula a precio normal y se descuenta ("Ajuste por perder precio mayorista"); si da
+  negativo, se rechaza. Sobre lo devuelto acumulado.
+- CONFIRMADO (dueño): mayorista y promociones no se suman (ya estaba en 0.18.0).
+- CONFIRMADO (dueño) [DINERO]: una sola cuenta "Aportes de socios" con el detalle por socio. HECHO: estado de cuenta del
+  socio (núcleo y app, con Excel e Imprimir).
+- HECHO y CONFIRMADO (dueño) [DINERO]: cambio de producto exacto (o devolución completa del dinero); regla
+  `cambio_exacto` encendida por defecto.
+- A CONFIRMAR (dueño) [DINERO]: en una garantía no se cobra el ajuste mayorista; el precio normal del ajuste es el de
+  la venta, sin promociones; en un cambio exacto de una venta al crédito sin pagar, la parte de la deuda se vuelve a
+  deber en la venta nueva, sin pedir aprobación de crédito y con el vencimiento de la venta original (revisión).
+- FALTA (dueño): pegar en orden `actualizar_supabase_0.16.0.sql`, `0.17.0`, `0.18.0` y `0.19.0` en su Supabase real
+  (`docs/SUPABASE.md`). **NO PROBADO en un Supabase real** (solo en el mini Supabase de la prueba 150).
+- HECHO (revisión, dentro de la 055, prueba 151): devolución con otra pendiente se rechaza; garantía sin devolver el ajuste
+  ya cobrado; previo del cambio por garantía = lo guardado; crédito de vuelta sin aprobación y con el vencimiento original;
+  líneas viejas con menos que "desde cantidad" = por cliente. Interruptor "Cambio exacto" en Ajustes > Reglas (app 0.13.1).
+- FALTA (menor): la regla `cambio_exacto` no está en la ficha/Armador. Si el precio de una sucursal tenía otra marca de "incluye ISV" que el mayorista, el ajuste usa la
+  del mayorista (caso raro).
+- NOTA: un cambio exacto de una venta al crédito puede pedir aprobación de crédito si el cliente no tiene límite
+  (`APROBACION_REQUERIDA`; lo hace quien aprueba), igual que el cambio por garantía.
+- FALTA: que el revisor revise 0.19.0.
+
+## Mayorista, garantías, cheques y antigüedad (HECHO en 0.18.0, migración 054, pruebas 141-145; app 0.12.0)
+
+- HECHO: precio mayorista por cantidad o por cliente mayorista (sin descuento sobre descuento), garantías con
+  reclamos, abonos con cheque (depositar y rebote) y antigüedad de saldos de clientes y proveedores.
+- FALTA (dueño): pegar `dist/actualizar_supabase_0.18.0.sql` en su Supabase real. **NO PROBADO en un Supabase real**
+  (solo en el mini Supabase de la prueba 145).
+- CONFIRMADO por el dueño (ver REQUISITOS, Cheques) [DINERO]: las ventas al contado NO aceptan cheque (solo abonos de clientes). Si lo quiere en
+  ventas, es otra parte.
+- CONFIRMADO (dueño, 0.19.0): con precio mayorista no se suma ninguna promoción ni descuento en esa línea (DESCUENTO_DOBLE);
+  si hay una promoción, gana lo más barato para el cliente.
+- FALTA (menor): `resumen_hoy` no cuenta los cheques recibidos hoy aparte (van en cobros); un producto devuelto por
+  garantía vuelve al inventario como cualquier devolución (no hay bodega de "dañados"); el Excel no deja BORRAR el
+  precio mayorista (se quita en la ficha).
+- NOTA: si el cheque rebota después de confirmar el depósito, el sistema hace solo un traslado del banco a "Cheques
+  por depositar" y luego anula el cobro (la deuda vuelve).
+- HECHO: el revisor revisó 0.18.0 (nada grave); sus puntos medios y menores quedaron dentro de la misma 054 (prueba 146).
+- DECIDIDO (dueño, HECHO en 0.19.0) [DINERO]: la devolución parcial de una venta con precio mayorista por cantidad
+  recalcula a precio normal lo que se queda si baja de "desde cantidad" (ajuste por perder precio mayorista).
+- FALTA (menor): con la app vieja (0.11.x) y el núcleo 0.18.0, cobrar a un cliente mayorista falla (la previa no
+  manda el cliente). Por eso se sube la app 0.12.1 enseguida (dicho en docs/SUPABASE.md).
+
+## Fotos de productos (HECHO en 0.17.0, migración 053, pruebas 139-140; app 0.11.0)
+
+- HECHO: interruptor por empresa (apagado por defecto), ruta de la foto en el producto, `poner_foto_producto` con
+  historial y bitácora, bucket privado `fotos-productos` y sus 4 políticas (o los clics si Supabase no deja por SQL).
+- FALTA (dueño): pegar `dist/actualizar_supabase_0.17.0.sql` en su Supabase real y revisar que `fotos_productos` diga
+  LISTO. **NO PROBADO contra un Supabase real** (aquí no hay red a supabase.co): confirmar que el rol `postgres` del
+  SQL Editor puede insertar en `storage.buckets` y crear políticas en `storage.objects`; si no, quedan los clics de
+  `docs/SUPABASE.md` (la prueba 140 prueba ese camino). Confirmar también que el API de Storage contesta "ya existe"
+  (409 / "Duplicate") al subir la misma foto otra vez (la app lo trata como bien).
+- FALTA (limpieza futura): archivos sueltos en Storage que ningún producto ni el historial usan (subidos sin llegar a
+  guardarse: app cerrada a mitad o respuesta perdida sin poder comprobar). La política de borrar ya deja borrarlos (y
+  solo esos); falta una tarea o función que los busque y borre. Las fotos quitadas o cambiadas se guardan a propósito.
+- HECHO (revisión de 0.17.0, dentro de la 053): borrar exige fotos encendidas y que el archivo no esté en uso; subir
+  exige licencia y módulo; LISTO revisa operación y regla de cada política; los ayudantes solo responden por sus empresas.
+- FALTA (menor): la columna informativa "tiene foto" en el Excel de productos (no se hizo: pedía reemplazar la hoja
+  completa de 046; el Excel sigue sin fotos).
+- FALTA: que el revisor revise 0.17.0.
+
+## Pendientes del núcleo que anotó la app (HECHOS en 0.16.0, migración 052, pruebas 133-135)
+
+- HECHO: el usuario limitado a su sucursal recibe solo lo suyo en `donde_esta_mi_dinero`, `v_comision_vendedor`,
+  `estado_fondos`, `v_conciliacion` (y sus tablas), `proyeccion_flujo`, `v_cxp_documento`, saldos iniciales de
+  proveedor, `pago_proveedor`, `pago_proveedor_anulacion` y `compra_linea`. El dueño ve lo mismo que antes.
+- HECHO: sucursal al pagar y anular pagos a proveedores (saldo inicial: solo sin restricción).
+- HECHO (revisión, en la misma 052): lado de clientes (saldos iniciales, aplicaciones, condonaciones, pagos de
+  cobros, saldo a favor y sus usos) y `condonar_saldo_cxc` por sucursal; banco de otra sucursal en tránsito en null.
+- HECHO: cobro "a la más vieja" de un limitado solo en sus sucursales; "aplicar" a otra sucursal se rechaza.
+- HECHO: `guardar_preferencias_alertas` rechaza tipos que el puesto no ve.
+- HECHO: `totales_compras`, `totales_gastos`, `mas_vendido` (con devoluciones).
+- HECHO: `cerrar_mes` / `reabrir_periodo` con `id_operacion` opcional.
+- HECHO: `dist/actualizar_supabase_0.16.0.sql` para quien ya tiene 0.15.0 (probado como en Supabase, prueba 135).
+- NO SE HACE (decisión técnica, ver `nucleo/docs/sucursales.md`): estado de resultados / balance / `saldo_cuentas`
+  por sucursal. Los libros no asignan cada asiento a una sucursal; usar `reporte_sucursales`.
+- FALTA (menor): `pago_fijo` / `pagos_fijos_proximos`, `v_ventas_por_dia`, `v_ventas_por_vendedor`, `v_cxc_cliente`,
+  `v_saldo_favor`, `bitacora_legible`, libros de ISV y cierres siguen siendo de toda la empresa.
+- FALTA: que el revisor revise 0.16.0. FALTA (dueño): pegar `actualizar_supabase_0.16.0.sql` en su Supabase real.
+- El revisor revisó 0.16.0 (sin nada grave); sus puntos medios y menores quedaron dentro de la 052.
+
+## Faltantes que pidió la app (HECHOS dentro de la misma 052, pruebas 136-138; app 0.10.0)
+
+- HECHO: cambio de producto con la diferencia a favor como saldo a favor / vale (o en dinero) y `calcular_cambio_previo`.
+- HECHO (ya existía en 0.10.0): anular un reparto (`anular_distribucion`); ahora con pantalla. Prueba 137: pagos a
+  socios primero, reabrir el mes, cerrar otra vez y repartir de nuevo.
+- HECHO: aporte de capital de un socio (`registrar_aporte_socio`, `anular_aporte_socio`, `aportes_socios`, cuenta
+  3.1.01.04, permiso `fondos.aportes`).
+- FALTA (menor): activar `fondos` con saldo manual previo en 3.1.01.04 no avisa `MODULO_CON_SALDO`; un comprobante
+  (foto) del aporte; anular una comisión de un vendedor dado de baja sigue igual.
+- FALTA (dueño): pegar `dist/actualizar_supabase_0.16.0.sql` (ya trae todo esto) en su Supabase real.
+- CONFIRMADO (dueño, 0.19.0) [DINERO]: los aportes van a una sola cuenta 3.1.01.04 "Aportes de socios" con el detalle por
+  socio en el sistema (no una cuenta por socio); falta que un contador valide el nombre y si se reclasifica a capital social.
+- DECIDIDO (dueño, 0.19.0): un cambio ya no tiene diferencia (cambio exacto o devolución completa del dinero).
+
+## Etapa 6: subir a Supabase real (PREPARADA en 0.15.0, migración 051, prueba 132)
+
+- HECHO: paquete para el SQL Editor (`armar_instalacion.sh`), primer cliente (`exportar_supabase.sh` / Armador),
+  Edge Functions (`supabase/functions/`), app para Netlify (`armar_app.sh`), guía `docs/SUPABASE.md`.
+- HECHO: prueba sobre un "mini Supabase" (rol dueño sin superusuario, auth de otro dueño, una petición por parte).
+- FALTA (dueño): hacer los pasos de `docs/SUPABASE.md` en un proyecto real; avisar cualquier diferencia.
+- FALTA: probar con la imagen oficial `supabase/postgres` o un proyecto real (aquí Docker Hub dio 429 y no hay red
+  a supabase.co). Confirmar en real: que `postgres` puede leer y borrar `auth.sessions` (si no, el cierre sigue
+  por base, pero sin quitar la renovación), el tamaño de parte que acepta el SQL Editor, y las llaves nuevas.
+- RIESGO: plan gratis sin respaldos descargables → respaldo manual semanal (P-03) con la cadena del Session
+  pooler. Pausa por 7 días sin uso. Tiempo máximo de 8 s por consulta de la app (reportes grandes).
+- RIESGO: lecturas directas de la app (`/rest/v1/<vista>`) se cortan en 1000 filas sin aviso (`max_rows`).
+- Pendiente (menor): Storage para fotos de comprobantes (bucket y sus políticas) no está armado. (El de fotos de
+  productos sí, en 0.17.0: se puede copiar el mismo patrón.)
+
+## Etapa 3a (HECHA en 0.10.0, migraciones 040-042, pruebas 120-123)
+
+- HECHO: cierre de mes con foto inmutable, advertencias, versiones al reabrir (`cierres.md`).
+- HECHO: selector de meses (foto o "preliminar"), comparativo, utilidad cobrada vs facturada,
+  exportación JSON para PDF/Excel (`estados.md`).
+- HECHO: módulo `fondos` (socios, fondos con meta, regla, reparto, uso con aprobación del dueño,
+  dividendos) (`fondos.md`).
+- HECHO: proyección de flujo por semana con alerta (`proyecciones.md`).
+- HECHO: prueba 89 con 25 combinaciones (fondos encendido, apagado y a mitad de mes) y cierre de enero
+  en cada una cuadrando con los libros.
+- FALTA: que el revisor revise 0.10.0 y que un contador hondureño valide los formatos (resultados,
+  balance, flujo, ISV para la SAR).
+- FALTA (menor): anular un uso de fondo ya aplicado (hoy lo corrige el contador con un asiento); cierre
+  anual (pasar el resultado del año a utilidades acumuladas).
+- Siguiente (etapa 3b): ver "Etapa 3b-1" arriba.
+
+## Etapa 3b-1 (HECHA en 0.11.0, migraciones 043-045, pruebas 124-126)
+
+- HECHO: conciliación bancaria (módulo `conciliacion`): cargar estado de cuenta, emparejar automático y a mano,
+  deshacer con motivo, diferencias, crear comisión e intereses, cierre por mes (`conciliacion.md`).
+- HECHO: libros de ISV de ventas y compras por mes, cuadrados con `isv_mes` (`libros_isv.md`).
+- HECHO: alertas en un solo lugar con permisos y preferencias por usuario; "Mi negocio hoy" con ganancia de hoy
+  y del mes (`alertas.md`).
+- FALTA: que el revisor revise 0.11.0 y que un contador valide los libros de ISV (formato SAR).
+- FALTA (menor): emparejar varias filas del banco contra un movimiento; anular un movimiento creado desde la
+  conciliación; guardar el CAI del proveedor en las compras.
+- Siguiente (etapa 3b-2): ver "Etapa 3b-2a" abajo.
+
+## Etapa 3b-2a (HECHA en 0.12.0, migración 046, prueba 127)
+
+- HECHO: Excel de ida y vuelta como JSON (`excel.md`): exportar plantilla con columnas e instrucciones, vista previa que no
+  guarda, aplicar todo o nada con id_operacion; hojas productos (con campos extra y columnas grises), clientes y proveedores
+  (con código nuevo `tercero.codigo` y saldos), categorías, existencias iniciales, saldos iniciales y conteo físico con
+  ajustes pendientes de aprobación.
+- FALTA: que el revisor revise 0.12.0.
+- FALTA (menor): descripción, proveedor principal y ubicación del producto (hoy: campos extra); campos extra de clientes;
+  hoja de solo lectura "Existencias por sucursal".
+- Siguiente (etapa 3b-2b): ver abajo.
+
+## Etapa 3b-2b (HECHA en 0.13.0, migración 047, prueba 128)
+
+- HECHO: usuarios restringidos por sucursal (lecturas y operaciones en el servidor), reporte por sucursal y total, envío de
+  dinero entre sucursales en tránsito, recepción de traslados de mercadería, precios por sucursal (`sucursales.md`).
+- HECHO: vigilancia por empleado, bitácora legible, cerrar sesión a distancia, horario por puesto (`control.md`).
+- HECHO: prueba de volumen `herramientas/prueba_volumen.sh` (20,000 ventas; tiempos en CHANGELOG 0.13.0).
+- FALTA: que el revisor revise 0.13.0.
+- FALTA: filtrar por sucursal los reportes de toda la empresa (estados, libros, dónde está mi dinero; resumen_hoy y alertas HECHO en 0.13.1);
+  envíos sin recibir en alertas; Edge Function que revoque tokens de Supabase Auth al cerrar sesión; reportes automáticos diario
+  y semanal; aviso al proveedor cuando la base se acerque al límite de su plan; prueba con cientos de miles de ventas en Supabase real.
+
+## Corregir de la revisión de 0.13.0 (todo HECHO en 0.13.1, migración 048, prueba 129)
+
+IMPORTANTE
+1. HECHO. Cerrar sesión ya no se salta al renovar el token: se usa el `session_id` del JWT y la hora de inicio de
+   la sesión (`auth.sessions`) contra la del cierre; sin `session_id`, el `iat` como antes (`control.md`).
+2. HECHO. Un mes con reparto de utilidades vigente no se reabre (`MES_CON_REPARTO`): primero se anula el reparto
+   (`cierres.md`). Se ajustó la prueba 121.
+3. HECHO. `resumen_hoy`, `alertas_activas` y `exportar_plantilla` filtran por sucursal al usuario restringido;
+   CxC = ventas al crédito emitidas en sus sucursales (`alertas.md`, `excel.md`).
+
+MENOR
+4. HECHO. Conciliación tipo "otro" no acepta cuentas que mueve un módulo (`conciliacion.md`).
+5. HECHO. Importar y emparejar en la conciliación exigen la sucursal del banco (`conciliacion.md`).
+
+- FALTA: que el revisor confirme 0.13.1; Edge Function que revoque los tokens de Supabase Auth; confirmar en el
+  Supabase real que se puede leer `auth.sessions`.
+
+## Decisiones del dueño para el final
+
+- Precio de venta del producto: se decide al final, decisión del dueño.
+
+## Corregir de la revisión de 0.9.1 (todo HECHO en 0.9.2)
+
+IMPORTANTE
+1. HECHO (prueba 114). Vendedor heredado: la regla de `vendedor_id` solo vale
+   cuando se elige en el momento; al completar un apartado o convertir una
+   cotización se respeta el vendedor del documento (aunque esté dado de baja o
+   su puesto solo cotice). Su comisión se genera igual; el dueño decide al liquidar.
+
+MENOR
+2. HECHO (prueba 115). Cuenta de salida elegida: `anular_cobro` y
+   `resolver_aprobacion` (anular venta) aceptan `cuenta_salida_id` (caja fuerte,
+   banco, caja chica o turno propio); nunca el turno de otro cajero.
+3. HECHO (prueba 116; 119 para ventas de antes). El porcentaje de comisión
+   queda guardado en la venta al emitirla y se usa al devengar.
+4. HECHO (prueba 117). `definir_destino_devolucion` pone el destino actual en
+   la solicitud de aprobación y reinicia una primera aprobación.
+5. HECHO (prueba 118). Tope por línea con 2 centavos de tolerancia.
+
+## Corregir de la revisión de la etapa 2
+
+GRAVE
+1. HECHO (prueba 102). Saldo a favor de otro cliente u otra empresa: la venta
+   ya no acepta `saldo_favor_id` desde la app (solo el cambio de producto usa
+   su lote) y `usar_saldo_favor_lote` exige misma empresa y mismo cliente.
+
+IMPORTANTE
+2. HECHO (prueba 103). Cajero ve costos en cambio de producto:
+   `ocultar_costos` limpia todos los niveles (`interno.quitar_claves`).
+3. HECHO (prueba 104). Devoluciones parciales por cantidad acumulada (10 kg a
+   L 11.50 devueltos de 0.5 en 0.5: ISV 86/87 por nota, exacto al final).
+4. HECHO (prueba 105). Tope de descuento también por línea (vender, apartar y
+   aprobar). 100 % en L 500 dentro de L 20,000 pide aprobación.
+5. HECHO (prueba 106). Comisión solo sobre lo realmente cobrado (se resta la
+   parte sin ISV de lo condonado). Decisión del dueño.
+6. HECHO (prueba 107). Efectivo de anulaciones y devoluciones: sale del turno
+   abierto de quien hace la operación, a su nombre, con referencia al turno
+   original (`dinero_movimiento.turno_origen_id`); nadie saca dinero del turno
+   de otro cajero (`TURNO_AJENO`). Decisión del dueño.
+
+MENOR
+- HECHO (prueba 108). Vales vencidos: `dar_baja_vales_vencidos` (solo el
+  dueño, permiso `cobros.baja_vales`, motivo y bitácora; asiento a 4.2.01.04).
+- HECHO (prueba 109). Devolución pendiente atascada:
+  `definir_destino_devolucion` y se vuelve a aprobar (o se rechaza; el error
+  lo explica).
+- HECHO (prueba 110). Descuento de factura en monto: exacto al centavo.
+- HECHO (prueba 111). `vendedor_id`: solo usuarios activos con puesto que vende.
+- HECHO (prueba 112). Porcentaje de comisión no retroactivo (desde >= hoy).
+- HECHO (nucleo/docs/comisiones.md). Aviso al dueño: con base "ganancia" el
+  vendedor puede deducir el costo.
+
+## Después de corregir
+
+1. Revisor confirma las correcciones.
+2. Etapa 3: 3a HECHA en 0.10.0, 3b-1 en 0.11.0, 3b-2a (Excel) en 0.12.0 y 3b-2b (sucursales y
+   centro de control) en 0.13.0.
+3. Etapas 4 a 7: pantallas (PWA), celular y sin internet, prueba real en
+   Supabase, preparación para vender.
+
+## Decisiones del dueño pendientes de confirmar
+
+- Límites sugeridos por paquete en docs/PAQUETES.md (los inventó el
+  constructor-maestro).
+- Valores iniciales de devoluciones, apartados (30 días, anticipo sin mínimo)
+  y vales (no vencen).
+- 0.9.1: la baja de vales vencidos la hace el dueño a mano cuando decide (no es
+  automática) y no se anula; confirmar que así lo quiere.
+- 0.9.1: una anulación pedida por un cajero cuyo turno sigue abierto saca el
+  efectivo de ese turno al aprobarla (el cajero lo entrega); si ya cerró, sale
+  del turno de quien aprueba. Confirmar.
+- 0.9.2: la comisión de un vendedor dado de baja se genera igual (recomendado) y
+  el dueño decide al liquidar; si no la paga, hoy la corrige el contador con un
+  asiento (no hay función para anularla). Confirmar.
+- 0.10.0 [DINERO]: utilidad cobrada = utilidad neta − aumento de la utilidad por cobrar (margen
+  proporcional al saldo de cada factura al crédito). Confirmar que así se quiere repartir.
+- 0.10.0 [DINERO]: el reparto usa la foto del cierre; si el mes se reabre y cambia, el reparto queda y el
+  nuevo cierre lo advierte (el dueño decide anular y repartir otra vez). Confirmar.
+- 0.10.0 [DINERO]: usar un fondo lo decide solo el dueño (otro puesto solo lo pide si el dueño le da el
+  permiso); el gasto pasa por los resultados del mes. Confirmar.
+- 0.10.0 [DINERO]: proyección conservadora (CxP vencidas, comisiones y dividendos en la semana 1; cobros
+  vencidos no se asumen; POS por liquidar no cuenta como disponible). Confirmar.
+- 0.10.0: el cierre bloquea solo con descuadre contable; un módulo que no cuadra con su cuenta sale como
+  "alerta de cuadre" sin bloquear (así lo dice REQUISITOS). Confirmar.
+- 0.11.0: conciliación uno a uno con 3 días de tolerancia; una conciliación cerrada no se reabre. Confirmar.
+- 0.11.0 [DINERO]: "ganancia de hoy" = ventas sin ISV − costo; "ganancia del mes" = ventas − costo − gastos del 1 a
+  hoy (de los libros); "ventas de hoy" con ISV. Confirmar.
+- 0.11.0: alertas — cierre del mes pasado se espera hasta el día 10; licencia avisa 15 días antes. Confirmar.
+- 0.12.0: categorías y unidades que no existen dan error (no se crean solas desde la hoja de productos). Confirmar.
+- 0.12.0: conteo físico a ciegas; al aprobar se aplica la diferencia contada (no la cantidad). Confirmar.
+- 0.12.0: en clientes, la columna "tipo" solo agrega papeles; un saldo inicial ya cargado con otro monto da error. Confirmar.
+- 0.13.0: usuario restringido ve lo de toda la empresa (banco sin sucursal); ventas del empleado = las que registró; el horario
+  bloquea operar, no consultar; la mercadería trasladada cuenta en el destino desde que sale. Confirmar.

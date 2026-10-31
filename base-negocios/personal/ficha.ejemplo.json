@@ -1,0 +1,16 @@
+{
+  "$schema": "./ficha.schema.json",
+  "nombre": "Mi Negocio S. de R.L.",
+  "rtn": "08011999000000",
+  "rubro": "Ferretería",
+  "moneda": "HNL",
+  "pais": "HN",
+  "zona_horaria": "America/Tegucigalpa",
+  "fecha_inicio": "2026-01-01",
+  "dias_futuro_max": 3,
+  "perfil": "pequeno",
+  "modulos": ["contabilidad"],
+  "dueno": { "correo": "dueno@minegocio.hn", "nombre": "Juan Pérez" },
+  "proveedor": { "correo": "soporte@proveedor.hn", "nombre": "Soporte" },
+  "tema": { "color_principal": "#1f6feb", "logo": "logo.png" }
+}
