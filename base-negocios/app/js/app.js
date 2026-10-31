@@ -12,6 +12,7 @@ import { vigilarImpresion } from './imprimible.js';
 import { olvidarDatos, reiniciarTodo } from './datos.js';
 import { comaInvalida, MENSAJE_COMA } from './formato.js';
 import { olvidarFotos, prepararFotos } from './fotos.js';
+import { temaActual, cambiarTema, alCambiarTema } from './tema_oscuro.js';
 
 const raiz = document.getElementById('app');
 const bandaSinConexion = document.getElementById('sin-conexion');
@@ -39,6 +40,19 @@ function pintarBarra() {
   bandaSinConexion.textContent = texto || '';
   bandaSinConexion.dataset.tipo = tipo;
   bandaSinConexion.dataset.pendientes = String(n);
+  pintarEstadoRed();
+}
+// App 0.15.0: "Al día" / "Sin conexión" / "Subiendo" siempre a la vista en el encabezado (punto + texto).
+function pintarEstadoRed() {
+  const el = document.getElementById('estado-red');
+  if (!el) return;
+  const n = estadoCola.pendientes || 0;
+  const [red, texto] = !hayConexion ? ['sin', n ? `Sin conexión · ${n} por subir` : 'Sin conexión']
+    : estadoCola.subiendo || n ? ['subiendo', n ? `Subiendo ${n}` : 'Subiendo'] : ['si', 'Al día'];
+  el.dataset.red = red;
+  el.title = texto;
+  el.setAttribute('aria-label', 'Conexión: ' + texto);
+  el.firstChild.textContent = texto;
 }
 function marcarConexion(hay) {
   const volvio = hay && !hayConexion;
@@ -174,6 +188,7 @@ function forzarSalida(texto) {
 
 // ---------------- Armazón de la app ----------------
 let zonas = null; // { pestanas, subpestanas, contenido, barra }
+let quitarOyenteTema = null;
 
 function mostrarApp() {
   const perfil = perfilActual();
@@ -189,6 +204,19 @@ function mostrarApp() {
   const campana = h('a', { class: 'campana', href: '#/inicio/pendientes', id: 'campana', 'aria-label': 'Pendientes' },
     icono('campana'), h('span', { class: 'campana-numero', id: 'campana-numero', hidden: true }, '0'));
   const subpestanas = h('nav', { class: 'subpestanas', 'aria-label': 'Subpestañas' });
+  // Modo oscuro (se guarda en este equipo) y estado de la conexión (app 0.15.0).
+  const botonTema = h('button', { type: 'button', class: 'boton-tema', id: 'boton-tema' });
+  const pintarBotonTema = (t) => {
+    const oscuro = t === 'oscuro';
+    botonTema.replaceChildren(icono(oscuro ? 'sol' : 'luna'));
+    botonTema.setAttribute('aria-label', oscuro ? 'Cambiar a modo claro' : 'Cambiar a modo oscuro');
+    botonTema.title = oscuro ? 'Modo claro' : 'Modo oscuro';
+  };
+  pintarBotonTema(temaActual());
+  botonTema.addEventListener('click', () => cambiarTema());
+  if (quitarOyenteTema) quitarOyenteTema();
+  quitarOyenteTema = alCambiarTema(pintarBotonTema);
+  const estadoRed = h('span', { class: 'estado-red', id: 'estado-red', role: 'status' }, h('span', { class: 'estado-red-texto' }, 'Al día'));
   const contenido = h('main', { class: 'contenido', id: 'contenido', tabindex: '-1' });
   raiz.replaceChildren(
     h('header', { class: 'encabezado' },
@@ -196,7 +224,7 @@ function mostrarApp() {
         h('div', { class: 'marca' },
           h('div', { class: 'marca-logo', id: 'marca-logo', 'aria-hidden': 'true', dataset: { iniciales: iniciales(perfil.empresa.nombre) } }, iniciales(perfil.empresa.nombre)),
           h('span', { class: 'marca-nombre', id: 'marca-nombre' }, perfil.empresa.nombre)),
-        h('div', { class: 'quien' }, campana,
+        h('div', { class: 'quien' }, estadoRed, botonTema, campana,
           h('span', {}, nombre, h('span', { class: 'rol-texto' }, ' · ', perfil.rol.nombre || perfil.rol.codigo)),
           h('button', { type: 'button', class: 'boton boton-claro', onclick: () => salir() }, 'Salir'))),
       pestanas),

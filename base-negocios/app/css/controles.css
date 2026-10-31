@@ -3,11 +3,11 @@
 .boton {
   font: inherit; font-size: 15px; font-weight: 600; line-height: 1.2; border-radius: 8px;
   padding: 10px 18px; min-height: 44px; min-width: 44px; cursor: pointer;
-  border: 1px solid var(--color-principal-texto, #0f1f3d); background: #ffffff; color: var(--color-principal-texto, #0f1f3d);
+  border: 1px solid var(--color-principal-texto, #0f1f3d); background: var(--color-tarjeta, #ffffff); color: var(--color-principal-texto, #0f1f3d);
   display: inline-flex; align-items: center; justify-content: center; gap: 8px; text-decoration: none; text-align: center;
 }
 .boton-principal { background: var(--color-principal, #0f1f3d); border-color: var(--color-principal, #0f1f3d); color: var(--color-en-principal, #ffffff); }
-.boton-peligro { border-color: var(--color-peligro, #a12a1e); color: var(--color-peligro, #a12a1e); background: #ffffff; }
+.boton-peligro { border-color: var(--color-peligro, #a12a1e); color: var(--color-peligro, #a12a1e); background: var(--color-tarjeta, #ffffff); }
 .boton-claro { border-color: var(--color-en-principal-suave, rgba(255,255,255,.5)); color: var(--color-en-principal, #ffffff); background: transparent; min-height: 40px; padding: 6px 14px; }
 .boton-ancho { width: 100%; }
 .boton[disabled] { opacity: .6; cursor: progress; }
@@ -25,8 +25,8 @@
 .campo label { font-size: 15px; font-weight: 600; color: var(--color-texto, #1a1a1a); }
 .campo input, .campo textarea, .campo select {
   font: inherit; font-size: 16px; /* 16 px evita que el celular haga zoom */
-  min-height: 44px; padding: 10px 12px; border: 1px solid #8a8780; border-radius: 8px;
-  background: #ffffff; color: #1a1a1a; width: 100%;
+  min-height: 44px; padding: 10px 12px; border: 1px solid var(--color-campo-borde, #8a8780); border-radius: 8px;
+  background: var(--color-campo-fondo, #ffffff); color: var(--color-campo-texto, #1a1a1a); width: 100%;
 }
 .campo textarea { min-height: 88px; resize: vertical; }
 .ayuda { font-size: 15px; color: var(--color-suave, #4a4a4a); margin: 0; }
@@ -34,13 +34,13 @@
 .mensaje { border-radius: 8px; padding: 12px 14px; font-size: 15px; margin: 0; }
 .mensaje p { margin: 0; }
 .mensaje p + p { margin-top: 4px; }
-.mensaje-error { background: var(--color-peligro-fondo, #fbeae7); color: var(--color-peligro, #a12a1e); border: 1px solid #e7b9b2; }
-.mensaje-info { background: var(--color-aviso-fondo, #fdf1dc); color: var(--color-aviso, #7a5410); border: 1px solid #e8d3a8; }
-.mensaje-ok { background: var(--color-ok-fondo, #e6f2ea); color: var(--color-ok, #1e6b3a); border: 1px solid #b7d8c2; }
+.mensaje-error { background: var(--color-peligro-fondo, #fbeae7); color: var(--color-peligro, #a12a1e); border: 1px solid var(--color-peligro-borde, #e7b9b2); }
+.mensaje-info { background: var(--color-aviso-fondo, #fdf1dc); color: var(--color-aviso, #7a5410); border: 1px solid var(--color-aviso-borde, #e8d3a8); }
+.mensaje-ok { background: var(--color-ok-fondo, #e6f2ea); color: var(--color-ok, #1e6b3a); border: 1px solid var(--color-ok-borde, #b7d8c2); }
 
 dialog.dialogo {
   border: none; border-radius: 12px; padding: 0; width: min(440px, calc(100vw - 32px));
-  box-shadow: 0 10px 40px rgba(15,31,61,.3); color: var(--color-texto, #1a1a1a); font-family: var(--letra, sans-serif);
+  box-shadow: 0 10px 40px rgba(15,31,61,.3); color: var(--color-texto, #1a1a1a); background: var(--color-tarjeta, #ffffff); font-family: var(--letra, sans-serif);
 }
 dialog.dialogo::backdrop { background: rgba(15,31,61,.45); }
 .dialogo form { display: flex; flex-direction: column; gap: 14px; padding: 22px; }

@@ -38,6 +38,85 @@
   --color-neutro: #4a4a4a;
   --color-neutro-fondo: #efebe4;
   --color-barra-grafica: #b4c1d8;
+  /* App 0.15.0: colores de campos, bordes de mensajes, sombras y tramos (antes estaban fijos en base/controles):
+     así el modo oscuro solo cambia variables. */
+  --color-campo-fondo: #ffffff;
+  --color-campo-texto: #1a1a1a;
+  --color-campo-borde: #8a8780;
+  --color-campo-borde-suave: #c9ced8;
+  --color-subpestanas-fondo: #eae8e3;
+  --color-peligro-borde: #e7b9b2;
+  --color-aviso-borde: #e8d3a8;
+  --color-ok-borde: #b7d8c2;
+  --sombra: 0 1px 3px rgba(15,31,61,.08);
+  --sombra-alta: 0 6px 20px rgba(15,31,61,.12);
+  /* Barra del total en Vender: oscura y fija (en los dos modos), el número en blanco. */
+  --color-total-fondo: #0f1f3d;
+  --color-total-texto: #ffffff;
+  /* Botón Cobrar: verde = entra dinero (color con significado, no cambia con la marca). */
+  --color-cobrar: #1e6b3a;
+  --color-cobrar-texto: #ffffff;
+  /* Los que salen de la marca para el MODO OSCURO (js/marca.js los recalcula con su contraste). */
+  --color-principal-texto-oscuro: #90ade4;
+  --color-acento-icono-oscuro: #c8972a;
+  --color-foco-oscuro: #c8972a;
+  --color-boton-oscuro: #3166c8;
+  --color-en-boton-oscuro: #ffffff;
+  --tramo-1-fondo: #fdf3d8; --tramo-1-texto: #6b4c00;
+  --tramo-2-fondo: #fde4cf; --tramo-2-texto: #7a3a00;
+  --tramo-3-fondo: #f9d3cc; --tramo-3-texto: #8a1f12;
+  --tramo-4-fondo: #a12a1e; --tramo-4-texto: #ffffff;
+  color-scheme: light;
   --letra: 'IBM Plex Sans', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
   --letra-mono: 'IBM Plex Mono', ui-monospace, 'SFMono-Regular', Menlo, Consolas, monospace;
+}
+/* ===================== Modo oscuro (app 0.15.0) =====================
+   Lo pone js/tema_oscuro.js en <html data-tema="oscuro"> (botón luna/sol del encabezado; se guarda en el equipo).
+   Fondos oscuros y letras claras; cada color con significado tiene su versión clara con contraste AA sobre su fondo.
+   El encabezado sigue con el color del negocio. Lo IMPRESO no cambia: comprobantes y reportes siempre en blanco y negro.
+   Los colores que salen de la marca van con !important porque marca.js los pone en el style del <html>:
+   en oscuro se usan sus versiones "-oscuro" (también calculadas por marca.js). */
+html[data-tema="oscuro"] {
+  color-scheme: dark;
+  --color-fondo: #11151c;
+  --color-tarjeta: #1a202b;
+  --color-linea: #2e3747;
+  --color-texto: #e9ecf1;
+  --color-suave: #aab2c0;
+  --color-campo-fondo: #0f131a;
+  --color-campo-texto: #e9ecf1;
+  --color-campo-borde: #6f7a8c;
+  --color-campo-borde-suave: #465063;
+  --color-subpestanas-fondo: #232a37;
+  --color-peligro: #ff9b8c;
+  --color-peligro-fondo: #3b1d1a;
+  --color-peligro-borde: #6e3129;
+  --color-ok: #7fd69c;
+  --color-ok-fondo: #15301f;
+  --color-ok-borde: #2d5b3c;
+  --color-aviso: #f0c86e;
+  --color-aviso-fondo: #33290f;
+  --color-aviso-borde: #66521f;
+  --color-verde: #7fd69c;
+  --color-verde-fondo: #17311f;
+  --color-rojo: #ff9b8c;
+  --color-rojo-fondo: #3b1d1a;
+  --color-dorado: #f0c86e;
+  --color-dorado-fondo: #33290f;
+  --color-azul: #a9c2ef;
+  --color-azul-fondo: #1c2841;
+  --color-neutro: #c7cdd7;
+  --color-neutro-fondo: #262e3b;
+  --color-barra-grafica: #45577a;
+  --sombra: 0 1px 3px rgba(0,0,0,.45);
+  --sombra-alta: 0 6px 20px rgba(0,0,0,.5);
+  --color-total-fondo: #0b0f15;
+  --color-cobrar: #237a43;
+  --tramo-1-fondo: #3a2f0e; --tramo-1-texto: #f3d27c;
+  --tramo-2-fondo: #43280f; --tramo-2-texto: #ffbf85;
+  --tramo-3-fondo: #4a1e19; --tramo-3-texto: #ffab9e;
+  --tramo-4-fondo: #c2412f; --tramo-4-texto: #ffffff;
+  --color-principal-texto: var(--color-principal-texto-oscuro) !important;
+  --color-acento-icono: var(--color-acento-icono-oscuro) !important;
+  --color-foco: var(--color-foco-oscuro) !important;
 }

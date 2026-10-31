@@ -17,7 +17,7 @@ h2 { font-size: 18px; margin: 0 0 8px; }
 /* Aviso "Sin conexión" */
 .sin-conexion {
   position: sticky; top: 0; z-index: 50; background: var(--color-aviso-fondo); color: var(--color-aviso);
-  font-weight: 600; text-align: center; padding: 10px 16px; font-size: 14px; border-bottom: 1px solid #e8d3a8;
+  font-weight: 600; text-align: center; padding: 10px 16px; font-size: 14px; border-bottom: 1px solid var(--color-aviso-borde);
 }
 
 /* Encabezado */
@@ -45,7 +45,7 @@ h2 { font-size: 18px; margin: 0 0 8px; }
 /* Contenido */
 .contenido { max-width: 1216px; margin: 0 auto; padding: 24px 32px 48px; display: flex; flex-direction: column; gap: 20px; }
 .subpestanas {
-  display: flex; gap: 6px; background: #eae8e3; padding: 4px; border-radius: 10px; align-self: flex-start;
+  display: flex; gap: 6px; background: var(--color-subpestanas-fondo); padding: 4px; border-radius: 10px; align-self: flex-start;
   max-width: 100%; overflow-x: auto; scrollbar-width: none;
 }
 .subpestanas::-webkit-scrollbar { display: none; }
@@ -55,7 +55,7 @@ h2 { font-size: 18px; margin: 0 0 8px; }
 }
 .subpestana[aria-current="page"] { background: var(--color-tarjeta); color: var(--color-principal-texto); font-weight: 600; box-shadow: 0 1px 2px rgba(15,31,61,.12); }
 
-.tarjeta { background: var(--color-tarjeta); border-radius: 14px; padding: 22px; box-shadow: 0 1px 3px rgba(15,31,61,.08); min-width: 0; }
+.tarjeta { background: var(--color-tarjeta); border-radius: 14px; padding: 22px; box-shadow: var(--sombra); min-width: 0; }
 .cifras { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px; }
 .cifra-titulo { font-size: 14px; color: var(--color-suave); margin: 0; }
 .cifra-valor { font-family: var(--letra-mono); font-size: 28px; font-weight: 600; color: var(--color-principal-texto); margin: 6px 0 0; word-break: break-word; }
@@ -135,7 +135,7 @@ h2 { font-size: 18px; margin: 0 0 8px; }
 .linea-datos > .campo { width: 120px; }
 .linea-datos .boton-quitar { margin-left: auto; }
 .buscar-fila input {
-  font: inherit; font-size: 16px; min-height: 48px; padding: 10px 12px; border: 1px solid #8a8780; border-radius: 8px; background: #fff; color: #1a1a1a;
+  font: inherit; font-size: 16px; min-height: 48px; padding: 10px 12px; border: 1px solid var(--color-campo-borde); border-radius: 8px; background: var(--color-campo-fondo); color: var(--color-campo-texto);
 }
 .etiqueta-campo { font-size: 15px; font-weight: 600; }
 .valor-campo { min-height: 44px; display: flex; align-items: center; font-size: 16px; }
@@ -154,7 +154,7 @@ h2 { font-size: 18px; margin: 0 0 8px; }
 .titulo-chico { font-size: 16px; margin: 4px 0 8px; }
 .formas { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
 .forma {
-  font: inherit; font-size: 15px; border: 1px solid #c9ced8; background: #ffffff; color: var(--color-texto);
+  font: inherit; font-size: 15px; border: 1px solid var(--color-campo-borde-suave); background: var(--color-tarjeta); color: var(--color-texto);
   border-radius: 8px; min-height: 44px; padding: 8px 6px; cursor: pointer;
 }
 .forma-on { border: 2px solid var(--color-principal-texto); font-weight: 600; color: var(--color-principal-texto); }
@@ -179,10 +179,10 @@ h2 { font-size: 18px; margin: 0 0 8px; }
 .opciones input, .opcion-check input, .linea-devolver input[type=checkbox], .confirmar-excedente input { width: 20px; height: 20px; flex: none; }
 .confirmar-excedente { display: flex; gap: 10px; align-items: flex-start; cursor: pointer; }
 .linea-devolver { display: grid; grid-template-columns: minmax(0, 1fr) 140px; gap: 12px; align-items: end; padding: 8px 0; border-bottom: 1px solid var(--color-linea); }
-.linea-devolver input[type=text] { font: inherit; font-size: 16px; min-height: 44px; padding: 8px 10px; border: 1px solid #8a8780; border-radius: 8px; width: 100%; }
+.linea-devolver input[type=text] { font: inherit; font-size: 16px; min-height: 44px; padding: 8px 10px; border: 1px solid var(--color-campo-borde); border-radius: 8px; width: 100%; }
 .billetes-lista { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; }
 .billete { display: grid; grid-template-columns: 80px 1fr; align-items: center; gap: 8px; font-size: 15px; }
-.billete input { font: inherit; font-size: 16px; min-height: 44px; padding: 8px; border: 1px solid #8a8780; border-radius: 8px; width: 100%; }
+.billete input { font: inherit; font-size: 16px; min-height: 44px; padding: 8px; border: 1px solid var(--color-campo-borde); border-radius: 8px; width: 100%; }
 .cifra-chica { background: var(--color-fondo); border-radius: 8px; padding: 12px; }
 .cifra-chica .cifra-valor { font-size: 20px; }
 .antiguedad { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin: 12px 0; }
@@ -234,12 +234,12 @@ h2 { font-size: 18px; margin: 0 0 8px; }
 .suma-nota { color: var(--color-suave); }
 
 /* App 0.14.0: barra de ventas sin internet (arriba, dentro del flujo: el contenido baja y no tapa Cobrar). */
-.sin-conexion[data-tipo=ok] { background: var(--color-ok-fondo, #e6f4ea); color: var(--color-ok, #1d6b35); border-bottom-color: #b9dfc4; }
+.sin-conexion[data-tipo=ok] { background: var(--color-ok-fondo); color: var(--color-ok); border-bottom-color: var(--color-ok-borde); }
 .comprobante-copia { width: 100%; display: flex; justify-content: center; }
 .estado-equipo { display: inline-block; font-size: 13px; font-weight: 600; padding: 2px 8px; border-radius: 999px; }
-.estado-equipo[data-estado=en_equipo] { background: #eceff3; color: #3b4352; }
-.estado-equipo[data-estado=subida] { background: #e6f4ea; color: #1d6b35; }
-.estado-equipo[data-estado=por_resolver], .estado-equipo[data-estado=rechazada] { background: #fdecea; color: #a12a1e; }
+.estado-equipo[data-estado=en_equipo] { background: var(--color-neutro-fondo); color: var(--color-neutro); }
+.estado-equipo[data-estado=subida] { background: var(--color-verde-fondo); color: var(--color-verde); }
+.estado-equipo[data-estado=por_resolver], .estado-equipo[data-estado=rechazada] { background: var(--color-rojo-fondo); color: var(--color-rojo); }
 
 /* App 0.3.0: tablas, columnas, inventario y ajustes */
 .marca-logo-img { width: 100%; height: 100%; object-fit: contain; border-radius: inherit; background: #ffffff; }
@@ -262,7 +262,7 @@ h2 { font-size: 18px; margin: 0 0 8px; }
 .casilla-toque { display: inline-flex; align-items: center; justify-content: center; min-width: 44px; min-height: 44px; cursor: pointer; border-radius: 8px; }
 .casilla-toque:hover { background: var(--color-neutro-fondo); }
 .conteo-fila { display: grid; grid-template-columns: minmax(0, 1fr) 130px; gap: 12px; align-items: center; padding: 8px 0; border-bottom: 1px solid var(--color-linea); }
-.conteo-fila input { font: inherit; font-size: 16px; min-height: 44px; padding: 8px 10px; border: 1px solid #8a8780; border-radius: 8px; width: 100%; }
+.conteo-fila input { font: inherit; font-size: 16px; min-height: 44px; padding: 8px 10px; border: 1px solid var(--color-campo-borde); border-radius: 8px; width: 100%; }
 /* Tablas en el celular: ver "Tablas como tarjetas" (app 0.6.0) al final. */
 .buscar-fila { align-items: flex-end; }
 .buscar-fila .campo { flex: 1; min-width: 0; }
@@ -301,10 +301,10 @@ h1.titulo-icono > .icono { width: 26px; height: 26px; }
 .chip-neutro { background: var(--color-neutro-fondo); color: var(--color-neutro); }
 /* App 0.12.0: antigüedad de saldos, más rojo mientras más viejo (contraste AA en cada uno). */
 .tramo-0 { background: var(--color-verde-fondo); color: var(--color-verde); }
-.tramo-1 { background: #fdf3d8; color: #6b4c00; }
-.tramo-2 { background: #fde4cf; color: #7a3a00; }
-.tramo-3 { background: #f9d3cc; color: #8a1f12; }
-.tramo-4 { background: #a12a1e; color: #ffffff; }
+.tramo-1 { background: var(--tramo-1-fondo); color: var(--tramo-1-texto); }
+.tramo-2 { background: var(--tramo-2-fondo); color: var(--tramo-2-texto); }
+.tramo-3 { background: var(--tramo-3-fondo); color: var(--tramo-3-texto); }
+.tramo-4 { background: var(--tramo-4-fondo); color: var(--tramo-4-texto); }
 .enlace { background: none; border: 0; padding: 0; min-height: 44px; color: var(--color-azul); text-decoration: underline; font: inherit; font-weight: 600; cursor: pointer; text-align: left; }
 
 /* Burbujas de ícono */
@@ -335,7 +335,7 @@ h1.titulo-icono > .icono { width: 26px; height: 26px; }
 .acciones { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 14px; }
 .accion {
   display: flex; align-items: center; gap: 14px; padding: 18px; border-radius: 14px; text-decoration: none; font-size: 17px; font-weight: 600;
-  min-height: 76px; background: var(--color-tarjeta); color: var(--color-principal-texto); box-shadow: 0 1px 3px rgba(15,31,61,.08);
+  min-height: 76px; background: var(--color-tarjeta); color: var(--color-principal-texto); box-shadow: var(--sombra);
   border: 1px solid transparent; transition: border-color .15s, box-shadow .15s;
 }
 .accion:hover { border-color: var(--color-linea); box-shadow: 0 3px 10px rgba(15,31,61,.10); }
@@ -383,7 +383,7 @@ a.fila-icono:hover .fila-icono-titulo { text-decoration: underline; }
 .progreso-relleno { height: 100%; background: var(--color-acento); border-radius: 4px; }
 .paso { display: flex; align-items: center; gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--color-linea); min-height: 56px; }
 .paso:last-of-type { border-bottom: none; }
-.paso-marca { width: 28px; height: 28px; border-radius: 50%; flex: none; display: flex; align-items: center; justify-content: center; border: 2px solid #8a8780; }
+.paso-marca { width: 28px; height: 28px; border-radius: 50%; flex: none; display: flex; align-items: center; justify-content: center; border: 2px solid var(--color-campo-borde); }
 .paso-hecho .paso-marca { background: var(--color-verde); border-color: var(--color-verde); color: #ffffff; }
 .paso-hecho .paso-marca .icono { width: 16px; height: 16px; stroke-width: 3; }
 .paso-texto { flex: 1; font-weight: 600; }
@@ -641,3 +641,30 @@ a.fila-icono:hover .fila-icono-titulo { text-decoration: underline; }
 }
 /* App 0.14.0: con la barra "Sin conexión" visible, la columna de Cobrar (sticky) queda debajo de la barra, nunca tapada. */
 body:has(#sin-conexion:not([hidden])) .vender-der { top: 56px; }
+
+/* ===================== App 0.15.0: modo oscuro y estado de conexión ===================== */
+/* Botón luna/sol del encabezado (cambia el modo; se guarda en este equipo). */
+.boton-tema {
+  display: inline-flex; align-items: center; justify-content: center; min-width: 44px; min-height: 44px; border-radius: 10px;
+  background: transparent; border: 1px solid transparent; color: var(--color-en-principal-suave); cursor: pointer; padding: 0;
+}
+.boton-tema:hover { color: var(--color-en-principal); border-color: var(--color-en-principal-suave); }
+.boton-tema .icono { width: 22px; height: 22px; }
+/* "Al día" / "Sin conexión" / "Subiendo": siempre a la vista, como el "Sincronizado" de antes. Punto + texto (no solo color). */
+.estado-red { display: inline-flex; align-items: center; gap: 6px; font-size: 14px; color: var(--color-en-principal-suave); white-space: nowrap; }
+.estado-red::before { content: ''; width: 9px; height: 9px; border-radius: 50%; background: #4cc274; box-shadow: 0 0 0 3px rgba(76,194,116,.25); }
+.estado-red[data-red="sin"]::before { background: #f0b43c; box-shadow: 0 0 0 3px rgba(240,180,60,.25); }
+.estado-red[data-red="subiendo"]::before { background: #6fa8ff; box-shadow: 0 0 0 3px rgba(111,168,255,.25); }
+@media (max-width: 699px) { .estado-red .estado-red-texto { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; } }
+
+/* Modo oscuro: los botones principales con el color del negocio ACLARADO (marca.js), para que se vean sobre fondo oscuro. */
+html[data-tema="oscuro"] .boton-principal, html[data-tema="oscuro"] .accion-principal {
+  background: var(--color-boton-oscuro); border-color: var(--color-boton-oscuro); color: var(--color-en-boton-oscuro);
+}
+html[data-tema="oscuro"] .accion-principal .burbuja-acento { background: var(--color-acento); color: var(--color-en-acento); }
+html[data-tema="oscuro"] .encabezado { box-shadow: 0 1px 0 var(--color-linea); }
+html[data-tema="oscuro"] .paso-hecho .paso-marca { color: #0f131a; }
+html[data-tema="oscuro"] .subpestana[aria-current="page"] { background: var(--color-tarjeta); box-shadow: 0 1px 2px rgba(0,0,0,.5); }
+html[data-tema="oscuro"] .campo input[type=date]::-webkit-calendar-picker-indicator { filter: invert(.85); }
+/* El comprobante en pantalla sigue siendo un papel blanco (así se imprime). */
+html[data-tema="oscuro"] .comprobante { border-color: var(--color-linea); }

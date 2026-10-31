@@ -100,6 +100,29 @@ function legibleSobreClaro(hex, fondo = '#f4f2ee') {
   return OSCURO;
 }
 
+// Modo oscuro (app 0.15.0): el fondo de las tarjetas oscuras. Los colores de la marca usados como letra, ícono,
+// foco o botón se ACLARAN hasta que se lean encima (letra 4.5, ícono/foco/borde de botón 3).
+export const TARJETA_OSCURA = '#1a202b';
+// Se aclara subiendo la LUZ del color (HSL) sin perder su tono: el azul marino queda azul, no gris.
+function aHsl(hex) {
+  const [r, g, b] = rgb(hex).map((x) => x / 255);
+  const max = Math.max(r, g, b), min = Math.min(r, g, b), l = (max + min) / 2, d = max - min;
+  if (!d) return [0, 0, l];
+  const s = d / (1 - Math.abs(2 * l - 1));
+  const hh = max === r ? ((g - b) / d) % 6 : max === g ? (b - r) / d + 2 : (r - g) / d + 4;
+  return [hh * 60, s, l];
+}
+function deHsl(hh, s, l) {
+  const c = (1 - Math.abs(2 * l - 1)) * s, x = c * (1 - Math.abs(((hh / 60) % 2) - 1)), m = l - c / 2;
+  const [r, g, b] = hh < 60 ? [c, x, 0] : hh < 120 ? [x, c, 0] : hh < 180 ? [0, c, x] : hh < 240 ? [0, x, c] : hh < 300 ? [x, 0, c] : [c, 0, x];
+  return aHex([r + m, g + m, b + m].map((v) => v * 255));
+}
+function aclararHasta(hex, minimo, fondo = TARJETA_OSCURA) {
+  const [hh, s, l] = aHsl(hex);
+  for (let t = l; t <= 1.0001; t += 0.02) { const c = deHsl((hh + 360) % 360, s, Math.min(1, t)); if (contraste(c, fondo) >= minimo) return c; }
+  return BLANCO;
+}
+
 // Todas las variables de color que salen de la marca. null = usar las del tema (css/tema.css).
 export function coloresDeMarca(m = {}) {
   const v = {};
@@ -108,18 +131,22 @@ export function coloresDeMarca(m = {}) {
     const en = textoSobre(p);
     Object.assign(v, { '--color-principal': p, '--color-principal-2': mezclar(p, BLANCO, 0.12), '--color-en-principal': en,
       '--color-en-principal-suave': suaveSobre(p, en), '--color-principal-texto': legibleSobreClaro(p) });
+    const boton = fondoLegible(aclararHasta(p, 3));
+    Object.assign(v, { '--color-principal-texto-oscuro': aclararHasta(p, 7), '--color-boton-oscuro': boton, '--color-en-boton-oscuro': textoSobre(boton) });
   }
   if (esColor(m.color_acento)) {
     const a = fondoLegible(m.color_acento.toLowerCase());
     // Foco: el acento solo si se ve sobre blanco (3 o más); si no, el principal legible.
     // Íconos de los títulos: el acento oscurecido hasta 3 o más sobre blanco.
     Object.assign(v, { '--color-acento': a, '--color-en-acento': textoSobre(a), '--color-acento-icono': iconoSobreBlanco(a),
-      '--color-foco': contraste(a, BLANCO) >= 3 ? a : (v['--color-principal-texto'] || '#0f1f3d') });
+      '--color-foco': contraste(a, BLANCO) >= 3 ? a : (v['--color-principal-texto'] || '#0f1f3d'),
+      '--color-acento-icono-oscuro': aclararHasta(a, 3), '--color-foco-oscuro': aclararHasta(a, 3) });
   }
   return v;
 }
 const VARIABLES = ['--color-principal', '--color-principal-2', '--color-en-principal', '--color-en-principal-suave',
-  '--color-principal-texto', '--color-acento', '--color-en-acento', '--color-acento-icono', '--color-foco'];
+  '--color-principal-texto', '--color-acento', '--color-en-acento', '--color-acento-icono', '--color-foco',
+  '--color-principal-texto-oscuro', '--color-boton-oscuro', '--color-en-boton-oscuro', '--color-acento-icono-oscuro', '--color-foco-oscuro'];
 
 // Pone los colores (o vuelve a los del tema si no hay) y el logo y nombre del encabezado.
 // raiz puede ser otro elemento (la vista previa de Ajustes > Mi negocio): ahí solo cambian los colores.
