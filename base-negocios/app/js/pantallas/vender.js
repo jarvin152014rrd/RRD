@@ -8,7 +8,7 @@
 //     guardada en el equipo (js/calculo_local.js); solo efectivo o transferencia; la venta se guarda en la cola.
 //   * caja con números reservados en ESTE equipo (G2): toda venta de contado pasa por la cola (número del bloque) y
 //     se sube enseguida; si el servidor no contesta, queda guardada y se imprime "Emitida sin conexión".
-import { rpc, escribir, nuevoId } from '../api.js';
+import { rpc, escribir, nuevoId, leer } from '../api.js';
 import { empresaId, perfilActual, puede, tieneModulo, modoSinInternet } from '../sesion.js';
 import * as si from '../sin_internet.js';
 import { precioConTasa } from '../calculo_local.js';
@@ -19,6 +19,40 @@ import { productos, clientes, miTurno, filtrar, olvidarDatos, nucleoAlMenos } fr
 import { vistaComprobante, vistaComprobanteLocal, nombreForma } from '../comprobante.js';
 import { abrirTurnoDialogo } from './caja_turno.js';
 import { fotosActivas, miniatura } from '../fotos.js';
+
+// Formas de pago como tarjetas (app 0.15.0, idea de RRD): ícono, nombre y una explicación corta.
+const FORMAS_VISTA = {
+  efectivo: ['billetes', 'Paga ahora'],
+  tarjeta: ['tarjeta', 'Datáfono o POS'],
+  transferencia: ['transferencia', 'Depósito o app'],
+  credito: ['reloj', 'Queda debiendo'],
+  mixto: ['capas', 'Dos o más formas'],
+};
+
+// Existencias para el buscador (app 0.15.0): suma de las bodegas que el usuario ve (v_existencia ya filtra por
+// sucursal y permiso). Sin permiso o sin módulo de inventario no se muestran (null).
+async function existenciasVisibles() {
+  if (!tieneModulo('inventario') || !puede('inventario.ver')) return null;
+  const filas = await leer('v_existencia', { empresa_id: empresaId() }, { limite: 5000 });
+  const m = new Map();
+  for (const f of filas) m.set(f.producto_id, (m.get(f.producto_id) || 0) + Number(f.cantidad || 0));
+  return m;
+}
+
+// Computadora: el ticket mide lo que queda de pantalla desde donde empieza (y al bajar, la pantalla entera),
+// así el pie con el total y Cobrar siempre se ve. Se deja de vigilar cuando la pantalla cambia.
+function ajustarTicket(el) {
+  if (!el) return;
+  const medir = () => {
+    if (!el.isConnected) { window.removeEventListener('scroll', medir); window.removeEventListener('resize', medir); return; }
+    if (window.innerWidth < 900) { el.style.removeProperty('max-height'); return; }
+    const arriba = Math.max(12, el.getBoundingClientRect().top);
+    el.style.maxHeight = `${Math.max(320, window.innerHeight - arriba - 12)}px`;
+  };
+  window.addEventListener('scroll', medir, { passive: true });
+  window.addEventListener('resize', medir);
+  requestAnimationFrame(medir);
+}
 
 export async function mostrar(vista, ctx) {
   await armarCarrito(vista, ctx, { modo: 'venta' });
@@ -129,6 +163,19 @@ export async function armarCarrito(vista, ctx, { modo, alTerminar = null }) {
   const zonaBuscar = h('div', { 'aria-live': 'polite' });
   const botonCamara = h('button', { type: 'button', class: 'boton', onclick: () => escanear(porCodigo, buscar) }, icono('foto'), 'Cámara');
 
+  // Existencias: con internet se leen aparte (no frenan la pantalla); sin internet, las de la foto del catálogo.
+  let existencias = null;
+  if (local || sinRedAlAbrir) {
+    existencias = new Map(lista.filter((p) => p.existencia !== null && p.existencia !== undefined).map((p) => [p.producto_id, Number(p.existencia)]));
+  } else if (modo === 'venta' || modo === 'cotizacion') {
+    existenciasVisibles().then((m) => { existencias = m; if (buscar.value.trim()) pintarResultados(); }).catch(() => {});
+  }
+  function chipExistencia(p) {
+    if (!existencias || p.tipo === 'servicio') return null;
+    const n = existencias.get(p.producto_id) || 0;
+    return n > 0 ? chip(`${fCantidad(n)} ${p.unidad || ''}`.trim(), 'verde', { class: 'chip-existencia', dataset: { dato: 'existencia' } })
+      : chip('Agotado', 'rojo', { class: 'chip-existencia', dataset: { dato: 'existencia' } });
+  }
   function pintarResultados() {
     const q = buscar.value.trim();
     resultados.replaceChildren(...(q ? filtrar(lista, q, ['nombre', 'codigo', 'codigo_barras']).slice(0, 8).map((p) =>
@@ -136,7 +183,8 @@ export async function armarCarrito(vista, ctx, { modo, alTerminar = null }) {
         // Fotos encendidas (app 0.11.0): miniatura (o el ícono si no tiene foto).
         (!local && fotosActivas()) ? miniatura(p, { icono: p.tipo === 'servicio' ? 'servicio' : 'etiqueta', props: { class: 'burbuja-chica' } }) : null,
         h('span', { class: 'resultado-texto' }, p.nombre, h('span', { class: 'detalle' }, [p.codigo, p.tipo === 'servicio' ? 'Servicio' : null, p.unidad].filter(Boolean).join(' · '))),
-        h('span', { class: 'monto' }, dinero(p.precio_venta_centavos)))) : []));
+        chipExistencia(p),
+        h('span', { class: 'monto resultado-precio' }, dinero(p.precio_venta_centavos)))) : []));
     if (q && !resultados.children.length) resultados.append(h('p', { class: 'vacio' }, 'No hay productos con ese nombre o código.'));
   }
   async function porCodigo(codigo) {
@@ -175,9 +223,14 @@ export async function armarCarrito(vista, ctx, { modo, alTerminar = null }) {
     buscar.value = '';
     resultados.replaceChildren();
     zonaBuscar.replaceChildren();
+    ultimaAgregada = p.producto_id;
+    if (avisoAgregado) avisoAgregado.remove();
+    avisoAgregado = aviso(`Agregado: ${p.nombre}`, 'ok', 1800);
     cambio();
     buscar.focus();
   }
+  let ultimaAgregada = null;
+  let avisoAgregado = null;
 
   function pintarCarrito() {
     if (!estado.lineas.length) {
@@ -245,9 +298,16 @@ export async function armarCarrito(vista, ctx, { modo, alTerminar = null }) {
               k === 0 ? chip('Sugerida: la que más descuenta', 'verde') : null);
           })));
       }
-      return h('article', { class: 'linea-carrito', dataset: { producto: p.producto_id } }, ...partes);
+      const nueva = ultimaAgregada === p.producto_id;
+      return h('article', { class: 'linea-carrito' + (nueva ? ' linea-nueva' : ''), dataset: { producto: p.producto_id } }, ...partes);
     }));
+    ultimaAgregada = null;
+    // Cuántos artículos lleva (en el título).
+    const n = estado.lineas.length;
+    cuentaArticulos.textContent = n ? String(n) : '';
+    cuentaArticulos.hidden = !n;
   }
+  const cuentaArticulos = chip('', 'azul', { class: 'cuenta-articulos', hidden: true, 'aria-label': 'Artículos en la venta' });
 
   // ---------------- Cliente, totales y pago ----------------
   const selCliente = h('select', { id: 'cliente' }, h('option', { value: '' }, 'Consumidor final'),
@@ -263,24 +323,30 @@ export async function armarCarrito(vista, ctx, { modo, alTerminar = null }) {
   const zonaTurno = h('div', {});
   const zonaPago = h('div', { class: 'zona-pago' });
   const zonaError = h('div', { 'aria-live': 'assertive' });
-  const botonCobrar = h('button', { id: 'cobrar', type: 'button', class: 'boton boton-principal boton-grande boton-ancho' }, '');
+  const botonCobrar = h('button', { id: 'cobrar', type: 'button', class: 'boton boton-principal boton-grande boton-ancho' + (modo === 'venta' ? ' boton-cobrar' : '') }, '');
 
   function total() { return estado.previa ? estado.previa.total_centavos : null; }
 
+  // Barra oscura con el TOTAL grande (app 0.15.0, como el "TOTAL" de RRD): lo primero que se ve antes de cobrar.
+  function barraTotal(pv) {
+    return h('div', { class: 'total-barra' }, h('span', { class: 'total-barra-texto' }, modo === 'venta' ? 'Total a cobrar' : 'Total'),
+      pv ? h('span', { class: 'monto total-barra-monto', dataset: { dato: 'total' } }, dinero(pv.total_centavos))
+        : h('span', { class: 'monto total-barra-monto' }, dinero(0)));
+  }
   function pintarTotales() {
     const pv = estado.previa;
     if (estado.errorPrevia) { totales.replaceChildren(estado.errorPrevia); }
-    else if (!pv) { totales.replaceChildren(h('p', { class: 'vacio' }, 'Total L 0.00')); }
+    else if (!pv) { totales.replaceChildren(barraTotal(null)); }
     else {
       totales.replaceChildren(...[
         // Todo con ISV, como lo ve el cliente: Subtotal - Descuento = Total (lo calcula el servidor).
         h('div', { class: 'suma' }, h('span', {}, 'Subtotal'), h('span', { class: 'monto', dataset: { dato: 'subtotal' } }, dinero(pv.subtotal_con_isv_centavos))),
         pv.descuento_con_isv_centavos ? h('div', { class: 'suma' }, h('span', {}, 'Descuento'),
           h('span', { class: 'monto', dataset: { dato: 'descuento' } }, '−' + dinero(pv.descuento_con_isv_centavos))) : null,
-        h('div', { class: 'suma suma-total' }, h('span', {}, 'Total'), h('span', { class: 'monto', dataset: { dato: 'total' } }, dinero(pv.total_centavos))),
         (pv.desglose_impuestos || []).filter((d) => d.clase === 'gravado').map((d) =>
           h('div', { class: 'suma suma-nota' }, h('span', {}, `${d.nombre} incluido`), h('span', { class: 'monto', dataset: { dato: 'isv-' + d.codigo } }, dinero(d.impuesto_centavos)))),
         pv.exento_centavos ? h('div', { class: 'suma suma-nota' }, h('span', {}, 'Exento'), h('span', { class: 'monto' }, dinero(pv.exento_centavos))) : null,
+        barraTotal(pv),
         pv.descuento_pide_aprobacion ? mensaje('info', `El descuento pasa su tope (${pv.tope_descuento_porcentaje} %).`,
           'Puede seguir: la venta quedará esperando la aprobación del administrador o del dueño.', { class: 'aviso-tope' }) : null].flat().filter(Boolean));
     }
@@ -293,7 +359,10 @@ export async function armarCarrito(vista, ctx, { modo, alTerminar = null }) {
     const botones = h('div', { class: 'formas', role: 'radiogroup', 'aria-label': 'Forma de pago' }, formas.map((f) =>
       h('button', { type: 'button', class: 'forma' + (estado.forma === f ? ' forma-on' : ''), role: 'radio',
         'aria-checked': estado.forma === f ? 'true' : 'false', dataset: { forma: f },
-        onclick: () => { estado.forma = f; cambio(false); } }, f === 'mixto' ? 'Mixto' : nombreForma(f))));
+        onclick: () => { estado.forma = f; cambio(false); } },
+      icono((FORMAS_VISTA[f] || ['billetes'])[0]),
+      h('span', { class: 'forma-nombre' }, f === 'mixto' ? 'Mixto' : nombreForma(f)),
+      h('span', { class: 'forma-ayuda' }, (FORMAS_VISTA[f] || [null, ''])[1]))));
     const detalle = h('div', { class: 'forma-detalle' });
     if (estado.forma === 'efectivo') {
       const rec = h('input', { id: 'recibido', type: 'text', inputmode: 'decimal', autocomplete: 'off', value: estado.recibido,
@@ -621,17 +690,23 @@ export async function armarCarrito(vista, ctx, { modo, alTerminar = null }) {
         h('p', { class: 'ayuda', id: 'ayuda-buscar' }, 'Con lector de códigos: apunte y listo (escribe el código y Enter).'),
         zonaBuscar, resultados),
       h('section', { class: 'tarjeta', 'aria-labelledby': 't-carrito' },
-        titulo('h2', 'bolsa', modo === 'venta' ? 'Artículos' : 'Artículos de la cotización', { id: 't-carrito' }), carrito)),
+        titulo('h2', 'bolsa', [modo === 'venta' ? 'Artículos' : 'Artículos de la cotización', ' ', cuentaArticulos], { id: 't-carrito' }), carrito)),
+    // El "ticket" de la derecha (app 0.15.0): cliente, forma de pago y, abajo, el total grande y Cobrar.
     h('aside', { class: 'vender-der tarjeta', 'aria-label': 'Cobro' },
+      titulo('h2', modo === 'venta' ? 'cobrar' : 'documento', modo === 'venta' ? 'Cobro' : 'Cotización', { class: 'titulo-ticket' }),
       zonaTurno,
       campo('Cliente', selCliente, modo === 'venta' ? 'Opcional. El crédito necesita cliente.' : null),
-      totales,
-      porCola ? null : campo('Descuento a toda la factura (%)', descFactura, 'Solo va a las líneas sin promoción ni otro descuento.'),
+      // El descuento a toda la factura se usa poco: plegado (se abre solo si ya tiene un valor).
+      porCola ? null : h('details', { class: 'plegable', open: estado.descFactura !== '' ? true : null },
+        h('summary', {}, icono('mas'), 'Descuento a toda la factura'),
+        campo('Descuento a toda la factura (%)', descFactura, 'Solo va a las líneas sin promoción ni otro descuento.')),
       zonaPago,
       !cobra && modo === 'venta' && !porCola ? mensaje('info', 'Usted puede vender al crédito o hacer una cotización.',
         'El cobro en efectivo, tarjeta o transferencia lo hace el cajero.') : null,
-      zonaError, botonCobrar));
+      // Abajo y siempre a la vista en la computadora: el total grande y Cobrar.
+      h('div', { class: 'ticket-pie' }, totales, zonaError, botonCobrar)));
   vista.append(raiz);
+  ajustarTicket(raiz.querySelector('.vender-der'));
   pintarTodo();
   pintarTurno();
   buscar.focus();

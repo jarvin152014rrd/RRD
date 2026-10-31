@@ -30,6 +30,7 @@ export function aviso(texto, tipo = 'ok', dura = 4500) {
   const el = h('p', { class: `mensaje mensaje-${tipo} con-icono` }, icono(ICONO_MENSAJE[tipo] || 'info'), h('span', {}, texto));
   caja.append(el);
   setTimeout(() => el.remove(), dura);
+  return el;
 }
 const ICONO_MENSAJE = { ok: 'check_circulo', error: 'alerta', info: 'info' };
 export function limpiarAvisos() {

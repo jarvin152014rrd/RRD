@@ -668,3 +668,81 @@ html[data-tema="oscuro"] .subpestana[aria-current="page"] { background: var(--co
 html[data-tema="oscuro"] .campo input[type=date]::-webkit-calendar-picker-indicator { filter: invert(.85); }
 /* El comprobante en pantalla sigue siendo un papel blanco (así se imprime). */
 html[data-tema="oscuro"] .comprobante { border-color: var(--color-linea); }
+
+/* ===================== App 0.15.0: Vender como en RRD ===================== */
+/* Resultados del buscador: foto, nombre y código, existencias (chip) y precio, en una fila fácil de tocar. */
+.resultados { gap: 0; border-radius: 10px; overflow: hidden; }
+.resultados:not(:empty) { border: 1px solid var(--color-linea); }
+.resultado-producto { border: none; border-radius: 0; border-bottom: 1px solid var(--color-linea); min-height: 56px; padding: 10px 14px; gap: 12px; }
+.resultado-producto:last-child { border-bottom: none; }
+.resultado-producto:hover, .resultado-producto:focus-visible { background: var(--color-azul-fondo); }
+.resultado-producto .chip-existencia { flex: none; }
+.resultado-precio { font-weight: 700; color: var(--color-principal-texto); flex: none; }
+.resultados > .vacio { padding: 12px 14px; }
+/* Línea recién agregada: se ilumina un momento (sin movimiento para quien lo pidió en su equipo). */
+@keyframes linea-nueva { from { background: var(--color-verde-fondo); } to { background: transparent; } }
+.linea-nueva { animation: linea-nueva 1.6s ease-out; border-radius: 8px; }
+@media (prefers-reduced-motion: reduce) { .linea-nueva { animation: none; } }
+.cuenta-articulos { font-size: 14px; }
+
+/* El "ticket" de la derecha */
+.titulo-ticket { margin: 0; font-size: 19px; }
+.formas { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.forma {
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; text-align: center;
+  min-height: 84px; padding: 10px 8px; border-radius: 12px; line-height: 1.2;
+}
+.forma .icono { width: 24px; height: 24px; color: var(--color-suave); }
+.forma-nombre { font-weight: 600; font-size: 15px; }
+.forma-ayuda { font-size: 13px; color: var(--color-suave); }
+.forma:hover { border-color: var(--color-principal-texto); }
+.forma-on { background: var(--color-principal); border-color: var(--color-principal); color: var(--color-en-principal); }
+.forma-on .icono, .forma-on .forma-ayuda { color: var(--color-en-principal-suave); }
+.forma-on .forma-nombre { color: var(--color-en-principal); }
+.forma[data-forma="mixto"]:last-child:nth-child(odd) { grid-column: 1 / -1; min-height: 64px; }
+html[data-tema="oscuro"] .forma-on { background: var(--color-boton-oscuro); border-color: var(--color-boton-oscuro); }
+html[data-tema="oscuro"] .forma-on .icono, html[data-tema="oscuro"] .forma-on .forma-ayuda,
+html[data-tema="oscuro"] .forma-on .forma-nombre { color: var(--color-en-boton-oscuro); }
+
+/* Total grande en barra oscura, justo encima de Cobrar */
+.total-barra {
+  display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap;
+  background: var(--color-total-fondo); color: var(--color-total-texto); border-radius: 12px; padding: 14px 18px; margin-top: 8px;
+}
+.total-barra-texto { font-size: 14px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; opacity: .9; }
+.total-barra-monto { font-size: 28px; font-weight: 700; color: var(--color-total-texto); }
+.vender[data-calculando] .total-barra-monto { opacity: .55; }
+/* Cobrar: verde (entra dinero), grande */
+.boton.boton-cobrar { background: var(--color-cobrar); border-color: var(--color-cobrar); color: var(--color-cobrar-texto); font-size: 19px; min-height: 60px; }
+html[data-tema="oscuro"] .boton.boton-cobrar { background: var(--color-cobrar); border-color: var(--color-cobrar); color: var(--color-cobrar-texto); }
+.boton.boton-cobrar:hover { filter: brightness(1.08); }
+.vuelto { background: var(--color-verde-fondo); color: var(--color-verde); border-radius: 10px; padding: 10px 14px; font-size: 20px; }
+.vuelto:empty { display: none; }
+.vuelto .peligro { color: var(--color-rojo); }
+.vender .buscar-fila input { min-height: 54px; font-size: 18px; }
+@media (max-width: 699px) {
+  .total-barra-monto { font-size: 24px; }
+  .forma { min-height: 76px; }
+}
+/* Computadora: el ticket cabe en la pantalla; si es más alto, se desliza por dentro y el pie (total + Cobrar) queda fijo abajo. */
+@media (min-width: 900px) {
+  .vender { grid-template-columns: minmax(0, 1fr) 400px; }
+  .vender-der { overflow-y: auto; padding-bottom: 0; }
+  .ticket-pie { position: sticky; bottom: 0; background: var(--color-tarjeta); padding: 4px 0 20px; display: flex; flex-direction: column; gap: 12px;
+    box-shadow: 0 -12px 12px -12px rgba(15,31,61,.18); }
+  .formas { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .forma { min-height: 76px; padding: 8px 4px; }
+  .forma[data-forma="mixto"]:last-child:nth-child(odd) { grid-column: auto; min-height: 76px; }
+}
+.ticket-pie { display: flex; flex-direction: column; gap: 12px; }
+/* Plegable sencillo (detalles que se usan poco) */
+.plegable > summary { list-style: none; cursor: pointer; min-height: 44px; display: flex; align-items: center; gap: 8px; font-weight: 600; font-size: 15px; color: var(--color-principal-texto); }
+.plegable[open] > summary { margin-bottom: 8px; }
+.plegable > summary::-webkit-details-marker { display: none; }
+.plegable > summary .icono { width: 18px; height: 18px; transition: transform .15s; }
+.plegable[open] > summary .icono { transform: rotate(45deg); }
+/* Pie del ticket: subtotal, descuento e ISV en una línea chica; debajo, el total grande. */
+.ticket-pie .totales { flex-direction: row; flex-wrap: wrap; gap: 2px 16px; }
+.ticket-pie .suma { font-size: 14px; padding: 0; gap: 6px; justify-content: flex-start; color: var(--color-suave); }
+.ticket-pie .suma .monto { color: var(--color-texto); }
+.ticket-pie .totales > .total-barra, .ticket-pie .totales > .mensaje, .ticket-pie .totales > .vacio { flex: 1 1 100%; }
