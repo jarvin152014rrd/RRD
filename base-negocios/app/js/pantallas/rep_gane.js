@@ -9,7 +9,7 @@
 import { rpc } from '../api.js';
 import { empresaId, perfilActual } from '../sesion.js';
 import { dinero, fecha, sumarDias } from '../formato.js';
-import { h, icono, cajaError, titulo, tarjetaCifra, chip, monto, estadoVacio, mensaje, tabla } from '../ui.js';
+import { h, icono, cajaError, titulo, chip, monto, estadoVacio, mensaje, tabla } from '../ui.js';
 import { alcance, reiniciarAlSalir } from '../datos.js';
 import { hoy } from '../formularios.js';
 import { selectorPeriodo, periodoInicial, datosPeriodo, botonesReporte, barraParte, ganoPerdio, nombreMes, mesAnterior, MESES,
@@ -53,6 +53,15 @@ export function frase(texto, actual, anterior, textoAnterior) {
   const dif = Number(actual) - Number(anterior);
   if (dif === 0) return `${base}, lo mismo que ${textoAnterior}.`;
   return `${base}, ${dinero(Math.abs(dif))} ${dif > 0 ? 'más' : 'menos'} que ${textoAnterior}.`;
+}
+
+// Una fila de la resta: signo (−, = o +), qué es, el monto (con .cifra-valor, como antes) y una nota chica.
+function filaResta(dato, signo, nombre, centavos, sentido, nota = null, clase = '', extra = null) {
+  return h('div', { class: 'resta-fila ' + clase, role: 'row', dataset: { dato } },
+    h('span', { class: 'resta-signo', 'aria-hidden': 'true', role: 'cell' }, signo),
+    h('span', { class: 'resta-nombre', role: 'cell' }, nombre, nota ? h('span', { class: 'resta-nota' }, nota) : null, extra ? [' ', extra] : null),
+    h('span', { class: 'cifra-valor monto' + (sentido === 'entra' ? ' monto-entra' : sentido === 'sale' ? ' monto-sale' : '') + (Number(centavos) < 0 ? ' monto-sale' : ''), role: 'cell' },
+      dinero(centavos)));
 }
 
 export async function mostrar(vista, ctx) {
@@ -125,22 +134,28 @@ export async function mostrar(vista, ctx) {
         icono(neta >= 0 ? 'sube' : 'baja'), h('span', {}, frase(textoPeriodo, neta, ant ? ant.utilidad_neta_centavos : null, textoAnt))),
       abierto ? mensaje('info', 'El mes sigue abierto: estas cifras pueden cambiar.', 'Quedan firmes cuando se cierra el mes (Reportes > Cierre de mes).', { dataset: { info: 'preliminar' } }) : null,
       vacio ? estadoVacio({ icono: 'grafica', chico: true, texto: 'No hay ventas ni gastos en estas fechas.' }) : null,
-      h('div', { class: 'cifras' },
-        tarjetaCifra({ dato: 'gane-ventas', icono: 'sube', color: 'verde', etiqueta: 'Vendí', valor: dinero(r.ventas_netas_centavos),
-          nota: Number(r.devoluciones_descuentos_centavos) ? `ya restadas devoluciones y descuentos por ${dinero(r.devoluciones_descuentos_centavos)}` : 'ventas sin ISV' }),
-        tarjetaCifra({ dato: 'gane-costo', icono: 'etiqueta', color: 'rojo', etiqueta: 'Me costó lo vendido', valor: dinero(r.costo_ventas_centavos) }),
-        tarjetaCifra({ dato: 'gane-bruta', icono: 'grafica', color: Number(r.utilidad_bruta_centavos) >= 0 ? 'verde' : 'rojo', etiqueta: 'Ganancia bruta',
-          valor: dinero(r.utilidad_bruta_centavos), nota: Number(r.ventas_netas_centavos) ? `${Math.round(Number(r.utilidad_bruta_centavos) * 1000 / Number(r.ventas_netas_centavos)) / 10} % de lo vendido` : null }),
-        tarjetaCifra({ dato: 'gane-gastos', icono: 'recibo', color: 'rojo', etiqueta: 'Gastos', valor: dinero(totalGastos) }),
-        tarjetaCifra({ dato: 'gane-neta', icono: neta >= 0 ? 'check_circulo' : 'alerta', color: neta >= 0 ? 'verde' : 'rojo',
-          etiqueta: neta >= 0 ? 'Ganancia neta' : 'Pérdida', valor: dinero(neta),
-          chip: periodo.modo === 'mes' && r.utilidad_cobrada_centavos !== undefined ? chip(`cobrada ${dinero(r.utilidad_cobrada_centavos)}`, 'azul', { dataset: { dato: 'gane-cobrada' } }) : null })),
+      // App 0.15.0 (idea de RRD "¿Cuánto ganamos este mes?"): la cuenta como una resta que se lee de arriba abajo,
+      // y al lado, en qué se fueron los gastos. Mismos números del núcleo (no se calcula nada nuevo).
+      h('div', { class: 'gane-columnas' },
+        h('div', { class: 'resta', role: 'table', 'aria-label': 'La cuenta' },
+          filaResta('gane-ventas', '', 'Vendí', r.ventas_netas_centavos, 'entra',
+            Number(r.devoluciones_descuentos_centavos) ? `ya restadas devoluciones y descuentos por ${dinero(r.devoluciones_descuentos_centavos)}` : 'ventas sin ISV'),
+          filaResta('gane-costo', '−', 'Me costó lo vendido', r.costo_ventas_centavos, 'sale'),
+          filaResta('gane-bruta', '=', 'Ganancia bruta', r.utilidad_bruta_centavos, null,
+            Number(r.ventas_netas_centavos) ? `${Math.round(Number(r.utilidad_bruta_centavos) * 1000 / Number(r.ventas_netas_centavos)) / 10} % de lo vendido` : null, 'resta-subtotal'),
+          filaResta('gane-gastos', '−', 'Gastos', totalGastos, 'sale'),
+          otrosI ? filaResta('gane-otros', '+', 'Otros ingresos', otrosI, 'entra') : null,
+          filaResta('gane-neta', '=', neta >= 0 ? 'Gané' : 'Perdí', neta, neta >= 0 ? 'entra' : 'sale',
+            null, 'resta-total ' + (neta >= 0 ? 'resta-gane' : 'resta-pierde'),
+            periodo.modo === 'mes' && r.utilidad_cobrada_centavos !== undefined
+              ? chip(`cobrada ${dinero(r.utilidad_cobrada_centavos)}`, 'azul', { dataset: { dato: 'gane-cobrada' } }) : null)),
+        h('div', { class: 'gane-gastos' },
+          h('h2', { class: 'titulo-chico' }, 'Gastos por categoría'),
+          filasGasto.length ? h('div', { class: 'lista-filas', id: 'gane-gastos-lista' }, filasGasto.map((g) => h('div', { class: 'fila-parte' },
+            h('div', { class: 'fila' }, h('span', {}, g.nombre), monto(dinero(g.monto_centavos), { sentido: 'sale' })),
+            barraParte(g.monto_centavos, totalGastos)))) : estadoVacio({ icono: 'recibo', chico: true, texto: 'No hubo gastos en estas fechas.' }))),
       periodo.modo === 'mes' ? h('p', { class: 'ayuda' }, `Ganancia cobrada = la parte de la ganancia que ya entró como dinero (lo vendido al crédito cuenta cuando se cobra). Es la que se reparte entre fondos y socios.`) : null,
       otrosI ? h('p', { class: 'ayuda' }, `Además entraron ${dinero(otrosI)} de otros ingresos (por ejemplo, intereses o sobrantes); ya están sumados en la ganancia neta.`) : null,
-      h('h2', { class: 'titulo-chico' }, 'Gastos por categoría'),
-      filasGasto.length ? h('div', { class: 'lista-filas', id: 'gane-gastos-lista' }, filasGasto.map((g) => h('div', { class: 'fila-parte' },
-        h('div', { class: 'fila' }, h('span', {}, g.nombre), monto(dinero(g.monto_centavos), { sentido: 'sale' })),
-        barraParte(g.monto_centavos, totalGastos)))) : estadoVacio({ icono: 'recibo', chico: true, texto: 'No hubo gastos en estas fechas.' }),
       h('h2', { class: 'titulo-chico' }, ant ? (periodo.modo === 'mes' ? `Comparado con ${textoAnt.replace(/^en (los )?/, (x, y) => (y ? 'los ' : ''))}` : `Comparado con los días anteriores (${textoAnt})`) : 'Comparado con antes'),
       ant ? tabla({ props: { id: 'gane-comparar' }, columnas: [{ titulo: 'Concepto' }, { titulo: 'Ahora', num: true }, { titulo: 'Antes', num: true }, { titulo: 'Diferencia', num: true }],
         filas: comparar.map(([t, k, s]) => {

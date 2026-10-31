@@ -782,3 +782,46 @@ input[type=file]::file-selector-button {
   border: 1px solid var(--color-principal-texto); background: var(--color-tarjeta); color: var(--color-principal-texto);
 }
 input[type=file]::file-selector-button:hover { background: var(--color-azul-fondo); }
+
+/* ===================== App 0.15.0: ¿Dónde está mi dinero? (portada oscura con el total grande) ===================== */
+.tarjeta-dinero { padding: 0; overflow: hidden; }
+.tarjeta-dinero > :not(.dinero-portada) { margin-left: 22px; margin-right: 22px; }
+.tarjeta-dinero > .fila:last-child { margin-bottom: 14px; }
+.dinero-portada { background: var(--color-total-fondo); color: var(--color-total-texto); padding: 22px 22px 20px; margin-bottom: 16px; }
+.dinero-portada h1 { color: var(--color-total-texto); font-size: 18px; }
+.dinero-portada h1 .icono { color: var(--color-acento); }
+.dinero-total { font-size: 40px; font-weight: 700; margin: 6px 0 2px; color: var(--color-total-texto); line-height: 1.1; overflow-wrap: anywhere; }
+.dinero-total-ayuda { margin: 0 0 16px; font-size: 14px; opacity: .85; }
+.dinero-grupos { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; }
+.dinero-grupo { background: var(--color-tarjeta); color: var(--color-texto); border-radius: 12px; padding: 12px 14px; }
+.dinero-grupo-cabeza { display: flex; align-items: center; gap: 8px; font-size: 14px; font-weight: 600; color: var(--color-suave); }
+.dinero-grupo-cabeza .icono { color: var(--color-acento-icono); }
+.dinero-grupo[data-grupo="en_camino"] .dinero-grupo-cabeza .icono { color: var(--color-dorado); }
+.dinero-grupo-monto { font-size: 22px; font-weight: 700; margin: 4px 0 0; color: var(--color-principal-texto); }
+.dinero-grupo-ayuda { font-size: 13px; color: var(--color-suave); margin: 2px 0 0; }
+.dinero-detalle-titulo { margin-top: 4px; }
+@media (max-width: 699px) {
+  .dinero-total { font-size: 32px; }
+  .tarjeta-dinero > :not(.dinero-portada) { margin-left: 16px; margin-right: 16px; }
+  .dinero-portada { padding: 18px 16px; }
+}
+
+/* ===================== App 0.15.0: ¿Gané o perdí? como una resta ===================== */
+.gane-columnas { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr); gap: 24px; align-items: start; }
+.gane-columnas .gane-gastos .titulo-chico { margin-top: 0; }
+.resta { display: flex; flex-direction: column; background: var(--color-fondo); border-radius: 12px; padding: 6px 16px; }
+.resta-fila { display: grid; grid-template-columns: 22px minmax(0, 1fr) auto; gap: 10px; align-items: baseline; padding: 10px 0; border-bottom: 1px solid var(--color-linea); }
+.resta-fila:last-child { border-bottom: none; }
+.resta-signo { font-family: var(--letra-mono); font-weight: 700; font-size: 18px; color: var(--color-suave); text-align: center; }
+.resta-nombre { font-size: 16px; }
+.resta-nota { display: block; font-size: 13px; color: var(--color-suave); }
+.resta .cifra-valor { font-size: 20px; margin: 0; white-space: nowrap; }
+.resta-subtotal { border-top: 2px solid var(--color-texto); border-bottom-style: dashed; }
+.resta-subtotal .resta-nombre { font-weight: 600; }
+.resta-total { border-top: 2px solid var(--color-texto); margin: 4px -16px -6px; padding: 14px 16px; border-radius: 0 0 12px 12px; }
+.resta-total .resta-nombre { font-size: 19px; font-weight: 700; }
+.resta-total .cifra-valor { font-size: 26px; font-weight: 700; }
+.resta-gane { background: var(--color-verde-fondo); }
+.resta-pierde { background: var(--color-rojo-fondo); }
+@media (max-width: 899px) { .gane-columnas { grid-template-columns: minmax(0, 1fr); } }
+@media (max-width: 699px) { .resta .cifra-valor { font-size: 17px; } .resta-total .cifra-valor { font-size: 21px; } }

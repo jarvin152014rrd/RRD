@@ -24,6 +24,7 @@ export function tarjetaDinero(d, sucursales = null) {
   const transito = (d.en_transito && d.en_transito.depositos) || [];
   const dias = transito.length ? Math.max(...transito.map((t) => t.dias || 0)) : 0;
   const cuentas = (d.cuentas || []).filter((c) => c.activa !== false && ve(c));
+  const total = sucursales ? cuentas.reduce((x, c) => x + (Number(c.saldo_centavos) || 0), 0) : d.total_centavos;
   const filas = cuentas.map((c) => {
     const [ic, color] = TIPO[c.tipo] || ['dinero', 'azul'];
     return h('div', { class: 'fila-icono' }, burbuja(ic, c.saldo_centavos < 0 ? 'rojo' : color, { class: 'burbuja-chica' }),
@@ -37,13 +38,35 @@ export function tarjetaDinero(d, sucursales = null) {
           + (d.cheques_por_depositar.posfechados_centavos ? ` · ${dinero(d.cheques_por_depositar.posfechados_centavos)} posfechados` : '')) : null),
       h('span', { class: 'monto' + (c.saldo_centavos < 0 ? ' peligro' : '') }, dinero(c.saldo_centavos)));
   });
-  filas.push(h('div', { class: 'fila fila-total' }, h('span', {}, 'Total'),
-    h('span', { class: 'monto', dataset: { dato: 'total_dinero' } },
-      dinero(sucursales ? cuentas.reduce((x, c) => x + (Number(c.saldo_centavos) || 0), 0) : d.total_centavos))));
-  return h('section', { class: 'tarjeta', 'aria-labelledby': 't-donde' },
+  filas.push(h('div', { class: 'fila fila-total' }, h('span', {}, 'Total'), h('span', { class: 'monto' }, dinero(total))));
+
+  // App 0.15.0 (idea de RRD: "¿Dónde está el dinero de verdad?"): arriba el total grande y tres grupos que se
+  // entienden de un vistazo. Los grupos solo SUMAN las cuentas de abajo (no calculan nada nuevo).
+  const suma = (tipos) => cuentas.filter((c) => tipos.includes(c.tipo)).reduce((x, c) => x + (Number(c.saldo_centavos) || 0), 0);
+  const hay = (tipos) => cuentas.some((c) => tipos.includes(c.tipo));
+  const otros = cuentas.filter((c) => !Object.prototype.hasOwnProperty.call(TIPO, c.tipo)).reduce((x, c) => x + (Number(c.saldo_centavos) || 0), 0);
+  const grupos = [
+    ['billetes', 'Efectivo en cajas', ['efectivo_caja', 'caja_chica'], 'Billetes y monedas del negocio', 'efectivo'],
+    ['banco', 'En bancos', ['banco'], 'Cuentas de banco', 'bancos'],
+    ['reloj', 'En camino', ['transito', 'pos_por_liquidar', 'transferencia_por_confirmar', 'cheques_por_depositar'],
+      'Depósitos, tarjetas, transferencias y cheques que aún no llegan', 'en_camino'],
+  ].filter(([, , tipos]) => hay(tipos)).map(([ic, nombre, tipos, ayuda, dato]) => {
+    const v = suma(tipos) + (dato === 'efectivo' ? otros : 0);
+    return h('div', { class: 'dinero-grupo', dataset: { grupo: dato } },
+      h('div', { class: 'dinero-grupo-cabeza' }, icono(ic), h('span', {}, nombre)),
+      h('p', { class: 'dinero-grupo-monto monto' + (v < 0 ? ' peligro' : '') }, dinero(v)),
+      h('p', { class: 'dinero-grupo-ayuda' }, ayuda));
+  });
+  const portada = h('div', { class: 'dinero-portada' },
     h('h1', { id: 't-donde', class: 'titulo-icono' }, icono('banco'), '¿Dónde está mi dinero hoy?'),
+    h('p', { class: 'dinero-total monto', dataset: { dato: 'total_dinero' } }, dinero(total)),
+    h('p', { class: 'dinero-total-ayuda' }, 'Todo el dinero del negocio, sumando cada caja, banco y lo que viene en camino.'),
+    grupos.length ? h('div', { class: 'dinero-grupos' }, grupos) : null);
+  return h('section', { class: 'tarjeta tarjeta-dinero', 'aria-labelledby': 't-donde' },
+    portada,
     sucursales ? mensaje('info', 'Usted ve solo el dinero de sus sucursales.',
       'Más las cuentas de toda la empresa, como el banco. El total es la suma de lo que aparece aquí.', { dataset: { info: 'solo-sucursales' } }) : null,
+    h('h2', { class: 'titulo-chico dinero-detalle-titulo' }, 'Cuenta por cuenta'),
     ...filas);
 }
 
