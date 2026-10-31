@@ -7,9 +7,9 @@
 import { rpc, leer, escribir } from '../api.js';
 import { empresaId, puede, tieneModulo } from '../sesion.js';
 import { dinero, fechaHora, aCentavos, paraCampo, cantidad, aNumero, comaInvalida, MENSAJE_COMA } from '../formato.js';
-import { h, icono, aviso, errorSimple, campo, conBoton, pedirMotivo, confirmar, titulo, filaIcono, chipEstado, monto, estadoVacio, mensaje } from '../ui.js';
+import { h, icono, aviso, errorSimple, campo, conBoton, pedirMotivo, confirmar, titulo, filaIcono, chipEstado, chip, monto, estadoVacio, mensaje, filtrosRapidos } from '../ui.js';
 import { hayEnMenu } from '../menu.js';
-import { filtrar, olvidarDatos, nucleoAlMenos } from '../datos.js';
+import { filtrar, olvidarDatos, nucleoAlMenos, existenciasPorProducto } from '../datos.js';
 import { fotosActivas, miniatura, fotoGrande, subirFotoProducto, quitarFotoProducto, revisarArchivo } from '../fotos.js';
 
 const E = () => empresaId();
@@ -31,14 +31,47 @@ export async function mostrar(vista, ctx) {
   const buscar = h('input', { id: 'buscar-producto-inv', type: 'search', placeholder: 'Nombre, código o código de barras', autocomplete: 'off' });
   const verInactivos = h('input', { type: 'checkbox', id: 'ver-inactivos' });
   const zona = h('div', { class: 'lista' });
+  // App 0.15.0 (idea de RRD): existencias en cada fila y filtros rápidos "Agotados" y "Bajo el mínimo".
+  // Se leen aparte (v_existencia, solo con inventario.ver): la lista sale enseguida y las existencias después.
+  let existencias = null;
+  let filtro = 'todos';
+  const zonaFiltros = h('div', {});
+  const estadoStock = (p) => {
+    if (!existencias || p.tipo === 'servicio') return null;
+    const n = existencias.get(p.producto_id) || 0;
+    return n <= 0 ? 'agotado' : Number(p.stock_minimo) > 0 && n < Number(p.stock_minimo) ? 'bajo' : 'hay';
+  };
+  const chipStock = (p) => {
+    const e = estadoStock(p);
+    if (!e) return null;
+    const n = existencias.get(p.producto_id) || 0;
+    return e === 'agotado' ? chip('Agotado', 'rojo', { dataset: { dato: 'existencia' } })
+      : chip(`${cantidad(n)} ${p.unidad || ''}`.trim(), e === 'bajo' ? 'dorado' : 'verde', { dataset: { dato: 'existencia' } });
+  };
+  const pintarFiltros = () => {
+    if (!existencias) return;
+    const activos = lista.filter((p) => p.activo);
+    const n = (e) => activos.filter((p) => estadoStock(p) === e).length;
+    zonaFiltros.replaceChildren(filtrosRapidos({ id: 'filtro-productos', etiqueta: 'Ver productos', actual: filtro, alCambiar: (f) => { filtro = f; pintar(); },
+      opciones: [{ id: 'todos', texto: 'Todos', n: activos.length, siempre: true, color: 'azul' },
+        { id: 'agotado', texto: 'Agotados', n: n('agotado'), color: 'rojo' }, { id: 'bajo', texto: 'Bajo el mínimo', n: n('bajo'), color: 'dorado' }] }));
+  };
+  if (tieneModulo('inventario') && puede('inventario.ver')) {
+    existenciasPorProducto().then((m) => {
+      existencias = m;
+      if (!ctx.sigueVigente()) return;
+      pintarFiltros(); pintar();
+    }).catch(() => {});
+  }
   const pintar = () => {
-    const vistos = filtrar(lista.filter((p) => verInactivos.checked || p.activo), buscar.value, ['nombre', 'codigo', 'codigo_barras', 'categoria']);
+    const vistos = filtrar(lista.filter((p) => (verInactivos.checked || p.activo) && (filtro === 'todos' || estadoStock(p) === filtro)),
+      buscar.value, ['nombre', 'codigo', 'codigo_barras', 'categoria']);
     zona.replaceChildren(...(vistos.length ? vistos.slice(0, 200).map((p) => filaIcono({
       // Miniatura de la foto (fotos encendidas y con foto); si no, el ícono.
       burbuja: miniatura(p, { icono: p.tipo === 'servicio' ? 'servicio' : 'etiqueta' }),
       titulo: [h('strong', {}, p.nombre), !p.activo ? [' ', chipEstado('inactivo')] : null],
       detalle: [p.codigo, p.categoria, p.tipo === 'servicio' ? 'Servicio' : p.unidad].filter(Boolean).join(' · '),
-      derecha: monto(dinero(p.precio_con_isv_centavos)),
+      derecha: [monto(dinero(p.precio_con_isv_centavos)), chipStock(p)],
       abajo: h('div', { class: 'botones' }, h('button', { type: 'button', class: 'boton', 'aria-label': `Ver ${p.nombre}`, onclick: () => ficha(vista, ctx, p.producto_id) }, 'Ver')),
       props: { dataset: { producto: p.producto_id } },
     }))
@@ -57,7 +90,7 @@ export async function mostrar(vista, ctx) {
         puede('productos.editar') && lista.length ? h('button', { type: 'button', class: 'boton boton-principal', id: 'nuevo-producto',
           onclick: nuevo }, icono('mas'), 'Nuevo producto') : null)),
     // Sin productos: pantalla que enseña a empezar (solo con los botones que puede usar).
-    lista.length ? [campo('Buscar', buscar), h('label', { class: 'opcion-check' }, verInactivos, ' Ver también los inactivos'), zona]
+    lista.length ? [campo('Buscar', buscar), h('label', { class: 'opcion-check' }, verInactivos, ' Ver también los inactivos'), zonaFiltros, zona]
       : estadoVacio({ icono: 'etiqueta', color: 'dorado', titulo: 'Aún no tiene productos',
         texto: 'Agregue lo que vende (productos o servicios) con su precio. Si ya los tiene en una lista, súbala en Excel.',
         botones: [puede('productos.editar') ? { texto: 'Agregar el primero', onclick: nuevo, icono: 'mas', id: 'nuevo-producto' } : null,

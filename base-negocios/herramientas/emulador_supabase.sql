@@ -74,7 +74,9 @@ BEGIN
   RAISE EXCEPTION 'PGRST202: no existe la función public.% con esos argumentos', p_fn;
 END $$;
 
-CREATE OR REPLACE FUNCTION emulador.leer(p_vista text, p_filtros jsonb, p_orden text, p_limite int) RETURNS jsonb
+-- App 0.15.0: p_desde (offset de PostgREST, para leer por páginas) y orden por varias columnas ("a.asc,b.desc").
+DROP FUNCTION IF EXISTS emulador.leer(text, jsonb, text, int);
+CREATE OR REPLACE FUNCTION emulador.leer(p_vista text, p_filtros jsonb, p_orden text, p_limite int, p_desde int DEFAULT 0) RETURNS jsonb
 LANGUAGE plpgsql SECURITY INVOKER SET search_path = '' AS $$
 DECLARE
   v_rel   oid;
@@ -84,6 +86,8 @@ DECLARE
   v_dir   text;
   v_res   jsonb;
   v_tipo  text;
+  v_parte text;
+  v_lista text[] := '{}';
 BEGIN
   SELECT c.oid INTO v_rel FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
    WHERE n.nspname = 'public' AND c.relname = p_vista AND c.relkind IN ('r', 'v');
@@ -108,20 +112,23 @@ BEGIN
     END IF;
   END LOOP;
   IF p_orden IS NOT NULL AND p_orden <> '' THEN
-    v_col := split_part(p_orden, '.', 1);
-    v_dir := CASE WHEN split_part(p_orden, '.', 2) = 'desc' THEN 'DESC' ELSE 'ASC' END;
-    IF NOT EXISTS (SELECT 1 FROM pg_attribute WHERE attrelid = v_rel AND attname = v_col AND attnum > 0) THEN
-      RAISE EXCEPTION 'PGRST100: columna desconocida %', v_col;
-    END IF;
-    v_orden := format(' ORDER BY %I %s', v_col, v_dir);
+    FOREACH v_parte IN ARRAY string_to_array(p_orden, ',') LOOP
+      v_col := split_part(v_parte, '.', 1);
+      v_dir := CASE WHEN split_part(v_parte, '.', 2) = 'desc' THEN 'DESC' ELSE 'ASC' END;
+      IF NOT EXISTS (SELECT 1 FROM pg_attribute WHERE attrelid = v_rel AND attname = v_col AND attnum > 0) THEN
+        RAISE EXCEPTION 'PGRST100: columna desconocida %', v_col;
+      END IF;
+      v_lista := v_lista || format('%I %s', v_col, v_dir);
+    END LOOP;
+    v_orden := ' ORDER BY ' || array_to_string(v_lista, ', ');
   END IF;
-  EXECUTE format('SELECT coalesce(jsonb_agg(to_jsonb(t)), ''[]'') FROM (SELECT * FROM public.%I%s%s LIMIT %s) t',
+  EXECUTE format('SELECT coalesce(jsonb_agg(to_jsonb(t)), ''[]'') FROM (SELECT * FROM public.%I%s%s LIMIT %s OFFSET %s) t',
                  p_vista,
                  CASE WHEN cardinality(v_where) > 0 THEN ' WHERE ' || array_to_string(v_where, ' AND ') ELSE '' END,
-                 v_orden, least(greatest(coalesce(p_limite, 200), 1), 1000))
+                 v_orden, least(greatest(coalesce(p_limite, 200), 1), 1000), greatest(coalesce(p_desde, 0), 0))
     INTO v_res USING p_filtros;
   RETURN v_res;
 END $$;
 
-REVOKE ALL ON FUNCTION emulador.rpc(text, jsonb), emulador.leer(text, jsonb, text, int) FROM PUBLIC;
-GRANT EXECUTE ON FUNCTION emulador.rpc(text, jsonb), emulador.leer(text, jsonb, text, int) TO anon, authenticated, service_role;
+REVOKE ALL ON FUNCTION emulador.rpc(text, jsonb), emulador.leer(text, jsonb, text, int, int) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION emulador.rpc(text, jsonb), emulador.leer(text, jsonb, text, int, int) TO anon, authenticated, service_role;

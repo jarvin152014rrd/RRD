@@ -23,14 +23,16 @@ export function tarjetaDinero(d, sucursales = null) {
   const ve = (c) => !sucursales || !c.sucursal_id || sucursales.includes(c.sucursal_id);
   const transito = (d.en_transito && d.en_transito.depositos) || [];
   const dias = transito.length ? Math.max(...transito.map((t) => t.dias || 0)) : 0;
-  const cuentas = (d.cuentas || []).filter((c) => c.activa !== false && ve(c));
+  // Las cuentas desactivadas que todavía tienen saldo SÍ salen (marcadas): el total del servidor las incluye.
+  const cuentas = (d.cuentas || []).filter((c) => (c.activa !== false || Number(c.saldo_centavos) !== 0) && ve(c));
   const total = sucursales ? cuentas.reduce((x, c) => x + (Number(c.saldo_centavos) || 0), 0) : d.total_centavos;
   const filas = cuentas.map((c) => {
     const [ic, color] = TIPO[c.tipo] || ['dinero', 'azul'];
     return h('div', { class: 'fila-icono' }, burbuja(ic, c.saldo_centavos < 0 ? 'rojo' : color, { class: 'burbuja-chica' }),
       h('div', { class: 'fila-icono-texto' },
         h('div', { class: 'fila-icono-titulo' }, c.nombre,
-          c.tipo === 'transito' && dias ? [' ', chip(`hace ${dias} días`, 'dorado')] : null),
+          c.tipo === 'transito' && dias ? [' ', chip(`hace ${dias} días`, 'dorado')] : null,
+          c.activa === false ? [' ', chip('Desactivada', 'neutro')] : null),
         c.numero_enmascarado || c.banco
           ? h('div', { class: 'fila-icono-detalle' }, [c.banco, c.numero_enmascarado].filter(Boolean).join(' ')) : null,
         c.tipo === 'cheques_por_depositar' && d.cheques_por_depositar ? h('div', { class: 'fila-icono-detalle', dataset: { dato: 'cheques-detalle' } },

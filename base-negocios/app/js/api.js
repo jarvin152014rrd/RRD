@@ -197,7 +197,7 @@ export function funcion(nombre, datos = {}) {
 
 // Lee una vista o tabla permitida (RLS decide qué filas). Filtros "igual a" ({ col: valor }) y,
 // desde 0.5.1, "desde / hasta" ({ col: { gte: valor } }, { col: { lte: valor } }; PostgREST gte. y lte.).
-export function leer(vista, filtros = {}, { orden = null, limite = null } = {}) {
+export function leer(vista, filtros = {}, { orden = null, limite = null, desde = null } = {}) {
   const q = new URLSearchParams({ select: '*' });
   for (const [k, v] of Object.entries(filtros)) {
     if (v && typeof v === 'object') {
@@ -208,6 +208,7 @@ export function leer(vista, filtros = {}, { orden = null, limite = null } = {}) 
   }
   if (orden) q.set('order', orden);
   if (limite) q.set('limit', String(limite));
+  if (desde) q.set('offset', String(desde));   // app 0.15.0: leer por páginas (el servidor da hasta 1000 filas por vez)
   return conToken('/rest/v1/' + encodeURIComponent(vista) + '?' + q, { method: 'GET', headers: {} });
 }
 

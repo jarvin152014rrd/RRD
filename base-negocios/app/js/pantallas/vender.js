@@ -8,14 +8,14 @@
 //     guardada en el equipo (js/calculo_local.js); solo efectivo o transferencia; la venta se guarda en la cola.
 //   * caja con números reservados en ESTE equipo (G2): toda venta de contado pasa por la cola (número del bloque) y
 //     se sube enseguida; si el servidor no contesta, queda guardada y se imprime "Emitida sin conexión".
-import { rpc, escribir, nuevoId, leer } from '../api.js';
+import { rpc, escribir, nuevoId } from '../api.js';
 import { empresaId, perfilActual, puede, tieneModulo, modoSinInternet } from '../sesion.js';
 import * as si from '../sin_internet.js';
 import { precioConTasa } from '../calculo_local.js';
 import { dinero, cantidad as fCantidad, aCentavos, paraCampo } from '../formato.js';
 import { h, icono, aviso, cajaError, errorSimple, campo, dialogo, titulo, estadoVacio, mensaje, chip } from '../ui.js';
 import { hayEnMenu } from '../menu.js';
-import { productos, clientes, miTurno, filtrar, olvidarDatos, nucleoAlMenos } from '../datos.js';
+import { productos, clientes, miTurno, filtrar, olvidarDatos, nucleoAlMenos, existenciasPorProducto } from '../datos.js';
 import { vistaComprobante, vistaComprobanteLocal, nombreForma } from '../comprobante.js';
 import { abrirTurnoDialogo } from './caja_turno.js';
 import { fotosActivas, miniatura } from '../fotos.js';
@@ -29,14 +29,11 @@ const FORMAS_VISTA = {
   mixto: ['capas', 'Dos o más formas'],
 };
 
-// Existencias para el buscador (app 0.15.0): suma de las bodegas que el usuario ve (v_existencia ya filtra por
-// sucursal y permiso). Sin permiso o sin módulo de inventario no se muestran (null).
+// Existencias para el buscador (app 0.15.0): suma de las bodegas de las sucursales del usuario (datos.js).
+// Sin permiso o sin módulo de inventario no se muestran (null).
 async function existenciasVisibles() {
   if (!tieneModulo('inventario') || !puede('inventario.ver')) return null;
-  const filas = await leer('v_existencia', { empresa_id: empresaId() }, { limite: 5000 });
-  const m = new Map();
-  for (const f of filas) m.set(f.producto_id, (m.get(f.producto_id) || 0) + Number(f.cantidad || 0));
-  return m;
+  return existenciasPorProducto();
 }
 
 // Computadora: el ticket mide lo que queda de pantalla desde donde empieza (y al bajar, la pantalla entera),
@@ -233,6 +230,8 @@ export async function armarCarrito(vista, ctx, { modo, alTerminar = null }) {
   let avisoAgregado = null;
 
   function pintarCarrito() {
+    cuentaArticulos.textContent = estado.lineas.length ? String(estado.lineas.length) : '';
+    cuentaArticulos.hidden = !estado.lineas.length;
     if (!estado.lineas.length) {
       carrito.replaceChildren(lista.length
         ? estadoVacio({ icono: 'buscar', chico: true, texto: 'Busque un producto o servicio arriba para empezar.' })
@@ -302,10 +301,6 @@ export async function armarCarrito(vista, ctx, { modo, alTerminar = null }) {
       return h('article', { class: 'linea-carrito' + (nueva ? ' linea-nueva' : ''), dataset: { producto: p.producto_id } }, ...partes);
     }));
     ultimaAgregada = null;
-    // Cuántos artículos lleva (en el título).
-    const n = estado.lineas.length;
-    cuentaArticulos.textContent = n ? String(n) : '';
-    cuentaArticulos.hidden = !n;
   }
   const cuentaArticulos = chip('', 'azul', { class: 'cuenta-articulos', hidden: true, 'aria-label': 'Artículos en la venta' });
 
@@ -331,7 +326,7 @@ export async function armarCarrito(vista, ctx, { modo, alTerminar = null }) {
   function barraTotal(pv) {
     return h('div', { class: 'total-barra' }, h('span', { class: 'total-barra-texto' }, modo === 'venta' ? 'Total a cobrar' : 'Total'),
       pv ? h('span', { class: 'monto total-barra-monto', dataset: { dato: 'total' } }, dinero(pv.total_centavos))
-        : h('span', { class: 'monto total-barra-monto' }, dinero(0)));
+        : h('span', { class: 'monto total-barra-monto' }, estado.lineas.length ? 'Calculando…' : dinero(0)));
   }
   function pintarTotales() {
     const pv = estado.previa;

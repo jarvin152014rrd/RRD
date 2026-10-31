@@ -1,4 +1,4 @@
-# Prompt maestro — base-negocios (núcleo 0.20.0, app 0.14.0)
+# Prompt maestro — base-negocios (núcleo 0.20.0, app 0.15.0)
 
 > Copie este texto completo al empezar una conversación nueva con Claude (o con otro
 > programador). Explica qué es el proyecto, cómo se trabaja y qué falta.
@@ -23,7 +23,7 @@
 
 - **No tocar RRD** (mi negocio de repuestos en uso diario): `index.html`, `VR.html`,
   `BODEGA.html` en la raíz del repositorio. Todo el producto nuevo vive en `base-negocios/`.
-- Repositorio `jarvin152014rrd/RRD`, rama de trabajo `claude/awesome-albattani-co033f`.
+- Repositorio `jarvin152014rrd/RRD`, rama de trabajo `claude/hopeful-maxwell-bctd4o` (antes `claude/awesome-albattani-co033f`).
 - **Nunca** pedir ni aceptar la clave de la base de datos, la llave `service_role` ni la
   `sb_secret_`. Solo se comparten la URL del proyecto y la llave pública (publishable/anon).
 - **Nunca** instalar ni cambiar nada en el proyecto de Supabase "Repuestos-ruta-directa"
@@ -75,6 +75,11 @@ va cada lempira, control, operación legal (SAR, CAI, ISV, NIIF PYMES) y crecimi
 
 ## 5. Lo que ya hace
 
+- **Aspecto (app 0.15.0, lo mejor de RRD):** modo oscuro (luna/sol), "Al día" siempre a la vista, buscador general
+  (lupa, Ctrl+K: pantallas, productos y clientes), Vender con total grande y Cobrar verde, pagos en tarjetas, listas
+  compactas con filtros rápidos (Agotados, Bajo el mínimo, Contado, Crédito...), "¿Dónde está mi dinero?" con el total
+  grande y "¿Gané o perdí?" como una resta. RRD solo se usó de ejemplo.
+
 - **Inicio:** tablero del dueño (saludo, botones rápidos, cifras con color, gráfica de 7 días,
   lo más vendido con foto, Primeros pasos, Pendientes y campanita). Diseño con íconos y colores
   con significado (verde entra, rojo sale, dorado importante, azul información).
@@ -106,7 +111,7 @@ va cada lempira, control, operación legal (SAR, CAI, ISV, NIIF PYMES) y crecimi
   jarvin152014@gmail.com). Registro abierto de usuarios **apagado**.
 - App publicada en Netlify: `https://dapper-tarsier-fbd098.netlify.app` (versión vieja).
 - **Falta pegar en orden** las actualizaciones 0.16.0, 0.17.0, 0.18.0, 0.19.0 y 0.20.0, luego
-  `verificar` (debe decir TODO BIEN | 0.20.0 | 56 | 56) y subir la app 0.14.0 a Netlify.
+  `verificar` (debe decir TODO BIEN | 0.20.0 | 56 | 56) y subir la app 0.15.0 a Netlify (incluye todo lo de la 0.14.0).
   Nada de 0.16 a 0.20 se ha probado todavía en un Supabase real.
 
 ## 7. Lo que está pendiente

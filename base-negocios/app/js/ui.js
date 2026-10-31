@@ -303,3 +303,16 @@ export function cabezaPantalla(ctx, ...izquierda) {
   const nav = ctx && ctx.subpestanas && ctx.subpestanas.children.length ? ctx.subpestanas : null;
   return h('div', { class: 'cabeza-pantalla' }, h('div', { class: 'cabeza-texto' }, ...izquierda), nav);
 }
+
+// ---------------- App 0.15.0 ----------------
+// Filtros rápidos en botones con su número (idea de RRD: "Agotados", "Bajo mín."): solo CUENTAN, no suman dinero.
+// opciones = [{ id, texto, n, color }]; alCambiar(id). Devuelve el elemento (role radiogroup).
+export function filtrosRapidos({ opciones, actual, alCambiar, etiqueta = 'Filtrar', id = null }) {
+  const caja = h('div', { class: 'filtros-rapidos', role: 'radiogroup', 'aria-label': etiqueta, id });
+  const pintar = (sel) => caja.replaceChildren(...opciones.filter((o) => o.siempre || o.n > 0 || o.id === sel).map((o) =>
+    h('button', { type: 'button', role: 'radio', class: `filtro-rapido filtro-${o.color || 'neutro'}`, 'aria-checked': o.id === sel ? 'true' : 'false',
+      dataset: { filtro: o.id }, onclick: () => { pintar(o.id); alCambiar(o.id); } },
+    h('span', {}, o.texto), h('span', { class: 'filtro-numero' }, String(o.n)))));
+  pintar(actual);
+  return caja;
+}

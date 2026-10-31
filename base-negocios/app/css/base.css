@@ -683,7 +683,7 @@ html[data-tema="oscuro"] .comprobante { border-color: var(--color-linea); }
 @keyframes linea-nueva { from { background: var(--color-verde-fondo); } to { background: transparent; } }
 .linea-nueva { animation: linea-nueva 1.6s ease-out; border-radius: 8px; }
 @media (prefers-reduced-motion: reduce) { .linea-nueva { animation: none; } }
-.cuenta-articulos { font-size: 14px; }
+.cuenta-articulos { font-size: 15px; }
 
 /* El "ticket" de la derecha */
 .titulo-ticket { margin: 0; font-size: 19px; }
@@ -694,7 +694,7 @@ html[data-tema="oscuro"] .comprobante { border-color: var(--color-linea); }
 }
 .forma .icono { width: 24px; height: 24px; color: var(--color-suave); }
 .forma-nombre { font-weight: 600; font-size: 15px; }
-.forma-ayuda { font-size: 13px; color: var(--color-suave); }
+.forma-ayuda { font-size: 15px; color: var(--color-suave); }
 .forma:hover { border-color: var(--color-principal-texto); }
 .forma-on { background: var(--color-principal); border-color: var(--color-principal); color: var(--color-en-principal); }
 .forma-on .icono, .forma-on .forma-ayuda { color: var(--color-en-principal-suave); }
@@ -709,7 +709,7 @@ html[data-tema="oscuro"] .forma-on .forma-nombre { color: var(--color-en-boton-o
   display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap;
   background: var(--color-total-fondo); color: var(--color-total-texto); border-radius: 12px; padding: 14px 18px; margin-top: 8px;
 }
-.total-barra-texto { font-size: 14px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; opacity: .9; }
+.total-barra-texto { font-size: 15px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; opacity: .9; }
 .total-barra-monto { font-size: 28px; font-weight: 700; color: var(--color-total-texto); }
 .vender[data-calculando] .total-barra-monto { opacity: .55; }
 /* Cobrar: verde (entra dinero), grande */
@@ -743,7 +743,7 @@ html[data-tema="oscuro"] .boton.boton-cobrar { background: var(--color-cobrar); 
 .plegable[open] > summary .icono { transform: rotate(45deg); }
 /* Pie del ticket: subtotal, descuento e ISV en una línea chica; debajo, el total grande. */
 .ticket-pie .totales { flex-direction: row; flex-wrap: wrap; gap: 2px 16px; }
-.ticket-pie .suma { font-size: 14px; padding: 0; gap: 6px; justify-content: flex-start; color: var(--color-suave); }
+.ticket-pie .suma { font-size: 15px; padding: 0; gap: 6px; justify-content: flex-start; color: var(--color-suave); }
 .ticket-pie .suma .monto { color: var(--color-texto); }
 .ticket-pie .totales > .total-barra, .ticket-pie .totales > .mensaje, .ticket-pie .totales > .vacio { flex: 1 1 100%; }
 
@@ -754,7 +754,7 @@ html[data-tema="oscuro"] .boton.boton-cobrar { background: var(--color-cobrar); 
   .fila-icono.con-abajo:has(> .fila-icono-abajo > .botones:only-child) { flex-wrap: nowrap; align-items: center; }
   .fila-icono.con-abajo:has(> .fila-icono-abajo > .botones:only-child) > .fila-icono-abajo { flex: none; padding-left: 0; }
   .fila-icono.con-abajo:has(> .fila-icono-abajo > .botones:only-child) > .fila-icono-abajo > .botones { margin: 0; flex-wrap: nowrap; }
-  .fila-icono.con-abajo:has(> .fila-icono-abajo > .botones:only-child) > .fila-icono-abajo .boton { min-width: 0; min-height: 40px; padding: 8px 16px; }
+  .fila-icono.con-abajo:has(> .fila-icono-abajo > .botones:only-child) > .fila-icono-abajo .boton { min-width: 0; min-height: 44px; padding: 8px 16px; }
   .fila-icono.con-abajo:has(> .fila-icono-abajo > .botones:only-child) > .fila-icono-derecha { min-width: 130px; }
   .fila-icono { padding: 10px 8px; margin: 0 -8px; border-radius: 8px; }
   .fila-icono:hover { background: var(--color-neutro-fondo); }
@@ -798,7 +798,7 @@ input[type=file]::file-selector-button:hover { background: var(--color-azul-fond
 .dinero-grupo-cabeza .icono { color: var(--color-acento-icono); }
 .dinero-grupo[data-grupo="en_camino"] .dinero-grupo-cabeza .icono { color: var(--color-dorado); }
 .dinero-grupo-monto { font-size: 22px; font-weight: 700; margin: 4px 0 0; color: var(--color-principal-texto); }
-.dinero-grupo-ayuda { font-size: 13px; color: var(--color-suave); margin: 2px 0 0; }
+.dinero-grupo-ayuda { font-size: 14px; color: var(--color-suave); margin: 2px 0 0; }
 .dinero-detalle-titulo { margin-top: 4px; }
 @media (max-width: 699px) {
   .dinero-total { font-size: 32px; }
@@ -814,7 +814,7 @@ input[type=file]::file-selector-button:hover { background: var(--color-azul-fond
 .resta-fila:last-child { border-bottom: none; }
 .resta-signo { font-family: var(--letra-mono); font-weight: 700; font-size: 18px; color: var(--color-suave); text-align: center; }
 .resta-nombre { font-size: 16px; }
-.resta-nota { display: block; font-size: 13px; color: var(--color-suave); }
+.resta-nota { display: block; font-size: 14px; color: var(--color-suave); }
 .resta .cifra-valor { font-size: 20px; margin: 0; white-space: nowrap; }
 .resta-subtotal { border-top: 2px solid var(--color-texto); border-bottom-style: dashed; }
 .resta-subtotal .resta-nombre { font-weight: 600; }
@@ -828,7 +828,7 @@ input[type=file]::file-selector-button:hover { background: var(--color-azul-fond
 
 /* ===================== App 0.15.0: buscador general ===================== */
 .boton-buscar {
-  display: inline-flex; align-items: center; gap: 8px; min-height: 40px; min-width: 44px; padding: 0 10px 0 12px; border-radius: 10px; cursor: pointer;
+  display: inline-flex; align-items: center; gap: 8px; min-height: 44px; min-width: 44px; padding: 0 10px 0 12px; border-radius: 10px; cursor: pointer;
   font: inherit; font-size: 14px; color: var(--color-en-principal-suave); background: rgba(255,255,255,.08); border: 1px solid var(--color-en-principal-suave);
 }
 .boton-buscar:hover { color: var(--color-en-principal); }
@@ -842,16 +842,34 @@ dialog.dialogo-buscador { width: min(620px, calc(100vw - 24px)); margin-top: 10v
 .buscador-cabeza > .icono { width: 22px; height: 22px; color: var(--color-suave); }
 .buscador-cabeza input { flex: 1; min-width: 0; font: inherit; font-size: 18px; border: none; outline: none; background: transparent; color: var(--color-texto); min-height: 44px; }
 .buscador-cabeza input:focus-visible { outline: none; }
-.buscador-cerrar { min-height: 40px; min-width: 40px; padding: 0; border-color: transparent; }
+.buscador-cerrar { min-height: 44px; min-width: 44px; padding: 0; border-color: transparent; }
 .buscador-lista { max-height: min(60vh, 520px); overflow-y: auto; padding: 6px; }
 .buscador-grupo-titulo { margin: 8px 10px 4px; font-size: 12px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; color: var(--color-suave); }
 .buscador-opcion { display: flex; align-items: center; gap: 12px; padding: 8px 10px; border-radius: 10px; cursor: pointer; min-height: 52px; }
 .buscador-opcion[aria-selected="true"] { background: var(--color-azul-fondo); }
 .buscador-texto { flex: 1; min-width: 0; display: flex; flex-direction: column; }
 .buscador-titulo { font-weight: 600; overflow-wrap: anywhere; }
-.buscador-detalle { font-size: 13px; color: var(--color-suave); }
+.buscador-detalle { font-size: 14px; color: var(--color-suave); }
 .buscador-precio { font-weight: 700; color: var(--color-principal-texto); white-space: nowrap; }
 .buscador-vacio { padding: 10px 12px; }
-.buscador-pie { margin: 0; padding: 8px 14px; font-size: 13px; color: var(--color-suave); border-top: 1px solid var(--color-linea); }
+.buscador-pie { margin: 0; padding: 8px 14px; font-size: 14px; color: var(--color-suave); border-top: 1px solid var(--color-linea); }
 @media (max-width: 699px) { dialog.dialogo-buscador { margin-top: 12px; } .buscador-pie { display: none; } }
 .buscador-cabeza input::-webkit-search-cancel-button { display: none; }
+
+/* App 0.15.0: filtros rápidos con número (Todas 12 · Contado 9 · Anuladas 1) */
+.filtros-rapidos { display: flex; flex-wrap: wrap; gap: 8px; margin: 4px 0 8px; }
+.filtro-rapido {
+  font: inherit; font-size: 14px; font-weight: 600; display: inline-flex; align-items: center; gap: 8px; min-height: 44px; padding: 6px 12px;
+  border-radius: 999px; cursor: pointer; border: 1px solid var(--color-campo-borde-suave); background: var(--color-tarjeta); color: var(--color-texto);
+}
+.filtro-numero { font-size: 14px; padding: 0 7px; border-radius: 999px; background: var(--color-neutro-fondo); color: var(--color-neutro); }
+.filtro-verde .filtro-numero { background: var(--color-verde-fondo); color: var(--color-verde); }
+.filtro-rojo .filtro-numero { background: var(--color-rojo-fondo); color: var(--color-rojo); }
+.filtro-dorado .filtro-numero { background: var(--color-dorado-fondo); color: var(--color-dorado); }
+.filtro-azul .filtro-numero { background: var(--color-azul-fondo); color: var(--color-azul); }
+.filtro-rapido[aria-checked="true"] { background: var(--color-principal); border-color: var(--color-principal); color: var(--color-en-principal); }
+html[data-tema="oscuro"] .filtro-rapido[aria-checked="true"] { background: var(--color-boton-oscuro); border-color: var(--color-boton-oscuro); color: var(--color-en-boton-oscuro); }
+.filtro-rapido:hover { border-color: var(--color-principal-texto); }
+/* Buscador, estado de conexión y modo oscuro: grupo aparte, a la izquierda de la campanita y el usuario. */
+.herramientas { display: flex; align-items: center; gap: 10px; margin-left: auto; color: var(--color-en-principal-suave); }
+@media (max-width: 699px) { .herramientas { gap: 2px; } }

@@ -8,7 +8,7 @@ import * as si from '../sin_internet.js';
 import { vistaComprobanteLocal } from '../comprobante.js';
 import { fechaLocal } from '../calculo_local.js';
 import { dinero, fechaHora } from '../formato.js';
-import { h, cajaError, titulo, filaIcono, chipEstado, monto, estadoVacio } from '../ui.js';
+import { h, cajaError, titulo, filaIcono, chipEstado, monto, estadoVacio, filtrosRapidos } from '../ui.js';
 import { hayEnMenu } from '../menu.js';
 import { vistaComprobante } from '../comprobante.js';
 import { prepararDevolucion } from './devoluciones.js';
@@ -30,11 +30,20 @@ export async function mostrar(vista, ctx) {
     return;
   }
   const lista = h('div', { class: 'lista-filas' });
+  // Filtros rápidos (app 0.15.0): cuántas de contado, al crédito, en espera y anuladas; tocar uno filtra la lista.
+  const clase = (v) => (v.estado === 'emitida' ? (v.condicion === 'credito' ? 'credito' : 'contado') : v.estado === 'anulada' ? 'anulada' : 'otra');
+  let filtro = 'todas';
+  const cuenta = (c) => ventas.filter((v) => clase(v) === c).length;
+  const filtros = ventas.length > 1 ? filtrosRapidos({ id: 'filtro-ventas', etiqueta: 'Ver ventas', actual: filtro, alCambiar: (f) => { filtro = f; pintarLista(); },
+    opciones: [{ id: 'todas', texto: 'Todas', n: ventas.length, siempre: true, color: 'azul' }, { id: 'contado', texto: 'Contado', n: cuenta('contado'), color: 'verde' },
+      { id: 'credito', texto: 'Crédito', n: cuenta('credito'), color: 'azul' }, { id: 'otra', texto: 'En espera', n: cuenta('otra'), color: 'dorado' },
+      { id: 'anulada', texto: 'Anuladas', n: cuenta('anulada'), color: 'rojo' }] }) : null;
   const tarjeta = h('section', { class: 'tarjeta', 'aria-labelledby': 't-dia' },
     titulo('h1', 'lista', 'Ventas del día', { id: 't-dia' }),
-    puede('ventas.ver') ? null : h('p', { class: 'ayuda' }, 'Aquí salen las ventas que usted hizo hoy.'), lista);
+    puede('ventas.ver') ? null : h('p', { class: 'ayuda' }, 'Aquí salen las ventas que usted hizo hoy.'), filtros, lista);
   const pintarLista = () => {
-    lista.replaceChildren(...(ventas.length ? ventas.map((v) => {
+    const vistas = filtro === 'todas' ? ventas : ventas.filter((v) => clase(v) === filtro);
+    lista.replaceChildren(...(vistas.length ? vistas.map((v) => {
       const emitida = v.estado === 'emitida';
       return filaIcono({
         icono: v.estado === 'anulada' ? 'anular' : 'recibo', color: emitida ? 'verde' : v.estado === 'anulada' ? 'rojo' : 'dorado',

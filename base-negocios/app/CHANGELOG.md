@@ -1,5 +1,33 @@
 # Cambios de la app
 
+## app 0.15.0 (núcleo 0.20.0, sin cambios en la base) — Lo mejor de RRD en lo visual
+
+Ideas tomadas del programa de Repuestos Ruta Directa (solo de ejemplo; RRD no se tocó), pensadas para cualquier rubro.
+Solo pantalla: no cambia ningún cálculo ni función del núcleo, y lo impreso sigue igual (blanco y negro, sin íconos).
+
+- **Modo oscuro:** botón luna/sol en el encabezado; se guarda en el equipo y, si nunca se eligió, sigue al equipo.
+  Todos los colores pasan a variables (`css/tema.css`); `marca.js` calcula las versiones claras de los colores del
+  negocio para el fondo oscuro (con su contraste).
+- **Encabezado:** "Al día / Sin conexión / Subiendo" siempre a la vista y **buscador general** (lupa o Ctrl+K; sin "/"
+  porque un lector de códigos puede mandarlo): pantallas por nombre o por palabras comunes ("arqueo", "cuentas por
+  cobrar"), productos con su precio y clientes, solo entre lo que el usuario puede ver (`js/buscador.js`). No se abre
+  encima de otra ventana y, si ya está en esa pantalla, no la vuelve a abrir (no se pierde la venta que se arma).
+- **Vender:** buscador con existencias (chip verde o "Agotado"); formas de pago como tarjetas con ícono y explicación;
+  a la derecha el "ticket" con el total grande en barra oscura y **Cobrar verde**, siempre a la vista en la
+  computadora; aviso corto "Agregado"; número de artículos; descuento a toda la factura plegado.
+- **Listas en la computadora:** cada fila en una línea con sus botones a la derecha (caben el doble).
+  **Filtros rápidos con número:** Ventas del día (Todas, Contado, Crédito, En espera, Anuladas) y Productos (Todos,
+  Agotados, Bajo el mínimo; con existencias en cada fila).
+- **¿Dónde está mi dinero?:** portada con el total grande y tres grupos (efectivo en cajas, bancos, en camino).
+- **¿Gané o perdí?:** la cuenta como una resta (Vendí − costo = bruta − gastos = Gané/Perdí) y al lado los gastos.
+- Subpestañas que bajan a otra línea si no caben (antes se cortaban); Ajustes en dos columnas; botón de archivo con el
+  estilo del programa.
+- **Existencias** (Vender y Productos): se leen por páginas de 1000 (`leer(..., { desde })`) y un usuario limitado a unas
+  sucursales solo suma las bodegas de esas sucursales (`datos.existenciasPorProducto`).
+- ¿Dónde está mi dinero?: las cuentas desactivadas que aún tienen saldo salen marcadas (el total del servidor las incluye).
+- Demo: el emulador acepta `offset` y orden por varias columnas, como Supabase.
+- Cascarón `cascaron-0.15.0` (archivos nuevos `js/tema_oscuro.js` y `js/buscador.js`).
+
 ## app 0.14.0 (núcleo 0.20.0; también funciona con 0.19.0, sin lo nuevo) — Vender sin internet
 
 - **Ajustes > Sin internet:** preparar el equipo (nombre, números de la caja, precios), si el equipo guarda seguro

@@ -2,7 +2,7 @@
 //   * pantallas del programa (por su nombre y por palabras comunes: "arqueo", "cuentas por cobrar"...),
 //   * productos (precio a la vista) y clientes,
 // SOLO entre lo que el usuario puede ver (el menú ya viene filtrado por módulos y permisos).
-// Se abre con el botón de la lupa, con Ctrl+K o con "/" (fuera de un campo). Flechas + Enter para elegir.
+// Se abre con el botón de la lupa o con Ctrl+K. Flechas + Enter para elegir.
 import { h, icono } from './ui.js';
 import { hayEnMenu } from './menu.js';
 import { productos, clientes, filtrar } from './datos.js';
@@ -70,9 +70,10 @@ function llenarCuando(selector, texto) {
   };
   setTimeout(probar, 60);
 }
+// Si ya está en esa pantalla NO se vuelve a abrir (en Vender se perdería la venta que está armando): solo se escribe
+// lo buscado en su cuadro de búsqueda.
 function ir(ruta, selector = null, texto = '') {
-  if (location.hash === ruta) window.dispatchEvent(new HashChangeEvent('hashchange'));
-  else location.hash = ruta;
+  if (location.hash !== ruta) location.hash = ruta;
   if (selector) llenarCuando(selector, texto);
 }
 
@@ -167,10 +168,12 @@ export function botonBuscador() {
     icono('buscar'), h('span', { class: 'boton-buscar-texto' }, 'Buscar…'), h('kbd', { class: 'boton-buscar-tecla' }, 'Ctrl K'));
 }
 
-// Atajos: Ctrl+K (o Cmd+K) siempre; "/" solo si no está escribiendo en un campo.
+// Atajo: Ctrl+K (o Cmd+K). Sin "/" a propósito: un lector de códigos puede mandar "/" y abriría el buscador.
+// No se abre encima de otra ventana (pedir motivo, confirmar...): primero se termina o cierra esa.
 document.addEventListener('keydown', (ev) => {
   if (!document.getElementById('boton-buscar')) return;   // sin sesión (pantalla de entrar)
-  const enCampo = ev.target instanceof HTMLElement && (ev.target.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(ev.target.tagName));
-  if ((ev.ctrlKey || ev.metaKey) && (ev.key === 'k' || ev.key === 'K')) { ev.preventDefault(); abrirBuscador(); }
-  else if (ev.key === '/' && !enCampo && !ev.ctrlKey && !ev.metaKey && !ev.altKey && !document.querySelector('dialog[open]')) { ev.preventDefault(); abrirBuscador(); }
+  if ((ev.ctrlKey || ev.metaKey) && (ev.key === 'k' || ev.key === 'K')) {
+    ev.preventDefault();
+    if (!document.querySelector('dialog[open]')) abrirBuscador();
+  }
 });
