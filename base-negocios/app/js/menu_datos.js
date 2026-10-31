@@ -51,6 +51,9 @@ export const MENU = [
     { id: 'conteo', titulo: 'Conteo físico', icono: 'conteo', modulos: ['inventario'], permisos: ['inventario.ajustar'], todos: ['excel.importar'], pantalla: 'inv_conteo' },
     { id: 'movimientos', titulo: 'Movimientos', icono: 'movimientos', modulos: ['inventario'], permisos: ['inventario.costos'], pantalla: 'inv_movimientos' },
     { id: 'traslados', titulo: 'Traslados', icono: 'traslado', modulos: ['inventario'], permisos: ['inventario.trasladar'], pantalla: 'inv_traslados' },
+    // Núcleo 0.21.0 (ideas de RRD): qué comprar más y capital muerto (solo leen).
+    { id: 'que_comprar', titulo: '¿Qué comprar?', icono: 'compras', modulos: ['inventario'], permisos: ['inventario.ver'], nucleo: '0.21.0', pantalla: 'inv_que_comprar' },
+    { id: 'capital_muerto', titulo: 'Capital muerto', icono: 'reloj', modulos: ['inventario'], permisos: ['inventario.ver'], nucleo: '0.21.0', pantalla: 'inv_capital_muerto' },
   ] },
   { id: 'compras', titulo: 'Compras', icono: 'compras', subs: [
     { id: 'compras', titulo: 'Compras', icono: 'documento', modulos: ['compras'], permisos: ['compras.ver'], pantalla: 'compras' },

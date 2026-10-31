@@ -4,6 +4,21 @@ Formato: versión (fecha) y lista de cambios. La versión vive en `VERSION_NUCLE
 y queda guardada en cada base al migrar (vista `version_esquema`).
 Números: MAYOR.MENOR.ARREGLO (ver `docs/CONVENCIONES.md`).
 
+## 0.21.0 (2026-10-31) — ¿Qué comprar? y capital muerto (ideas de RRD)
+
+Migración nueva 057 (solo agrega dos lecturas; no cambia nada guardado). 160 pruebas (nuevas 159 y 160; la 157 queda fija
+en 0.20.0). Para quien ya tiene 0.20.0 en Supabase: `dist/actualizar_supabase_0.21.0.sql` (ver `docs/SUPABASE.md`).
+
+- **`que_comprar(empresa, dias, cubrir_dias)`**: por producto (bienes activos), lo vendido neto de devoluciones en los
+  últimos días, cuánto sale por día, lo que hay en las bodegas del usuario, para cuántos días alcanza y cuánto pedir
+  (lo que falta para cubrir los días elegidos o llegar al mínimo; entero si el producto no admite decimales), con su
+  estado (agotado, se acaba en menos de 7 días, bajo el mínimo, conviene pedir) y costo aproximado del pedido.
+- **`capital_muerto(empresa, dias)`**: productos con existencias que no se venden desde hace esos días (o desde que se
+  crearon), con la última venta y el dinero parado al costo.
+- Las dos piden `inventario.ver`, cuentan solo las sucursales del usuario y dejan los costos en blanco sin
+  `inventario.costos`. Días de 7 a 365 (`DIAS_INVALIDOS`).
+- `herramientas/probar.sh`: `SOLO_PRUEBAS='prueba_(157|159)'` corre solo algunas (para revisar rápido).
+
 ## 0.20.0 (2026-10-29) — Vender sin internet (etapa 1), transferencias por confirmar y talonario de emergencia
 
 Migración nueva 056 (las 001-055 no se tocaron). 158 pruebas (nuevas 152 a 158; la 150 queda fija en 0.19.0). Todas

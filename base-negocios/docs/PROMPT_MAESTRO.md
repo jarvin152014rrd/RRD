@@ -1,4 +1,4 @@
-# Prompt maestro — base-negocios (núcleo 0.20.0, app 0.15.0)
+# Prompt maestro — base-negocios (núcleo 0.21.0, app 0.15.0)
 
 > Copie este texto completo al empezar una conversación nueva con Claude (o con otro
 > programador). Explica qué es el proyecto, cómo se trabaja y qué falta.
@@ -60,7 +60,7 @@ va cada lempira, control, operación legal (SAR, CAI, ISV, NIIF PYMES) y crecimi
   NIIF PYMES, nada se borra (contrapartidas con motivo), montos en centavos (bigint), zona
   America/Tegucigalpa, `id_operacion` por operación (no se duplica), bitácora encadenada a prueba
   de alteraciones, errores con clave (`CLAVE: mensaje`), filtros por sucursal, licencia y límites.
-  56 migraciones en `nucleo/sql/migraciones`, **158 pruebas** (`bash herramientas/probar.sh`,
+  57 migraciones en `nucleo/sql/migraciones`, **160 pruebas** (`bash herramientas/probar.sh`,
   también `--paquete`).
 - **App:** PWA en `app/` (HTML + JavaScript con módulos, sin compilador ni librerías nuevas,
   sin `innerHTML` con datos), íconos propios, funciona sin internet. Pruebas con Playwright
@@ -75,9 +75,12 @@ va cada lempira, control, operación legal (SAR, CAI, ISV, NIIF PYMES) y crecimi
 
 ## 5. Lo que ya hace
 
+- **Inventario (núcleo 0.21.0):** ¿Qué comprar? (lo que más sale, para cuántos días alcanza y cuánto pedir) y Capital
+  muerto (lo que no se vende y el dinero parado).
 - **Aspecto (app 0.15.0, lo mejor de RRD):** modo oscuro (luna/sol), "Al día" siempre a la vista, buscador general
   (lupa, Ctrl+K: pantallas, productos y clientes), Vender con total grande y Cobrar verde, pagos en tarjetas, listas
-  compactas con filtros rápidos (Agotados, Bajo el mínimo, Contado, Crédito...), "¿Dónde está mi dinero?" con el total
+  compactas con filtros rápidos (Agotados, Bajo el mínimo, Contado, Crédito...), teclas F2/F9/Esc en Vender,
+  Cotizaciones con cifras y WhatsApp, "¿Dónde está mi dinero?" con el total
   grande y "¿Gané o perdí?" como una resta. RRD solo se usó de ejemplo.
 
 - **Inicio:** tablero del dueño (saludo, botones rápidos, cifras con color, gráfica de 7 días,
@@ -110,15 +113,16 @@ va cada lempira, control, operación legal (SAR, CAI, ISV, NIIF PYMES) y crecimi
 - Supabase de pruebas instalado en **0.15.0** con la "Tienda de Ropa Prueba" (dueño:
   jarvin152014@gmail.com). Registro abierto de usuarios **apagado**.
 - App publicada en Netlify: `https://dapper-tarsier-fbd098.netlify.app` (versión vieja).
-- **Falta pegar en orden** las actualizaciones 0.16.0, 0.17.0, 0.18.0, 0.19.0 y 0.20.0, luego
-  `verificar` (debe decir TODO BIEN | 0.20.0 | 56 | 56) y subir la app 0.15.0 a Netlify (incluye todo lo de la 0.14.0).
+- **Falta pegar en orden** las actualizaciones 0.16.0, 0.17.0, 0.18.0, 0.19.0, 0.20.0 (después de corregirla) y 0.21.0, luego
+  `verificar` (debe decir TODO BIEN | 0.21.0 | 57 | 57) y subir la app 0.15.0 a Netlify (incluye todo lo de la 0.14.0).
   Nada de 0.16 a 0.20 se ha probado todavía en un Supabase real.
 
 ## 7. Lo que está pendiente
 
 **Revisión**
-- El revisor debe revisar la **0.20.0 (vender sin internet)**: su revisión se cortó por el límite
-  de uso. Corregir lo que encuentre dentro de la misma migración 056 (aún no entregada al dueño).
+- El revisor YA revisó la **0.20.0 (vender sin internet)** y encontró 14 puntos (2 rompen el cierre de turno,
+  varios de dinero y seguridad): están en `docs/PENDIENTES.md`, "REVISIÓN DE 0.20.0". Corregirlos dentro de la
+  misma migración 056 (aún no entregada al dueño) ANTES de pegar la 0.20.0. Dos piden decisión del dueño (4 y 10).
 
 **Decisiones mías por confirmar**
 - Tope por turno sin internet: L 50,000.

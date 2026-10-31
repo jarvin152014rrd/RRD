@@ -112,7 +112,9 @@ async function venderEnPantalla(p, { codigo, cantidad = null, forma = 'efectivo'
   };
   const usar = (x) => { global.paginaActual = x; return x; };
   console.log('Pruebas de la app 0.14.0 (vender sin internet, transferencias por confirmar, talonario de emergencia):');
-  afirmar(sql(null, '(SELECT version_nucleo FROM public.version_esquema)') === '0.20.0', 'la base de demo no es 0.20.0');
+  // 0.20.0 o más nueva (desde 0.21.0 la demo trae también qué comprar y capital muerto).
+  { const v = sql(null, '(SELECT version_nucleo FROM public.version_esquema)').split('.').map(Number);
+    afirmar(v[0] > 0 || v[1] >= 20, 'la base de demo no es 0.20.0 o más nueva'); }
 
   // ---- Base: facturación SAR con CAI en la caja 001, talonario encendido, cajera con permiso y turno abierto.
   const empresa = E();

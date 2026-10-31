@@ -1,6 +1,6 @@
 # Cambios de la app
 
-## app 0.15.0 (núcleo 0.20.0, sin cambios en la base) — Lo mejor de RRD en lo visual
+## app 0.15.0 (núcleo 0.20.0; con 0.21.0 además ¿Qué comprar? y Capital muerto) — Lo mejor de RRD en lo visual
 
 Ideas tomadas del programa de Repuestos Ruta Directa (solo de ejemplo; RRD no se tocó), pensadas para cualquier rubro.
 Solo pantalla: no cambia ningún cálculo ni función del núcleo, y lo impreso sigue igual (blanco y negro, sin íconos).
@@ -36,6 +36,8 @@ Solo pantalla: no cambia ningún cálculo ni función del núcleo, y lo impreso 
   mientras calcula no hace nada) y Esc en el buscador vacío vacía la venta (pregunta antes). El cursor vuelve al buscador
   para seguir escaneando.
 - **Ventas del día:** arriba, lo vendido hoy (el mismo número de Inicio, `resumen_hoy`), con la comparación con ayer.
+- **Inventario > ¿Qué comprar? y Capital muerto** (con núcleo 0.21.0; con uno anterior no salen): cifras, filtros,
+  tabla, Excel e Imprimir; los costos solo con `inventario.costos`. Todo lo calcula el servidor.
 - Buscador: Esc siempre cierra (antes, la primera vez solo borraba lo escrito).
 - Prueba nueva `probar_0150.cjs` (6; también total del día y teclas rápidas): modo oscuro con contraste AA y comprobante blanco, buscador (palabras, productos,
   clientes, permisos, no borra la venta, no se abre encima de otra ventana), filtros que cuentan como la base,

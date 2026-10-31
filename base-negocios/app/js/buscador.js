@@ -30,6 +30,8 @@ const CLAVES = {
   'inventario/conteo': 'inventario fisico contar ajuste',
   'inventario/movimientos': 'kardex entradas salidas',
   'inventario/traslados': 'mover entre bodegas sucursales',
+  'inventario/que_comprar': 'rotacion pedido reponer que pedir surtir se acaba mas vendido',
+  'inventario/capital_muerto': 'sin movimiento parado no se vende dinero parado inventario muerto',
   'compras/compras': 'compra factura de proveedor mercaderia',
   'compras/proveedores': 'proveedor',
   'compras/pagos': 'cuentas por pagar cxp deuda proveedor pagar',

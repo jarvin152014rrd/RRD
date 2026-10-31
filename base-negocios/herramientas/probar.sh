@@ -26,7 +26,7 @@
 # parte fuera de orden se rechaza sin tocar nada y que la verificación dice
 # "TODO BIEN". Después corren las mismas pruebas.
 #
-# Variables opcionales: PGBIN, PRUEBAS_PGDATA, PRUEBAS_PUERTO,
+# Variables opcionales: PGBIN, PRUEBAS_PGDATA, PRUEBAS_PUERTO, SOLO_PRUEBAS (regex),
 #                       MANTENER_SERVIDOR=1 (no apagarlo al final)
 # =====================================================================
 set -uo pipefail
@@ -137,6 +137,10 @@ total=0; buenas=0; malas=()
 
 # .sql y .sh juntos, en orden de número.
 mapfile -t archivos < <(ls "$DIR_PRUEBAS"/prueba_*.sql "$DIR_PRUEBAS"/prueba_*.sh 2>/dev/null | sort)
+# SOLO_PRUEBAS='prueba_(157|159)' corre solo las que coinciden (para revisar rápido; el resultado final es con todas).
+if [ -n "${SOLO_PRUEBAS:-}" ]; then
+  mapfile -t archivos < <(printf '%s\n' "${archivos[@]}" | grep -E "$SOLO_PRUEBAS")
+fi
 for archivo in "${archivos[@]}"; do
   nombre="$(basename "$archivo")"; nombre="${nombre%.*}"
   que="$(grep -m1 -E '^(--|#) PRUEBA:' "$archivo" | sed -E 's/^(--|#) PRUEBA: *//')"

@@ -2,7 +2,7 @@
 // se lee bien con contraste AA y lo impreso sigue blanco y negro), buscador general (palabras, productos, clientes,
 // permisos, no borra la venta, no se abre encima de otra ventana), filtros rápidos que cuentan como la base,
 // cotizaciones (cifras y WhatsApp sin emojis) y celular (encabezado en una línea, barra con el total, Salir en Más).
-// Ventas del día con el total del servidor y teclas rápidas en Vender (F2, F9, Esc).
+// Ventas del día con el total del servidor, teclas rápidas en Vender (F2, F9, Esc) e Inventario > ¿Qué comprar? y Capital muerto.
 // La corre herramientas/probar_app.sh. Variables: URL_APP, BASE_DEMO, CAPTURAS, PG* del servidor local.
 'use strict';
 const path = require('node:path');
@@ -230,6 +230,30 @@ const EM = () => id('EMPRESA');
     await p.waitForSelector('.venta-lista', { timeout: 15000 });
     afirmar(Number(sql(DUENO, `(SELECT count(*) FROM public.venta WHERE empresa_id = '${E}')`)) === antes + 1, 'F9 no registró la venta (o la registró dos veces)');
     await ctx.close();
+  });
+
+  await prueba('Inventario: ¿Qué comprar? y Capital muerto muestran lo del servidor (núcleo 0.21.0)', async () => {
+    const { ctx, p } = await nueva();
+    await entrar(p, DUENO);
+    const qc = JSON.parse(sql(DUENO, `public.que_comprar('${E}', 30, 30)`));
+    await ir(p, 'inventario/que_comprar', '[data-dato=qc-pedir]');
+    afirmar(Number(await textoDe(p, '[data-dato=qc-pedir] .cifra-valor')) === Number(qc.total.por_pedir), 'conviene pedir distinto al servidor');
+    afirmar((await textoDe(p, '[data-dato=qc-costo] .cifra-valor')).trim() === lempiras(qc.total.costo_aprox_centavos), 'costo del pedido distinto');
+    const conPedido = qc.filas.filter((x) => Number(x.pedir) > 0);
+    afirmar(await p.locator('#qc-tabla tbody tr').count() === conPedido.length, 'filas de la tabla');
+    if (conPedido.length) afirmar((await textoDe(p, `#qc-tabla tr[data-producto="${conPedido[0].producto_id}"] [data-dato=pedir]`)).startsWith(String(Number(conPedido[0].pedir))), 'cuánto pedir');
+    const cm = JSON.parse(sql(DUENO, `public.capital_muerto('${E}', 90)`));
+    await ir(p, 'inventario/capital_muerto', '[data-dato=cm-productos]');
+    afirmar(Number(await textoDe(p, '[data-dato=cm-productos] .cifra-valor')) === Number(cm.total.productos), 'capital muerto distinto al servidor');
+    paso = 'cajero sin costos';
+    await ctx.close();
+    const c = await nueva();
+    await entrar(c.p, 'cajero@demo.hn');
+    if (await c.p.evaluate(() => [...document.querySelectorAll('a.pestana')].some((a) => a.dataset.pestana === 'inventario'))) {
+      await c.p.goto(URL_APP + '/#/inventario/que_comprar'); await c.p.waitForTimeout(1500);
+      if (await c.p.locator('[data-dato=qc-pedir]').count()) afirmar(await c.p.locator('[data-dato=qc-costo]').count() === 0, 'el cajero ve el costo');
+    }
+    await c.ctx.close();
   });
 
   await prueba('cotizaciones: cifras como la base y WhatsApp sin emojis', async () => {

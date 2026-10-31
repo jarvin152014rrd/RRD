@@ -159,6 +159,25 @@ Queda la carpeta `dist/app-<cliente>/`. Si por error pega la llave secreta, la h
 
 ---
 
+## Actualizar de 0.20.0 a 0.21.0 (si YA lo tenía instalado) — ¿Qué comprar? y capital muerto
+
+> **Todavía no.** Primero hay que corregir lo que encontró el revisor en la 0.20.0 (ver `docs/PENDIENTES.md`). Cuando
+> esté corregida, se pega la 0.20.0 y después esta.
+
+Solo se pega **un archivo** (pequeño). No cambia nada guardado: agrega dos reportes en Inventario.
+
+1. **Haga un respaldo primero.**
+2. En la carpeta `base-negocios`: `bash herramientas/armar_instalacion.sh`. En `dist/` aparece
+   **`actualizar_supabase_0.21.0.sql`**.
+3. Supabase > **SQL Editor** > **New query** (rol **postgres**), pegue el archivo y toque **Run**.
+4. Abajo debe salir: **ACTUALIZADO A 0.21.0**, **version = 0.21.0** y **migraciones = 57**.
+5. Suba la app **0.15.0** a Netlify. En Inventario aparecen **¿Qué comprar?** y **Capital muerto**.
+
+| Lo que sale | Qué hacer |
+|---|---|
+| `FALTA_VERSION_ANTERIOR ... 056 (núcleo 0.20.0)` | Su base no tiene la 0.20.0. Pegue primero esa. |
+| `ROL_EQUIVOCADO` | Elija el rol **postgres** arriba a la derecha y vuelva a correr. |
+
 ## Actualizar de 0.19.0 a 0.20.0 (si YA lo tenía instalado) — vender sin internet, transferencias por confirmar y talonario
 
 Si su Supabase ya tiene la 0.19.0, **no** vuelva a pegar las partes. Solo se pega **un archivo** (unos 168 KB).

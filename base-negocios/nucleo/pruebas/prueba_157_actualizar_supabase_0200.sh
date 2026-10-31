@@ -3,7 +3,8 @@
 set -euo pipefail
 BASE="$1"
 RAIZ="${RAIZ:-$(cd "$(dirname "$0")/../.." && pwd)}"
-VERSION="$(tr -d '[:space:]' < "$RAIZ/VERSION_NUCLEO")"
+# Fija en 0.20.0 (desde 0.21.0 el paquete actual trae más; la 160 prueba 0.20.0 -> 0.21.0).
+VERSION="0.20.0"
 VIEJA="${BASE}_019"
 OTRA="${BASE}_sin055"
 TMP="$(mktemp -d)"
@@ -20,7 +21,12 @@ cp "$RAIZ/CHANGELOG.md" "$TMP/v019/"
 for f in "$RAIZ"/nucleo/sql/migraciones/0[0-4][0-9]_*.sql "$RAIZ"/nucleo/sql/migraciones/05[0-5]_*.sql; do cp "$f" "$TMP/v019/nucleo/sql/migraciones/"; done
 echo "0.19.0" > "$TMP/v019/VERSION_NUCLEO"
 bash "$TMP/v019/herramientas/armar_instalacion.sh" "$TMP/dist019" >/dev/null || falla "no se armó el paquete 0.19.0"
-bash "$RAIZ/herramientas/armar_instalacion.sh" "$TMP/dist" >/dev/null || falla "no se armó el paquete actual"
+mkdir -p "$TMP/v020/herramientas" "$TMP/v020/nucleo/sql/migraciones"
+cp "$RAIZ/herramientas/armar_instalacion.sh" "$TMP/v020/herramientas/"
+cp "$RAIZ/CHANGELOG.md" "$TMP/v020/"
+for f in "$RAIZ"/nucleo/sql/migraciones/0[0-4][0-9]_*.sql "$RAIZ"/nucleo/sql/migraciones/05[0-6]_*.sql; do cp "$f" "$TMP/v020/nucleo/sql/migraciones/"; done
+echo "0.20.0" > "$TMP/v020/VERSION_NUCLEO"
+bash "$TMP/v020/herramientas/armar_instalacion.sh" "$TMP/dist" >/dev/null || falla "no se armó el paquete 0.20.0"
 ACT="$TMP/dist/actualizar_supabase_${VERSION}.sql"
 [ -f "$ACT" ] || falla "no hay $ACT"
 [ "$(ls "$TMP"/dist/actualizar_supabase_* | wc -l)" = "1" ] || falla "la actualización debía ser un solo archivo"
