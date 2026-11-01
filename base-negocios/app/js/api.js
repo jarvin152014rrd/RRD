@@ -175,14 +175,14 @@ export async function rpcSiExiste(funcion, args = {}) {
 
 // Llama una función que ESCRIBE: siempre con id_operacion (uuid). Si se corta el internet a
 // medio camino, reintenta UNA vez con el MISMO id: el servidor reconoce el reintento y no duplica.
-export async function escribir(funcion, args = {}) {
+export async function escribir(funcion, args = {}, { tiempo = 0 } = {}) {
   const datos = { p_id_operacion: nuevoId(), ...args };
   try {
-    return await rpc(funcion, datos);
+    return await rpc(funcion, datos, { tiempo });
   } catch (e) {
     if (!e.sinConexion) throw e;
     await new Promise((ok) => setTimeout(ok, 1500));
-    return rpc(funcion, datos);
+    return rpc(funcion, datos, { tiempo });
   }
 }
 

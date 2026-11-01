@@ -6,8 +6,8 @@ Números: MAYOR.MENOR.ARREGLO (ver `docs/CONVENCIONES.md`).
 
 ## 0.21.0 (2026-10-31) — ¿Qué comprar? y capital muerto (ideas de RRD)
 
-Migración nueva 057 (solo agrega dos lecturas; no cambia nada guardado). 160 pruebas (nuevas 159 y 160; la 157 queda fija
-en 0.20.0). Para quien ya tiene 0.20.0 en Supabase: `dist/actualizar_supabase_0.21.0.sql` (ver `docs/SUPABASE.md`).
+Migración nueva 057 (solo agrega dos lecturas; no cambia nada guardado). 161 pruebas (nuevas 159, 160 y 161; la 157 queda
+fija en 0.20.0). Para quien ya tiene 0.20.0 en Supabase: `dist/actualizar_supabase_0.21.0.sql` (ver `docs/SUPABASE.md`).
 
 - **`que_comprar(empresa, dias, cubrir_dias)`**: por producto (bienes activos), lo vendido neto de devoluciones en los
   últimos días, cuánto sale por día, lo que hay en las bodegas del usuario, para cuántos días alcanza y cuánto pedir
@@ -26,7 +26,9 @@ en 0.20.0). Para quien ya tiene 0.20.0 en Supabase: `dist/actualizar_supabase_0.
 igual gastan su número, tope por turno, CAI vencido en el equipo, negativo solo sin internet, foto del catálogo
 entregada a ese equipo, "con internet" solo si llega pronto, quién devuelve los números, efectivo al turno correcto al
 resolver, precio de la copia en el talonario (dueño o admin, con motivo), "ya estaba" sin datos ajenos, RLS por
-sucursal, deuda de la transferencia al vendedor y limpieza del equipo. Prueba nueva 161; la 158 ampliada.
+sucursal, deuda de la transferencia al vendedor y limpieza del equipo. Prueba nueva 161; la 158 ampliada. El revisor
+revisó las correcciones dos veces más y se corrigió lo que encontró (renovación con candado, CAI vencido, efectivo al
+turno de quien resuelve en su caja, precio de la copia con ISV).
 
 Migración nueva 056 (las 001-055 no se tocaron). 158 pruebas (nuevas 152 a 158; la 150 queda fija en 0.19.0). Todas
 pasan también con `probar.sh --paquete`. Para quien ya tiene 0.19.0 en Supabase: `dist/actualizar_supabase_0.20.0.sql`

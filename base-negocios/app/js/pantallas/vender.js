@@ -595,6 +595,8 @@ export async function armarCarrito(vista, ctx, { modo, alTerminar = null }) {
       if (estado.referencia.trim().length < 3) throw errorSimple('Escriba el número de referencia de la transferencia.', 'Sin la referencia no se puede confirmar después en el banco.');
       if (estado.banco.trim()) p.banco = estado.banco.trim();
     }
+    // (3a vuelta) Una renovación que quedó sin respuesta se confirma aquí mismo si hay internet (no se espera al refresco).
+    if (!sinRed && await si.hayRenovacionPendiente(perfil.empresa.id)) { try { await si.confirmarBloques(perfil.empresa.id); } catch { /* sigue */ } }
     const est = await si.estadoVenta(perfil);
     if (sinRed) {
       if (!est.puede) throw errorSimple(est.razon);

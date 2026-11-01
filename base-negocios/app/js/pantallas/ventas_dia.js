@@ -8,12 +8,12 @@ import * as si from '../sin_internet.js';
 import { vistaComprobanteLocal } from '../comprobante.js';
 import { fechaLocal } from '../calculo_local.js';
 import { dinero, fechaHora } from '../formato.js';
-import { h, cajaError, titulo, filaIcono, chipEstado, chip, monto, estadoVacio, filtrosRapidos, tarjetaCifra, mensaje } from '../ui.js';
+import { h, cajaError, titulo, filaIcono, chipEstado, chip, monto, estadoVacio, filtrosRapidos, tarjetaCifra, mensaje, pedirMotivo } from '../ui.js';
 import { hayEnMenu } from '../menu.js';
 import { vistaComprobante } from '../comprobante.js';
 import { prepararDevolucion } from './devoluciones.js';
 
-const ESTADOS = { en_equipo: 'En el equipo', subida: 'Subida', por_resolver: 'Con problema', rechazada: 'Con problema' };
+const ESTADOS = { en_equipo: 'En el equipo', subida: 'Subida', por_resolver: 'Con problema', rechazada: 'Con problema', descartada: 'Revisada' };
 
 export async function mostrar(vista, ctx) {
   const perfil = perfilActual();
@@ -106,7 +106,14 @@ function tarjetaEquipo(vista, locales, volverAPintar) {
       // Revisión 0.20.0 (9): una rechazada (3 intentos) se puede volver a intentar.
       x.estado === 'rechazada' ? h('button', { type: 'button', class: 'boton', dataset: { accion: 'reintentar' },
         'aria-label': `Volver a subir ${x.numero_documento}`,
-        onclick: async () => { await si.reintentar(empresaId(), x.id_operacion); volverAPintar(); } }, 'Volver a intentar') : null),
+        onclick: async () => { await si.reintentar(empresaId(), x.id_operacion); volverAPintar(); } }, 'Volver a intentar') : null,
+      x.estado === 'rechazada' && puede('ventas.subir_ajenas') ? h('button', { type: 'button', class: 'boton boton-peligro', dataset: { accion: 'descartar' },
+        onclick: async () => {
+          const ok = await pedirMotivo({ titulo: `Dar por revisada ${x.numero_documento}`, peligro: true, textoBoton: 'Dar por revisada',
+            explicacion: 'Use esto solo si la venta nunca va a poder subir (por ejemplo, su número ya no es válido). Guarde la copia en papel: si hace falta, regístrela como una venta normal.',
+            accion: (motivo) => si.descartarRechazada(empresaId(), x.id_operacion, motivo) });
+          if (ok) volverAPintar();
+        } }, 'Dar por revisada') : null),
       props: { class: 'venta-fila-icono', dataset: { local: x.id_operacion, estado: x.estado } },
     }))));
   return tarjeta;

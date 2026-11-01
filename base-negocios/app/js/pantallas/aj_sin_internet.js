@@ -115,7 +115,7 @@ export async function mostrar(vista, ctx) {
         b.addEventListener('click', () => pedirMotivo({ titulo: `Subir las ${lista.length} venta(s) de ${lista[0].usuario_nombre}`,
           textoBoton: 'Subir', explicacion: 'Quedan a nombre de quien las hizo y "subidas por" usted, con este motivo.',
           accion: async (motivo) => {
-            const r = await si.subir(E, { usuarioId: uid, motivo });
+            const r = await si.subir(E, { usuarioId: uid, motivo, conRechazadas: true });
             if (r.sin_conexion) throw new Error('No hay conexión con el servidor.');
             if (r.rechazadas) throw new Error(`${r.rechazadas} venta(s) no se pudieron subir.`);
             aviso(`Subidas: ${r.subidas + r.ya_estaban}. Por resolver: ${r.por_resolver}.`);

@@ -26,7 +26,13 @@ ampliada) y las decisiones del dueño:
 - DECIDIDO por el dueño y HECHO (10): en el talonario de emergencia el dueño o el administrador pueden escribir el
   precio de la copia (por unidad, con ISV), con motivo en la bitácora; sin promociones ni mayorista encima. En
   efectivo, el dinero entra al turno de quien pasa la factura (la pantalla lo dice).
-- FALTA: que el revisor revise las correcciones (segunda vuelta).
+- HECHO: el revisor revisó las correcciones dos veces más (2a y 3a vuelta) y se corrigió lo que encontró: renovación de
+  números con candado y marca "renovando" (si la respuesta se pierde o es un 5xx, el equipo no usa esos números hasta
+  confirmar), tiempo máximo de 15 s, renovar con CAI vencido, efectivo al turno abierto de quien resuelve en SU caja,
+  talonario con el precio de la copia CON ISV (sin mezclar precios del mismo producto), rechazadas en el respaldo y en
+  "ventas de otros usuarios" (y el dueño puede darlas por revisadas con motivo), misma regla al renovar que al devolver.
+- FALTA (menor, pruebas): `probar_compras_dinero.cjs` "cuadrar con el banco" falla los primeros días del mes (los datos de
+  demostración ponen movimientos "recientes" que caen en el mes pasado). No es de la app; arreglar los datos de la demo.
 
 ## Vender sin internet, etapa 1 (HECHO en 0.20.0, migración 056, pruebas 152-158; app 0.14.0)
 

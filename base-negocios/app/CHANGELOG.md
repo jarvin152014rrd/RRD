@@ -1,5 +1,14 @@
 # Cambios de la app
 
+## app 0.15.0 — también: correcciones de "vender sin internet" (revisión de 0.20.0, ver CHANGELOG del núcleo)
+
+- Renovar los números: sube lo guardado, manda hasta dónde llegó cada bloque y nunca a la vez que una venta (candado);
+  si no hay respuesta, no usa esos números hasta confirmar. Renueva también con el CAI vencido.
+- No factura con el CAI vencido. El tope sin internet se cuenta por turno.
+- Ventas rechazadas: después de 3 intentos dejan de trabar la cola; se reintentan, van en el respaldo y en "ventas de
+  otros usuarios", y el dueño puede darlas por revisadas con motivo. Se borran del equipo las subidas de hace 30 días.
+- Sin internet por resolver: dice a qué turno entra el efectivo. Talonario: precio de la copia (dueño o admin, con motivo).
+
 ## app 0.15.0 (núcleo 0.20.0; con 0.21.0 además ¿Qué comprar? y Capital muerto) — Lo mejor de RRD en lo visual
 
 Ideas tomadas del programa de Repuestos Ruta Directa (solo de ejemplo; RRD no se tocó), pensadas para cualquier rubro.

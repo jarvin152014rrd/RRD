@@ -2766,7 +2766,7 @@ BEGIN
       -- (2a vuelta, D) el precio de la copia ya trae el ISV: se guarda tal cual, "con ISV incluido" (si no, al volver a
       -- calcular el ISV, el total no daría el de la copia). El mismo producto con dos precios distintos no se acepta.
       IF EXISTS (SELECT 1 FROM jsonb_array_elements(v_lin) y2 WHERE y2->>'producto_id' = l->>'producto_id'
-                  AND y2 ? 'precio_copia_centavos' AND (y2->>'precio_copia_centavos')::numeric <> v_con) THEN
+                  AND (NOT y2 ? 'precio_copia_centavos' OR (y2->>'precio_copia_centavos')::numeric <> v_con)) THEN
         RAISE EXCEPTION 'DATO_INVALIDO: el mismo producto va con dos precios distintos; póngalo en una sola línea.';
       END IF;
       v_fv := jsonb_set(v_fv, ARRAY['productos', l->>'producto_id'], pr

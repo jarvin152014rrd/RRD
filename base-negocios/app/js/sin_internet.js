@@ -168,16 +168,20 @@ export async function preparar(perfil, { nombre = null, cajaId = null, reservar 
       const usar = siguientes && Object.keys(siguientes).length ? siguientes : null;
       if (usar) await poner(be, 'datos', { siguientes: usar, en: new Date().toISOString() }, 'renovando');
       try {
+        // (3a vuelta) Con tiempo máximo: mientras dura, no se vende (candado); si no contesta, cuenta como sin conexión.
         const r = await api.escribir('reservar_bloque_numeros', { p_empresa_id: empresa, p_equipo_id: eq.equipo_id,
-          p_datos: { ...(cajaId ? { caja_id: cajaId } : {}), ...(usar ? { siguientes: usar } : {}) } });
+          p_datos: { ...(cajaId ? { caja_id: cajaId } : {}), ...(usar ? { siguientes: usar } : {}) } }, { tiempo: 15000 });
         avisos.push(...(r.avisos || []));
         await guardarBloques(empresa, r.bloques || [], { completa: true });
         await borrarDe(be, 'datos', 'renovando');
       } catch (e) {
-        // Sin respuesta (red): no se sabe si el servidor renovó; queda "renovando" hasta la próxima preparación.
-        if (!e.sinConexion && e.http !== 0) await borrarDe(be, 'datos', 'renovando');
-        if (e.clave !== 'FALTAN_VENTAS_POR_SUBIR') throw e;
-        avisos.push('Hay ventas de este equipo sin subir: cuando suban se pueden renovar los números.');
+        // La marca "renovando" se borra SOLO si el servidor contestó con un error suyo (no renovó). Sin respuesta, o con un
+        // error de la pasarela (5xx), no se sabe si renovó: queda hasta confirmar la lista de bloques con internet.
+        const delServidor = Boolean(e.clave || e.sqlstate) || (e.http >= 400 && e.http < 500);
+        if (delServidor) await borrarDe(be, 'datos', 'renovando');
+        if (e.clave === 'FALTAN_VENTAS_POR_SUBIR') avisos.push('Hay ventas de este equipo sin subir: cuando suban se pueden renovar los números.');
+        else if (e.clave === 'SIN_PERMISO') avisos.push('Los números de esta caja los renueva quien los reservó, el cajero del turno o el dueño.');
+        else throw e;
       }
     });
   }
@@ -224,6 +228,16 @@ async function borrarDe(db, almacen, clave) {
 async function renovando(empresa) {
   try { return (await leerDe(await baseEquipo(empresa), 'datos', 'renovando')) || null; } catch { return null; }
 }
+// Con internet: lee la lista de bloques del servidor y la guarda (resuelve una renovación que quedó sin respuesta).
+export async function confirmarBloques(empresa) {
+  const eq = await equipoLocal(empresa);
+  if (!eq) return false;
+  const r = await api.rpc('bloques_del_equipo', { p_empresa_id: empresa, p_equipo_id: eq.equipo_id }, { tiempo: 10000 });
+  const db = await baseEquipo(empresa);
+  await conCandadoNumeros(empresa, async () => { await guardarBloques(empresa, r.bloques || [], { completa: true }); await borrarDe(db, 'datos', 'renovando'); });
+  return true;
+}
+export async function hayRenovacionPendiente(empresa) { return Boolean(await renovando(empresa)); }
 
 // Guarda los bloques del servidor sin bajar nunca el contador local (el equipo puede ir adelante: ventas sin subir).
 // completa: la lista es TODA la de bloques activos de este equipo (revisión 0.20.0, 8): los que ya no vienen (el servidor
@@ -399,12 +413,12 @@ async function avisar(extra = {}) {
 
 // Sube las ventas del usuario conectado (o las de otro, con motivo: M2). Una sola pestaña a la vez.
 // -> { subidas, por_resolver, rechazadas, quedan, sin_conexion }
-export async function subir(empresa, { usuarioId = usuarioActivo, motivo = null, equipoId = null, registros = null } = {}) {
+export async function subir(empresa, { usuarioId = usuarioActivo, motivo = null, equipoId = null, registros = null, conRechazadas = false } = {}) {
   const tarea = async () => {
     const eq = equipoId ? { equipo_id: equipoId } : await equipoLocal(empresa);
     const res = { subidas: 0, por_resolver: 0, rechazadas: 0, ya_estaban: 0, quedan: 0, sin_conexion: false, resultados: [] };
     if (!eq) return res;
-    let lista = registros || (await pendientes(empresa)).filter((x) => !usuarioId || x.usuario_id === usuarioId);
+    let lista = registros || (await (conRechazadas ? porSubirOConProblema(empresa) : pendientes(empresa))).filter((x) => !usuarioId || x.usuario_id === usuarioId);
     const total = lista.length;
     let hecho = 0;
     while (lista.length) {
@@ -466,14 +480,25 @@ export async function reintentar(empresa, idOperacion) {
   programarSubida(true);
   return true;
 }
+// (3a vuelta) El dueño puede dar por revisada una venta rechazada que nunca va a subir (queda en el equipo como
+// "descartada", con su motivo; ya no traba la cola). Si su número quedó como hueco, el servidor lo dirá al devolver.
+export async function descartarRechazada(empresa, idOperacion, motivo) {
+  const db = await baseEquipo(empresa);
+  const reg = await leerDe(db, 'cola', idOperacion);
+  if (!reg || reg.estado !== 'rechazada') return false;
+  await poner(db, 'cola', { ...reg, estado: 'descartada', motivo_descarte: motivo, descartada_en: new Date().toISOString() });
+  avisar();
+  return true;
+}
+
 // Revisión 0.20.0 (14): las ventas ya subidas se borran del equipo después de 30 días (la base no crece sin fin).
 const DIAS_GUARDAR_SUBIDAS = 30;
 export async function limpiarCola(empresa) {
   try {
     const db = await baseEquipo(empresa);
     const limite = Date.now() - DIAS_GUARDAR_SUBIDAS * 86400000;
-    const viejas = (await todos(db, 'cola')).filter((x) => (x.estado === 'subida' || x.estado === 'por_resolver')
-      && Date.parse(x.subida_en || x.creada_en) < limite);
+    const viejas = (await todos(db, 'cola')).filter((x) => ['subida', 'por_resolver', 'descartada'].includes(x.estado)
+      && Date.parse(x.subida_en || x.descartada_en || x.creada_en) < limite);
     if (!viejas.length) return 0;
     const tx = db.transaction('cola', 'readwrite');
     for (const x of viejas) tx.objectStore('cola').delete(x.id_operacion);
@@ -513,10 +538,7 @@ export async function devolverBloques(empresa, cajaId = null) {
   const db = await baseEquipo(empresa);
   const devueltos = [];
   // (2a vuelta, A) Primero la lista del servidor: un bloque que el servidor ya renovó no se intenta devolver.
-  try {
-    const r = await api.rpc('bloques_del_equipo', { p_empresa_id: empresa, p_equipo_id: eq.equipo_id });
-    await conCandadoNumeros(empresa, async () => { await guardarBloques(empresa, r.bloques || [], { completa: true }); await borrarDe(db, 'datos', 'renovando'); });
-  } catch { /* se intenta con lo que hay */ }
+  try { await confirmarBloques(empresa); } catch { /* se intenta con lo que hay */ }
   for (const b of await bloquesLocales(empresa)) {
     if (b.estado !== 'activo' || (cajaId && b.caja_id !== cajaId)) continue;
     await api.escribir('devolver_bloque', { p_empresa_id: empresa, p_equipo_id: eq.equipo_id, p_bloque_id: b.bloque_id, p_siguiente: b.siguiente });
