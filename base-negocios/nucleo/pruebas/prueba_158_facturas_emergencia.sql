@@ -116,7 +116,10 @@ BEGIN
 
   -- 6) El libro de ventas del mes: la factura 5 y el 7 ANULADO en cero.
   PERFORM pruebas.como('dueno_a');
-  l := public.libro_ventas(e, extract(year FROM hoy)::int, extract(month FROM hoy)::int)->'filas';
+  -- El libro del mes de ayer y el de hoy (el día 1, "ayer" es del mes anterior).
+  l := (public.libro_ventas(e, extract(year FROM hoy - 1)::int, extract(month FROM hoy - 1)::int)->'filas')
+       || CASE WHEN date_trunc('month', hoy - 1) <> date_trunc('month', hoy)
+               THEN public.libro_ventas(e, extract(year FROM hoy)::int, extract(month FROM hoy)::int)->'filas' ELSE '[]'::jsonb END;
   PERFORM pruebas.afirmar(EXISTS (SELECT 1 FROM jsonb_array_elements(l) y WHERE y->>'numero_documento' = '001-901-01-00000005'
                                     AND (y->>'total_centavos')::bigint = 3000)
     AND EXISTS (SELECT 1 FROM jsonb_array_elements(l) y WHERE y->>'numero_documento' = '001-901-01-00000007' AND y->>'estado' = 'ANULADA'

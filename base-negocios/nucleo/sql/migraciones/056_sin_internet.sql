@@ -333,6 +333,16 @@ CREATE POLICY leer ON public.catalogo_foto FOR SELECT TO authenticated
   USING (empresa_id = ANY (ARRAY(SELECT public.empresas_con_permiso('ventas.resolver_sin_internet'))));
 CREATE POLICY leer ON public.catalogo_entrega FOR SELECT TO authenticated
   USING (empresa_id = ANY (ARRAY(SELECT public.empresas_con_permiso('ventas.resolver_sin_internet'))));
+-- Revisión 0.20.0 (12): también por sucursal (como numero_bloque).
+CREATE POLICY por_sucursal ON public.numero_emitido AS RESTRICTIVE FOR SELECT TO authenticated
+  USING (empresa_id = ANY (ARRAY(SELECT public.empresas_sin_restriccion()))
+         OR EXISTS (SELECT 1 FROM public.numero_bloque b WHERE b.id = bloque_id AND b.sucursal_id = ANY (ARRAY(SELECT public.sucursales_permitidas()))));
+CREATE POLICY por_sucursal ON public.catalogo_foto AS RESTRICTIVE FOR SELECT TO authenticated
+  USING (empresa_id = ANY (ARRAY(SELECT public.empresas_sin_restriccion()))
+         OR sucursal_id = ANY (ARRAY(SELECT public.sucursales_permitidas())));
+CREATE POLICY por_sucursal ON public.catalogo_entrega AS RESTRICTIVE FOR SELECT TO authenticated
+  USING (empresa_id = ANY (ARRAY(SELECT public.empresas_sin_restriccion()))
+         OR EXISTS (SELECT 1 FROM public.catalogo_foto f WHERE f.id = foto_id AND f.sucursal_id = ANY (ARRAY(SELECT public.sucursales_permitidas()))));
 CREATE POLICY leer ON public.venta_sin_internet FOR SELECT TO authenticated
   USING (empresa_id = ANY (ARRAY(SELECT public.empresas_con_permiso('ventas.resolver_sin_internet')))
          OR usuario_id = auth.uid());
@@ -997,7 +1007,9 @@ BEGIN
   END LOOP;
 
   PERFORM set_config('app.numero_bloque', jsonb_build_object('bloque_id', p_vsi.bloque_id, 'numero', p_vsi.numero)::text, true);
-  PERFORM set_config('app.sin_internet', '1', true);
+  -- Revisión 0.20.0 (3): la existencia negativa se acepta solo si la venta se hizo SIN internet (la mercadería ya salió);
+  -- una venta con internet por la cola sigue la regla de siempre.
+  PERFORM set_config('app.sin_internet', CASE WHEN NOT p_vsi.en_linea THEN '1' ELSE '' END, true);
   v := interno.emitir_venta(v.id, v_fecha, p_vsi.id_operacion);
   PERFORM set_config('app.numero_bloque', '', true);
   PERFORM set_config('app.sin_internet', '', true);
@@ -1032,7 +1044,11 @@ DECLARE
   v_formas text[];
   v_vend   bigint;
   v_neg    boolean := false;
-  v_quien  uuid := CASE WHEN p_a_mi_turno THEN auth.uid() ELSE p_vsi.usuario_id END;
+  -- Quién recibe el efectivo (y queda como quien registró): con p_a_mi_turno, quien resuelve; si no, el cajero del turno
+  -- ABIERTO de esos números (el dinero está en su caja; revisión 0.20.0), o quien hizo la venta.
+  v_quien  uuid := CASE WHEN p_a_mi_turno THEN auth.uid() ELSE coalesce(
+                     (SELECT t.cajero_id FROM public.numero_bloque nb JOIN public.turno_caja t ON t.id = nb.turno_id
+                       WHERE nb.id = p_vsi.bloque_id AND t.estado = 'abierto'), p_vsi.usuario_id) END;
   pj       jsonb;
   l        jsonb;
   k        integer;
@@ -1069,8 +1085,12 @@ BEGIN
       v_prob := 'tope_venta';
     END IF;
     IF v_prob IS NULL AND NOT p_vsi.en_linea THEN
+      -- Revisión 0.20.0 (1): el tope es del TURNO (todos sus bloques y todos los usuarios), no del bloque ni del usuario.
       SELECT coalesce(sum(x.total_centavos), 0) INTO v_vend FROM public.venta_sin_internet x
-       WHERE x.bloque_id = p_vsi.bloque_id AND x.usuario_id = p_vsi.usuario_id AND NOT x.en_linea AND x.estado <> 'anulada';
+        JOIN public.numero_bloque nb ON nb.id = x.bloque_id
+       WHERE x.empresa_id = e.id AND NOT x.en_linea AND x.estado <> 'anulada'
+         AND (nb.id = p_vsi.bloque_id
+              OR nb.turno_id = (SELECT b0.turno_id FROM public.numero_bloque b0 WHERE b0.id = p_vsi.bloque_id));
       IF v_vend + p_vsi.total_centavos > e.sin_internet_tope_turno_centavos THEN
         v_prob := 'tope_turno';
       END IF;
@@ -1080,9 +1100,10 @@ BEGIN
     RETURN jsonb_build_object('problema', v_prob, 'texto', interno.vsi_problema_texto(v_prob));
   END IF;
 
-  v_antes := interno.vsi_como(v_quien);
+  -- Permiso de QUIEN HIZO LA VENTA (activo): sin internet, ventas.sin_internet; con internet (cola de la caja con bloque),
+  -- vender y cobrar.
+  v_antes := interno.vsi_como(p_vsi.usuario_id);
   BEGIN
-    -- Permiso del usuario (activo): sin internet, ventas.sin_internet; con internet (cola de la caja con bloque), vender y cobrar.
     IF p_modo = 'subir' AND ue.activo THEN
       IF NOT p_vsi.en_linea AND NOT public.tiene_permiso('ventas.sin_internet', e.id) THEN
         v_prob := 'sin_permiso';
@@ -1090,11 +1111,25 @@ BEGIN
         v_prob := 'sin_permiso';
       END IF;
     END IF;
+  EXCEPTION WHEN OTHERS THEN
+    PERFORM interno.vsi_volver(v_antes);
+    RAISE;
+  END;
+  PERFORM interno.vsi_volver(v_antes);
+  v_antes := interno.vsi_como(v_quien);
+  BEGIN
     -- G5: el precio con la foto; si no, con el de hoy; si no, por resolver.
     IF v_prob IS NULL THEN
       PERFORM set_config('app.sucursal_venta', coalesce(v_suc::text, ''), true);
       PERFORM set_config('app.cliente_venta', coalesce(p_vsi.payload->>'cliente_id', ''), true);
-      SELECT * INTO f FROM public.catalogo_foto x WHERE x.empresa_id = e.id AND x.version = p_vsi.foto_version;
+      -- Revisión 0.20.0 (5): solo vale una foto de la sucursal de la caja que se le ENTREGÓ a ese equipo dentro de las horas
+      -- permitidas antes de la venta (no cualquier lista vieja con precios más bajos). Si no, se calcula con los precios de hoy.
+      SELECT x.* INTO f FROM public.catalogo_foto x
+       WHERE x.empresa_id = e.id AND x.version = p_vsi.foto_version AND x.sucursal_id = v_suc
+         AND EXISTS (SELECT 1 FROM public.catalogo_entrega ce
+                      WHERE ce.foto_id = x.id AND ce.equipo_id = p_vsi.equipo_id
+                        AND ce.entregado_en <= p_vsi.hora_equipo + interval '10 minutes'
+                        AND ce.entregado_en >= p_vsi.hora_equipo - make_interval(hours => e.sin_internet_horas) - interval '1 hour');
       IF f.id IS NOT NULL THEN
         v_fv := interno.foto_de_venta(f.contenido, v_lin);
         PERFORM set_config('app.foto_venta', v_fv::text, true);
@@ -1245,7 +1280,34 @@ LANGUAGE sql STABLE SECURITY DEFINER SET search_path = '' AS $$
     50)
 $$;
 
--- reservar_bloque_numeros(empresa, equipo, id_operacion, {"caja_id"?, "tamano"?})   ventas.sin_internet
+-- Revisión 0.20.0 (8): deja un bloque activo como "devuelto" desde el siguiente número del equipo, SOLO si todo lo que el
+-- equipo numeró antes de ese número ya llegó al servidor (sin huecos). Lo usan devolver_bloque y la renovación del bloque.
+CREATE FUNCTION interno.cerrar_bloque_hasta(b public.numero_bloque, p_siguiente bigint, p_id_operacion uuid DEFAULT NULL)
+RETURNS public.numero_bloque
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = '' AS $$
+DECLARE
+  v_falt bigint;
+BEGIN
+  IF b.estado <> 'activo' THEN
+    RAISE EXCEPTION 'BLOQUE_INVALIDO: ese bloque ya no está activo (%).', replace(b.estado, '_', ' ');
+  END IF;
+  IF p_siguiente IS NULL OR p_siguiente NOT BETWEEN b.desde AND b.hasta + 1 OR p_siguiente < b.siguiente THEN
+    RAISE EXCEPTION 'BLOQUE_INVALIDO: el equipo dice que su siguiente número es % y el servidor ya recibió hasta el %.',
+      coalesce(p_siguiente::text, '?'), b.siguiente - 1;
+  END IF;
+  SELECT (p_siguiente - b.desde) - count(*) INTO v_falt FROM public.numero_emitido n
+   WHERE n.bloque_id = b.id AND n.numero < p_siguiente;
+  IF v_falt > 0 THEN
+    RAISE EXCEPTION 'FALTAN_VENTAS_POR_SUBIR: faltan % venta(s) de este equipo por llegar al servidor.', v_falt;
+  END IF;
+  UPDATE public.numero_bloque SET estado = 'devuelto', siguiente = p_siguiente, devuelto_desde = p_siguiente,
+         devuelto_en = now(), devuelto_por = auth.uid(), devolucion_id_operacion = p_id_operacion
+   WHERE id = b.id
+  RETURNING * INTO b;
+  RETURN b;
+END $$;
+
+-- reservar_bloque_numeros(empresa, equipo, id_operacion, {"caja_id"?, "tamano"?, "siguientes"?})   ventas.sin_internet
 -- Reserva los números de la caja (del turno abierto del usuario) para ESTE equipo: facturas CAI y/o tickets según
 -- la regla de documento de la empresa. Si el equipo ya tiene un bloque activo de esa caja, lo devuelve (ya_estaba).
 CREATE FUNCTION public.reservar_bloque_numeros(p_empresa_id uuid, p_equipo_id uuid, p_id_operacion uuid, p_datos jsonb DEFAULT '{}')
@@ -1271,13 +1333,17 @@ DECLARE
   v_res   jsonb := '[]';
   v_avis  jsonb := '[]';
   v_hoy   date;
+  v_sig   bigint;
 BEGIN
   PERFORM interno.exigir_escritura(p_empresa_id, 'ventas.sin_internet', 'ventas');
   IF p_id_operacion IS NULL THEN
     RAISE EXCEPTION 'FALTA_ID_OPERACION: cada operación necesita un id_operacion (uuid) único.';
   END IF;
   PERFORM interno.exigir_tipo_operacion(p_empresa_id, p_id_operacion, 'reserva_bloque');
-  PERFORM interno.exigir_claves(v_datos, ARRAY['caja_id', 'tamano']);
+  PERFORM interno.exigir_claves(v_datos, ARRAY['caja_id', 'tamano', 'siguientes']);
+  IF v_datos ? 'siguientes' AND jsonb_typeof(v_datos->'siguientes') IS DISTINCT FROM 'object' THEN
+    RAISE EXCEPTION 'DATO_INVALIDO: "siguientes" va como {"<bloque_id>": <siguiente número del equipo>}.';
+  END IF;
   SELECT * INTO e FROM public.empresa x WHERE x.id = p_empresa_id;
   v_hoy := public.hoy_local(p_empresa_id);
   q := interno.equipo_de(p_empresa_id, p_equipo_id, true);
@@ -1324,11 +1390,16 @@ BEGIN
       RAISE EXCEPTION 'BLOQUE_ACTIVO: la caja "%" ya tiene números reservados en el equipo "%"; ese equipo los devuelve al cerrar el turno (o el dueño lo desactiva).',
         c.nombre, (SELECT x.nombre FROM public.equipo x WHERE x.id = ya.equipo_id);
     END IF;
-    -- Bloque del mismo equipo ya usado completo (y todo subido): se cierra y se reserva otro.
-    IF ya.id IS NOT NULL AND ya.siguiente > ya.hasta THEN
-      UPDATE public.numero_bloque SET estado = 'devuelto', devuelto_desde = ya.hasta + 1, devuelto_en = now(), devuelto_por = auth.uid()
-       WHERE id = ya.id;
-      ya := NULL;
+    -- Revisión 0.20.0 (8): renovar el bloque del mismo equipo cuando le quedan POCOS números (una quinta parte o 5 o menos)
+    -- o ninguno. El equipo dice su siguiente número ("siguientes"); todo lo anterior debe haber llegado (sin huecos). Los
+    -- números que no usó pasan al bloque nuevo (empieza ahí).
+    IF ya.id IS NOT NULL THEN
+      v_sig := coalesce(interno.json_entero(v_datos->'siguientes'->(ya.id::text), 'siguientes'),
+                        CASE WHEN ya.siguiente > ya.hasta THEN ya.hasta + 1 END);
+      IF v_sig IS NOT NULL AND ya.hasta - v_sig + 1 <= greatest(5, (ya.hasta - ya.desde + 1) / 5) THEN
+        PERFORM interno.cerrar_bloque_hasta(ya, v_sig);
+        ya := NULL;
+      END IF;
     END IF;
     CONTINUE WHEN ya.id IS NOT NULL;
 
@@ -1434,23 +1505,16 @@ BEGIN
   IF b.equipo_id <> p_equipo_id THEN
     RAISE EXCEPTION 'BLOQUE_INVALIDO: solo el equipo que tiene los números los devuelve.';
   END IF;
+  -- Revisión 0.20.0 (7): el id del equipo no es secreto; además devuelve SOLO quien reservó los números, el cajero del
+  -- turno de esos números o quien puede subir ventas ajenas (el dueño). Si no, otro podría devolverlos con ventas sin
+  -- subir en el equipo y los números se repetirían.
+  IF auth.uid() IS DISTINCT FROM b.reservado_por
+     AND auth.uid() IS DISTINCT FROM (SELECT t.cajero_id FROM public.turno_caja t WHERE t.id = b.turno_id)
+     AND NOT public.tiene_permiso('ventas.subir_ajenas', p_empresa_id) THEN
+    RAISE EXCEPTION 'SIN_PERMISO: los números los devuelve quien los reservó, el cajero de ese turno o el dueño.';
+  END IF;
   PERFORM interno.equipo_de(p_empresa_id, p_equipo_id, true);
-  IF b.estado <> 'activo' THEN
-    RAISE EXCEPTION 'BLOQUE_INVALIDO: ese bloque ya no está activo (%).', replace(b.estado, '_', ' ');
-  END IF;
-  IF p_siguiente IS NULL OR p_siguiente NOT BETWEEN b.desde AND b.hasta + 1 OR p_siguiente < b.siguiente THEN
-    RAISE EXCEPTION 'BLOQUE_INVALIDO: el equipo dice que su siguiente número es % y el servidor ya recibió hasta el %.',
-      coalesce(p_siguiente::text, '?'), b.siguiente - 1;
-  END IF;
-  SELECT (p_siguiente - b.desde) - count(*) INTO v_falt FROM public.numero_emitido n
-   WHERE n.bloque_id = b.id AND n.numero < p_siguiente;
-  IF v_falt > 0 THEN
-    RAISE EXCEPTION 'FALTAN_VENTAS_POR_SUBIR: faltan % venta(s) de este equipo por llegar al servidor.', v_falt;
-  END IF;
-  UPDATE public.numero_bloque SET estado = 'devuelto', siguiente = p_siguiente, devuelto_desde = p_siguiente,
-         devuelto_en = now(), devuelto_por = auth.uid(), devolucion_id_operacion = p_id_operacion
-   WHERE id = b.id
-  RETURNING * INTO b;
+  b := interno.cerrar_bloque_hasta(b, p_siguiente, p_id_operacion);
   PERFORM interno.equipo_noticia(p_equipo_id);
   RETURN jsonb_build_object('bloque_id', b.id, 'estado', b.estado, 'devuelto_desde', b.devuelto_desde,
     'sin_usar', b.hasta - b.devuelto_desde + 1, 'ya_estaba', false);
@@ -1498,7 +1562,11 @@ BEGIN
     VALUES (p_empresa_id, c.sucursal_id, interno.siguiente_numero(p_empresa_id, 'catalogo_foto')::integer, v_hu, v_cat, auth.uid())
     RETURNING * INTO f;
   END IF;
-  IF (SELECT s.foto_version FROM interno.equipo_sync s WHERE s.equipo_id = q.id) IS DISTINCT FROM f.version THEN
+  -- Revisión 0.20.0 (5): se anota la entrega si es otra foto o si la última entrega de esta foto tiene más de 1 hora
+  -- (así la venta sin internet se revisa contra una entrega reciente).
+  IF (SELECT s.foto_version FROM interno.equipo_sync s WHERE s.equipo_id = q.id) IS DISTINCT FROM f.version
+     OR NOT EXISTS (SELECT 1 FROM public.catalogo_entrega ce WHERE ce.equipo_id = q.id AND ce.foto_id = f.id
+                     AND ce.entregado_en > now() - interval '1 hour') THEN
     INSERT INTO public.catalogo_entrega (empresa_id, equipo_id, foto_id, entregado_a) VALUES (p_empresa_id, q.id, f.id, auth.uid());
   END IF;
   PERFORM interno.equipo_noticia(q.id, f.version);
@@ -1577,12 +1645,22 @@ BEGIN
     RAISE EXCEPTION 'DATO_INVALIDO: cada venta lleva "id_operacion" y "usuario_id".';
   END IF;
   -- Idempotente: la misma venta otra vez, o una que ya entró por registrar_venta (G2), es "ya estaba".
+  -- Revisión 0.20.0 (11): de otro usuario solo contesta a quien puede subir ventas ajenas.
+  IF v_usu <> auth.uid() AND NOT public.tiene_permiso('ventas.subir_ajenas', p_empresa_id) THEN
+    RAISE EXCEPTION 'SIN_PERMISO: esa venta es de otro usuario; la sube él mismo o el dueño (permiso "ventas.subir_ajenas").';
+  END IF;
   SELECT * INTO ya FROM public.venta_sin_internet z WHERE z.empresa_id = p_empresa_id AND z.id_operacion = v_id;
+  IF ya.id IS NOT NULL AND ya.usuario_id <> v_usu THEN
+    RAISE EXCEPTION 'ID_OPERACION_USADO: ese identificador ya es de otra venta.';
+  END IF;
   IF ya.id IS NOT NULL THEN
     RETURN jsonb_build_object('id_operacion', v_id, 'estado', 'ya_estaba', 'estado_venta', ya.estado, 'venta_id', ya.venta_id,
       'numero_documento', ya.numero_documento, 'problema', ya.problema, 'problema_texto', ya.problema_texto);
   END IF;
   SELECT * INTO vv FROM public.venta z WHERE z.empresa_id = p_empresa_id AND z.id_operacion = v_id;
+  IF vv.id IS NOT NULL AND v_usu NOT IN (coalesce(vv.creado_por, v_usu), coalesce(vv.vendedor_id, v_usu)) THEN
+    RAISE EXCEPTION 'ID_OPERACION_USADO: ese identificador ya es de otra venta.';
+  END IF;
   IF vv.id IS NOT NULL THEN
     RETURN jsonb_build_object('id_operacion', v_id, 'estado', 'ya_estaba', 'estado_venta', 'registrada', 'venta_id', vv.id,
       'numero_documento', vv.numero_documento);
@@ -1622,7 +1700,9 @@ BEGIN
   vsi.tipo_documento := interno.json_texto(x->'tipo_documento', 'tipo_documento', 20);
   vsi.foto_version := interno.json_entero(x->'foto_version', 'foto_version')::integer;
   vsi.total_centavos := interno.json_centavos(x->'total_centavos', 'total_centavos');
-  vsi.en_linea := coalesce((x->>'en_linea')::boolean, false);
+  -- Revisión 0.20.0 (6): "con internet" lo dice el equipo; solo se cree si la venta llega a los pocos minutos (si no, se
+  -- revisa como sin internet: topes, tarjeta y permiso).
+  vsi.en_linea := coalesce((x->>'en_linea')::boolean, false) AND v_hora >= now() - interval '15 minutes';
   vsi.hora_equipo := v_hora;
   vsi.recibido_en := now();
   vsi.payload := x;
@@ -1686,6 +1766,58 @@ BEGIN
     'avisos', interno.avisos_referencia(p_empresa_id, x->'pagos', vsi.venta_id));
 END $$;
 
+-- Revisión 0.20.0 (9): una venta que el servidor no puede ni revisar (datos dañados) igual GASTA su número y queda
+-- "por resolver" (problema "datos"), así no queda un hueco que impida devolver los números ni cerrar el turno. Solo si el
+-- número es de un bloque de ese equipo y no está usado; si no (o es de otro usuario sin permiso), sigue "rechazada".
+CREATE FUNCTION interno.vsi_guardar_rechazada(p_empresa_id uuid, p_equipo public.equipo, x jsonb, p_error text) RETURNS jsonb
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = '' AS $$
+DECLARE
+  vsi    public.venta_sin_internet;
+  b      public.numero_bloque;
+  v_id   uuid;
+  v_usu  uuid;
+  v_num  bigint;
+  v_hora timestamptz;
+BEGIN
+  IF p_error LIKE 'ID_OPERACION_USADO%' OR p_error LIKE 'SIN_PERMISO%' OR p_error LIKE 'FALTA_MOTIVO%' OR p_error LIKE 'SIN_SESION%' THEN
+    RETURN NULL;
+  END IF;
+  v_id := (x->>'id_operacion')::uuid;
+  v_usu := (x->>'usuario_id')::uuid;
+  v_num := (x->>'numero')::bigint;
+  IF v_id IS NULL OR v_usu IS NULL OR v_num IS NULL
+     OR (v_usu <> auth.uid() AND NOT public.tiene_permiso('ventas.subir_ajenas', p_empresa_id))
+     OR NOT EXISTS (SELECT 1 FROM public.usuario_empresa u WHERE u.empresa_id = p_empresa_id AND u.user_id = v_usu)
+     OR EXISTS (SELECT 1 FROM public.venta_sin_internet z WHERE z.empresa_id = p_empresa_id AND z.id_operacion = v_id)
+     OR EXISTS (SELECT 1 FROM public.venta z WHERE z.empresa_id = p_empresa_id AND z.id_operacion = v_id) THEN
+    RETURN NULL;
+  END IF;
+  SELECT * INTO b FROM public.numero_bloque z
+   WHERE z.id = (x->>'bloque_id')::uuid AND z.empresa_id = p_empresa_id AND z.equipo_id = p_equipo.id FOR UPDATE;
+  IF b.id IS NULL OR v_num NOT BETWEEN b.desde AND b.hasta OR b.estado = 'conciliado'
+     OR (b.estado = 'devuelto' AND v_num >= b.devuelto_desde)
+     OR EXISTS (SELECT 1 FROM public.numero_emitido n WHERE n.empresa_id = p_empresa_id AND n.serie = b.serie AND n.numero = v_num) THEN
+    RETURN NULL;
+  END IF;
+  PERFORM interno.exigir_tipo_operacion(p_empresa_id, v_id, 'venta');
+  BEGIN v_hora := (x->>'hora_equipo')::timestamptz; EXCEPTION WHEN OTHERS THEN v_hora := NULL; END;
+  vsi.id := gen_random_uuid();
+  vsi.empresa_id := p_empresa_id; vsi.sucursal_id := b.sucursal_id; vsi.caja_id := b.caja_id; vsi.equipo_id := p_equipo.id;
+  vsi.usuario_id := v_usu; vsi.id_operacion := v_id; vsi.bloque_id := b.id; vsi.numero := v_num;
+  vsi.numero_documento := interno.numero_de_bloque(b, v_num); vsi.tipo_documento := b.tipo;
+  vsi.total_centavos := CASE WHEN x->>'total_centavos' ~ '^[0-9]{1,15}$' THEN (x->>'total_centavos')::bigint END;
+  vsi.en_linea := false; vsi.hora_equipo := v_hora; vsi.recibido_en := now(); vsi.payload := x;
+  vsi.estado := 'por_resolver'; vsi.problema := 'datos'; vsi.grave := false; vsi.negativo := false;
+  vsi.problema_texto := interno.vsi_problema_texto('datos') || ' (' || left(regexp_replace(p_error, '^[A-Z_]+: ', ''), 200) || ')';
+  vsi.subido_por := auth.uid();
+  INSERT INTO public.venta_sin_internet VALUES (vsi.*);
+  INSERT INTO public.numero_emitido (empresa_id, bloque_id, serie, numero, numero_documento, venta_sin_internet_id, estado)
+  VALUES (p_empresa_id, b.id, b.serie, v_num, vsi.numero_documento, vsi.id, 'por_resolver');
+  UPDATE public.numero_bloque SET siguiente = greatest(siguiente, v_num + 1) WHERE id = b.id;
+  RETURN jsonb_build_object('id_operacion', v_id, 'estado', 'por_resolver', 'numero_documento', vsi.numero_documento,
+    'problema', 'datos', 'problema_texto', vsi.problema_texto, 'grave', false);
+END $$;
+
 -- subir_ventas_sin_internet(empresa, equipo, ventas jsonb (1 a 20), motivo?)
 -- ventas.sin_internet (o ventas.subir_ajenas). Funciona fuera del horario del puesto (M7: subir no es operar).
 -- Cada venta en su propio paso: una que falla no detiene a las demás; una por resolver igual gasta su número.
@@ -1696,6 +1828,7 @@ DECLARE
   q      public.equipo;
   x      jsonb;
   r      jsonb;
+  v_err  text;
   v_res  jsonb := '[]';
 BEGIN
   IF auth.uid() IS NULL THEN
@@ -1725,8 +1858,16 @@ BEGIN
     BEGIN
       r := interno.vsi_subir_una(p_empresa_id, q, x, p_motivo);
     EXCEPTION WHEN OTHERS THEN
-      r := jsonb_build_object('id_operacion', x->'id_operacion', 'estado', 'rechazada',
-                              'error', SQLERRM, 'clave', substring(SQLERRM FROM '^([A-Z][A-Z0-9_]+):'));
+      v_err := SQLERRM;
+      BEGIN
+        r := interno.vsi_guardar_rechazada(p_empresa_id, q, x, v_err);
+      EXCEPTION WHEN OTHERS THEN
+        r := NULL;
+      END;
+      IF r IS NULL THEN
+        r := jsonb_build_object('id_operacion', x->'id_operacion', 'estado', 'rechazada',
+                                'error', v_err, 'clave', substring(v_err FROM '^([A-Z][A-Z0-9_]+):'));
+      END IF;
     END;
     v_res := v_res || r;
   END LOOP;
@@ -1774,6 +1915,7 @@ LANGUAGE plpgsql SECURITY DEFINER SET search_path = '' AS $$
 DECLARE
   z      public.venta_sin_internet;
   r      jsonb;
+  v_mi   boolean;
   v_datos jsonb := coalesce(p_datos, '{}');
 BEGIN
   SELECT * INTO z FROM public.venta_sin_internet x WHERE x.id = p_id;
@@ -1818,7 +1960,12 @@ BEGIN
       RAISE EXCEPTION 'VENTA_SIN_INTERNET_INVALIDA: el número % no es válido para registrarla; anúlela y regístrela como una venta normal.',
         coalesce(z.numero_documento, '?');
     END IF;
-    r := interno.vsi_revisar(z, 'resolver', coalesce((v_datos->>'a_mi_turno')::boolean, false));
+    -- Revisión 0.20.0 (4, decisión): si el turno de esos números sigue abierto, el efectivo entra ahí (está en esa caja);
+    -- si ya se cerró, entra al turno de quien resuelve (debe ponerlo en su caja). Se puede pedir lo uno o lo otro.
+    v_mi := coalesce((v_datos->>'a_mi_turno')::boolean,
+                     NOT EXISTS (SELECT 1 FROM public.numero_bloque nb JOIN public.turno_caja t ON t.id = nb.turno_id
+                                  WHERE nb.id = z.bloque_id AND t.estado = 'abierto'));
+    r := interno.vsi_revisar(z, 'resolver', v_mi);
     IF r->>'problema' IS NOT NULL THEN
       RAISE EXCEPTION 'VENTA_SIN_INTERNET_INVALIDA: todavía no se puede registrar: %', r->>'texto';
     END IF;
@@ -1830,7 +1977,7 @@ BEGIN
   END IF;
   PERFORM set_config('app.motivo', '', true);
   RETURN jsonb_build_object('venta_sin_internet_id', z.id, 'estado', z.estado, 'venta_id', z.venta_id,
-    'numero_documento', z.numero_documento, 'ya_estaba', false);
+    'numero_documento', z.numero_documento, 'ya_estaba', false, 'a_mi_turno', coalesce(v_mi, false));
 END $$;
 
 -- conciliar_bloque(empresa, bloque, motivo, id_operacion)   equipos.administrar (G3)
@@ -2156,6 +2303,7 @@ DECLARE
   v_si    uuid;
   v_num   bigint;
   v_de    text;
+  v_cajero uuid;
   v_datos jsonb := coalesce(p_datos, '{}');
 BEGIN
   SELECT * INTO pg FROM public.venta_pago WHERE id = p_venta_pago_id;
@@ -2200,6 +2348,9 @@ BEGIN
   PERFORM interno.exigir_periodo_abierto(v.empresa_id, v_fecha);
   v_cta := (SELECT c.codigo FROM public.cuenta_dinero d JOIN public.cuenta c ON c.id = d.cuenta_id WHERE d.id = pg.cuenta_dinero_id);
   v_de := CASE WHEN v.cliente_id IS NOT NULL THEN 'cliente' ELSE 'cajero' END;
+  -- Revisión 0.20.0 (13): el cajero que aceptó la transferencia: en una venta sin internet, quien la hizo (aunque otro la
+  -- haya resuelto después); si no, quien registró la venta.
+  v_cajero := coalesce((SELECT z.usuario_id FROM public.venta_sin_internet z WHERE z.venta_id = v.id LIMIT 1), v.creado_por);
   PERFORM set_config('app.motivo', trim(p_motivo), true);
   IF v_de = 'cliente' THEN
     v_num := interno.siguiente_numero(v.empresa_id, 'cxc_saldo_inicial');
@@ -2217,14 +2368,14 @@ BEGIN
   ELSE
     v_asto := interno.asiento_sistema(v.empresa_id, interno.sucursal_activa(v.sucursal_id), v_fecha,
       'Transferencia que no llegó: venta ' || v.numero_documento || ' (ref. ' || coalesce(pg.referencia, 's/r') || '); la debe el cajero '
-        || coalesce(public.nombre_usuario(v.empresa_id, v.creado_por), ''),
+        || coalesce(public.nombre_usuario(v.empresa_id, v_cajero), ''),
       'transferencia_no_llego', p_id_operacion,
       jsonb_build_array(jsonb_build_object('uso', 'cxc_empleados', 'debe', pg.monto_centavos, 'descripcion', 'Transferencia que no llegó (venta a Consumidor final)'),
                         jsonb_build_object('cuenta', v_cta, 'haber', pg.monto_centavos, 'descripcion', 'Transferencia que no llegó')));
   END IF;
   UPDATE public.venta_pago SET estado_transferencia = 'no_llego', no_llego_en = now(), no_llego_por = auth.uid(),
          motivo_no_llego = trim(p_motivo), fecha_no_llego = v_fecha, deuda_de = v_de,
-         deudor_id = CASE WHEN v_de = 'cliente' THEN v.cliente_id ELSE v.creado_por END,
+         deudor_id = CASE WHEN v_de = 'cliente' THEN v.cliente_id ELSE v_cajero END,
          asiento_no_llego_id = v_asto, cxc_saldo_inicial_id = v_si, no_llego_id_operacion = p_id_operacion
    WHERE id = pg.id RETURNING * INTO pg;
   PERFORM interno.rastrear_dinero(v_asto, 'transferencia_no_llego', 'venta', v.id, pg.referencia, NULL);
@@ -2246,7 +2397,8 @@ REVOKE EXECUTE ON FUNCTION
   interno.vsi_registrar(public.venta_sin_internet, jsonb, jsonb), interno.vsi_revisar(public.venta_sin_internet, text, boolean),
   interno.tamano_bloque(uuid, uuid), interno.vsi_subir_una(uuid, public.equipo, jsonb, text),
   interno.configurar_empresa_055(uuid, jsonb, text), interno.puede_ver_alerta(uuid, text), interno.alertas_de(uuid, text),
-  interno.avisos_referencia(uuid, jsonb, uuid), interno.anulacion_sin_no_llego()
+  interno.avisos_referencia(uuid, jsonb, uuid), interno.anulacion_sin_no_llego(),
+  interno.cerrar_bloque_hasta(public.numero_bloque, bigint, uuid), interno.vsi_guardar_rechazada(uuid, public.equipo, jsonb, text)
 FROM PUBLIC, anon, authenticated, service_role;
 REVOKE EXECUTE ON FUNCTION
   public.registrar_equipo(uuid, jsonb, uuid), public.desactivar_equipo(uuid, uuid, text),
