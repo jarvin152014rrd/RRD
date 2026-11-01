@@ -86,7 +86,7 @@ export async function mostrar(vista, ctx) {
 
   // ---------------- 2. Ventas de otros usuarios (M2) ----------------
   async function pintarAjenas(zona) {
-    const ajenas = (await si.pendientes(E)).filter((x) => x.usuario_id !== perfil.usuario.id);
+    const ajenas = (await si.porSubirOConProblema(E)).filter((x) => x.usuario_id !== perfil.usuario.id);
     const zonaError = h('div', { 'aria-live': 'assertive' });
     const porUsuario = new Map();
     for (const x of ajenas) { const l = porUsuario.get(x.usuario_id) || []; l.push(x); porUsuario.set(x.usuario_id, l); }

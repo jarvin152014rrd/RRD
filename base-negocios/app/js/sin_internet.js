@@ -152,23 +152,34 @@ export async function preparar(perfil, { nombre = null, cajaId = null, reservar 
   if (reservar) {
     // Revisión 0.20.0 (8): para renovar los números, primero se sube lo guardado y se dice al servidor hasta dónde llegó
     // cada bloque (él revisa que no falte nada y entrega uno nuevo que empieza ahí cuando quedan pocos).
-    let siguientes = null;
-    try {
-      const sub = await subir(empresa);
-      if (!sub.sin_conexion && !(await pendientes(empresa)).length) {
+    try { await subir(empresa); } catch { /* sin subir no se renueva: se reserva como antes */ }
+    const quedanTodas = await porSubirOConProblema(empresa);
+    if (quedanTodas.some((x) => x.usuario_id !== usuario)) {
+      avisos.push('Hay ventas de otro usuario guardadas en este equipo sin subir: que entre ese usuario (o el dueño, en Ajustes > Sin internet) para subirlas; mientras tanto no se renuevan los números.');
+    }
+    // (2a vuelta, A) Mientras se pide la renovación NO se vende con esos números (mismo candado que guardarVenta), y queda
+    // anotado "renovando": si la respuesta se pierde, el equipo no usa esos números hasta confirmar con internet.
+    await conCandadoNumeros(empresa, async () => {
+      let siguientes = null;
+      if (!quedanTodas.length) {
         siguientes = {};
         for (const b of await bloquesLocales(empresa)) if (b.estado === 'activo') siguientes[b.bloque_id] = Number(b.siguiente);
       }
-    } catch { /* sin subir no se renueva: se reserva como antes */ }
-    try {
-      const r = await api.escribir('reservar_bloque_numeros', { p_empresa_id: empresa, p_equipo_id: eq.equipo_id,
-        p_datos: { ...(cajaId ? { caja_id: cajaId } : {}), ...(siguientes && Object.keys(siguientes).length ? { siguientes } : {}) } });
-      avisos = r.avisos || [];
-      await guardarBloques(empresa, r.bloques || [], { completa: true });
-    } catch (e) {
-      if (e.clave !== 'FALTAN_VENTAS_POR_SUBIR') throw e;
-      avisos = ['Hay ventas de este equipo sin subir: cuando suban se pueden renovar los números.'];
-    }
+      const usar = siguientes && Object.keys(siguientes).length ? siguientes : null;
+      if (usar) await poner(be, 'datos', { siguientes: usar, en: new Date().toISOString() }, 'renovando');
+      try {
+        const r = await api.escribir('reservar_bloque_numeros', { p_empresa_id: empresa, p_equipo_id: eq.equipo_id,
+          p_datos: { ...(cajaId ? { caja_id: cajaId } : {}), ...(usar ? { siguientes: usar } : {}) } });
+        avisos.push(...(r.avisos || []));
+        await guardarBloques(empresa, r.bloques || [], { completa: true });
+        await borrarDe(be, 'datos', 'renovando');
+      } catch (e) {
+        // Sin respuesta (red): no se sabe si el servidor renovó; queda "renovando" hasta la próxima preparación.
+        if (!e.sinConexion && e.http !== 0) await borrarDe(be, 'datos', 'renovando');
+        if (e.clave !== 'FALTAN_VENTAS_POR_SUBIR') throw e;
+        avisos.push('Hay ventas de este equipo sin subir: cuando suban se pueden renovar los números.');
+      }
+    });
   }
   const anterior = await catalogoLocal(empresa, usuario);
   const t0 = Date.now();
@@ -185,7 +196,11 @@ export async function preparar(perfil, { nombre = null, cajaId = null, reservar 
   // G1: el perfil sin internet (lo necesario para abrir la app sin conexión).
   await poner(bu, 'datos', { perfil, sin_internet: p.perfil, guardado_en: new Date().toISOString() }, 'perfil');
   // La lista del servidor es la de TODOS los bloques activos de este equipo: los que ya no vienen dejan de usarse aquí.
-  await guardarBloques(empresa, p.bloques || [], { completa: true });
+  // Con eso también se sabe cómo terminó una renovación que había quedado sin respuesta.
+  await conCandadoNumeros(empresa, async () => {
+    await guardarBloques(empresa, p.bloques || [], { completa: true });
+    await borrarDe(be, 'datos', 'renovando');
+  });
   try { localStorage.setItem(LLAVE_ULTIMO, JSON.stringify({ empresa_id: empresa, usuario_id: usuario })); } catch { /* nada */ }
   avisar();
   return { equipo: eq, catalogo: cat, soporte: sop, avisos };
@@ -194,6 +209,20 @@ export async function preparar(perfil, { nombre = null, cajaId = null, reservar 
 function nombreSugerido() {
   const movil = /Android|iPhone|iPad|Mobile/i.test(navigator.userAgent);
   return `${movil ? 'Celular' : 'Computadora'} ${new Date().toISOString().slice(0, 10)}`;
+}
+
+// (2a vuelta, A) Candado de los números del equipo: renovar y guardar una venta nunca van a la vez (también entre pestañas).
+async function conCandadoNumeros(empresa, fn) {
+  if (navigator.locks && navigator.locks.request) return navigator.locks.request(`negocio-numeros-${empresa}`, fn);
+  return fn();
+}
+async function borrarDe(db, almacen, clave) {
+  const tx = db.transaction(almacen, 'readwrite');
+  tx.objectStore(almacen).delete(clave);
+  await new Promise((ok) => { tx.oncomplete = ok; tx.onerror = ok; });
+}
+async function renovando(empresa) {
+  try { return (await leerDe(await baseEquipo(empresa), 'datos', 'renovando')) || null; } catch { return null; }
 }
 
 // Guarda los bloques del servidor sin bajar nunca el contador local (el equipo puede ir adelante: ventas sin subir).
@@ -232,11 +261,15 @@ export async function estadoVenta(perfil, tipo = null) {
   if (!b) return { puede: false, razon: 'Este equipo no tiene números reservados para esta caja.', cat };
   if (b.siguiente > b.hasta) return { puede: false, razon: 'Se acabaron los números reservados en este equipo. Conéctese para reservar más.', cat };
   if (caiVencido(b, cat)) return { puede: false, razon: `El CAI de estas facturas venció el ${fechaCorta(b.cai.fecha_limite_emision)}. Conéctese y use el CAI nuevo.`, cat };
+  const ren = await renovando(empresa);
+  if (ren && ren.siguientes && ren.siguientes[b.bloque_id] !== undefined) {
+    return { puede: false, razon: 'Se estaban renovando los números de este equipo. Conéctese un momento para confirmarlos.', cat };
+  }
   return { puede: true, cat, bloque: b, quedan: b.hasta - b.siguiente + 1 };
 }
 
 // Revisión 0.20.0 (2): una factura no sale con el CAI vencido (la fecha de HOY en el negocio, con la hora corregida).
-function caiVencido(b, cat) {
+export function caiVencido(b, cat) {
   return Boolean(b && b.cai && b.cai.fecha_limite_emision)
     && fechaLocal(horaCorregida(cat), cat.reglas.zona_horaria) > b.cai.fecha_limite_emision;
 }
@@ -274,8 +307,12 @@ export function calcular(cat, { lineas, cliente_id }) {
 // ---------------------------------------------------------------- Guardar una venta (G6)
 // datos: { usuario: {id, nombre}, calculo (de calcular o de la previa del servidor), cliente_id, pagos, en_linea, tipo, nota }
 // -> la venta guardada (con su número). Lanza el error si no se pudo: entonces NO hay venta ni número usado.
-export async function guardarVenta(perfil, datos, { fallar = false } = {}) {
+export async function guardarVenta(perfil, datos, opciones = {}) {
+  return conCandadoNumeros(perfil.empresa.id, () => guardarVentaSinCandado(perfil, datos, opciones));
+}
+async function guardarVentaSinCandado(perfil, datos, { fallar = false } = {}) {
   const empresa = perfil.empresa.id;
+  const ren = await renovando(empresa);
   const cat = await catalogoLocal(empresa, perfil.usuario.id);
   const t = tipoDocumento(cat, datos.tipo);
   const db = await baseEquipo(empresa);
@@ -291,6 +328,11 @@ export async function guardarVenta(perfil, datos, { fallar = false } = {}) {
   const bloques = tx.objectStore('bloques');
   const lista = await prom(bloques.getAll());
   const b = lista.find((x) => x.estado === 'activo' && x.tipo === t && x.caja_id === cat.caja.caja_id);
+  if (b && ren && ren.siguientes && ren.siguientes[b.bloque_id] !== undefined) {
+    tx.abort();
+    await resultado.catch(() => {});
+    throw new Error('Se estaban renovando los números de este equipo. Conéctese un momento para confirmarlos.');
+  }
   if (!b || b.siguiente > b.hasta || caiVencido(b, cat)) {
     tx.abort();
     await resultado.catch(() => {});
@@ -333,6 +375,10 @@ export async function cola(empresa) {
 }
 export async function pendientes(empresa, usuarioId = null) {
   return (await cola(empresa)).filter((x) => x.estado === 'en_equipo' && (!usuarioId || x.usuario_id === usuarioId));
+}
+// (2a vuelta, E) Lo que todavía no está en el servidor: por subir y rechazadas (respaldo, ventas ajenas y antes de devolver).
+export async function porSubirOConProblema(empresa, usuarioId = null) {
+  return (await cola(empresa)).filter((x) => (x.estado === 'en_equipo' || x.estado === 'rechazada') && (!usuarioId || x.usuario_id === usuarioId));
 }
 
 // Avisos para la barra: fn({ pendientes, subiendo: {hecho, total} | null, error })
@@ -426,7 +472,8 @@ export async function limpiarCola(empresa) {
   try {
     const db = await baseEquipo(empresa);
     const limite = Date.now() - DIAS_GUARDAR_SUBIDAS * 86400000;
-    const viejas = (await todos(db, 'cola')).filter((x) => x.estado === 'subida' && Date.parse(x.subida_en || x.creada_en) < limite);
+    const viejas = (await todos(db, 'cola')).filter((x) => (x.estado === 'subida' || x.estado === 'por_resolver')
+      && Date.parse(x.subida_en || x.creada_en) < limite);
     if (!viejas.length) return 0;
     const tx = db.transaction('cola', 'readwrite');
     for (const x of viejas) tx.objectStore('cola').delete(x.id_operacion);
@@ -457,7 +504,7 @@ export function detener() { clearTimeout(reloj); reloj = null; intento = 0; empr
 export async function devolverBloques(empresa, cajaId = null) {
   const r = await subir(empresa);
   if (r.sin_conexion) throw new api.ErrorServidor('No hay conexión: no se pueden subir las ventas guardadas.', { sinConexion: true });
-  const quedan = (await pendientes(empresa)).filter((x) => !cajaId || x.payload.caja_id === cajaId);
+  const quedan = (await porSubirOConProblema(empresa)).filter((x) => !cajaId || x.payload.caja_id === cajaId);
   if (quedan.length) {
     throw new api.ErrorServidor(`FALTAN_VENTAS_POR_SUBIR: quedan ${quedan.length} venta(s) en este equipo (de este u otro usuario); súbalas primero.`,
       { clave: 'FALTAN_VENTAS_POR_SUBIR' });
@@ -465,6 +512,11 @@ export async function devolverBloques(empresa, cajaId = null) {
   const eq = await equipoLocal(empresa);
   const db = await baseEquipo(empresa);
   const devueltos = [];
+  // (2a vuelta, A) Primero la lista del servidor: un bloque que el servidor ya renovó no se intenta devolver.
+  try {
+    const r = await api.rpc('bloques_del_equipo', { p_empresa_id: empresa, p_equipo_id: eq.equipo_id });
+    await conCandadoNumeros(empresa, async () => { await guardarBloques(empresa, r.bloques || [], { completa: true }); await borrarDe(db, 'datos', 'renovando'); });
+  } catch { /* se intenta con lo que hay */ }
   for (const b of await bloquesLocales(empresa)) {
     if (b.estado !== 'activo' || (cajaId && b.caja_id !== cajaId)) continue;
     await api.escribir('devolver_bloque', { p_empresa_id: empresa, p_equipo_id: eq.equipo_id, p_bloque_id: b.bloque_id, p_siguiente: b.siguiente });
@@ -492,7 +544,7 @@ export async function alSalir(empresa, usuario) {
 // Respaldo en archivo de las ventas por subir (para un equipo que se va a dañar o formatear).
 export async function respaldo(empresa) {
   const eq = await equipoLocal(empresa);
-  const lista = await pendientes(empresa);
+  const lista = await porSubirOConProblema(empresa);
   return { tipo: 'respaldo_ventas_sin_internet', version: 1, empresa_id: empresa, equipo: eq, creado_en: new Date().toISOString(),
     ventas: lista.map((x) => ({ id_operacion: x.id_operacion, usuario_id: x.usuario_id, usuario_nombre: x.usuario_nombre,
       numero_documento: x.numero_documento, total_centavos: x.total_centavos, payload: x.payload })) };

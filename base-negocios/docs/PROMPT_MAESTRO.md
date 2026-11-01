@@ -60,7 +60,7 @@ va cada lempira, control, operación legal (SAR, CAI, ISV, NIIF PYMES) y crecimi
   NIIF PYMES, nada se borra (contrapartidas con motivo), montos en centavos (bigint), zona
   America/Tegucigalpa, `id_operacion` por operación (no se duplica), bitácora encadenada a prueba
   de alteraciones, errores con clave (`CLAVE: mensaje`), filtros por sucursal, licencia y límites.
-  57 migraciones en `nucleo/sql/migraciones`, **160 pruebas** (`bash herramientas/probar.sh`,
+  57 migraciones en `nucleo/sql/migraciones`, **161 pruebas** (`bash herramientas/probar.sh`,
   también `--paquete`).
 - **App:** PWA en `app/` (HTML + JavaScript con módulos, sin compilador ni librerías nuevas,
   sin `innerHTML` con datos), íconos propios, funciona sin internet. Pruebas con Playwright
@@ -113,16 +113,16 @@ va cada lempira, control, operación legal (SAR, CAI, ISV, NIIF PYMES) y crecimi
 - Supabase de pruebas instalado en **0.15.0** con la "Tienda de Ropa Prueba" (dueño:
   jarvin152014@gmail.com). Registro abierto de usuarios **apagado**.
 - App publicada en Netlify: `https://dapper-tarsier-fbd098.netlify.app` (versión vieja).
-- **Falta pegar en orden** las actualizaciones 0.16.0, 0.17.0, 0.18.0, 0.19.0, 0.20.0 (después de corregirla) y 0.21.0, luego
+- **Falta pegar en orden** las actualizaciones 0.16.0, 0.17.0, 0.18.0, 0.19.0, 0.20.0 y 0.21.0, luego
   `verificar` (debe decir TODO BIEN | 0.21.0 | 57 | 57) y subir la app 0.15.0 a Netlify (incluye todo lo de la 0.14.0).
   Nada de 0.16 a 0.20 se ha probado todavía en un Supabase real.
 
 ## 7. Lo que está pendiente
 
 **Revisión**
-- El revisor YA revisó la **0.20.0 (vender sin internet)** y encontró 14 puntos (2 rompen el cierre de turno,
-  varios de dinero y seguridad): están en `docs/PENDIENTES.md`, "REVISIÓN DE 0.20.0". Corregirlos dentro de la
-  misma migración 056 (aún no entregada al dueño) ANTES de pegar la 0.20.0. Dos piden decisión del dueño (4 y 10).
+- La **0.20.0 (vender sin internet)** ya se revisó y se corrigieron sus 14 puntos dentro de la misma 056 (ver
+  `docs/PENDIENTES.md`, "REVISIÓN DE 0.20.0"; decisiones del dueño: efectivo al turno abierto o al de quien resuelve;
+  precio de la copia en el talonario por dueño o admin con motivo). Ya se puede pegar en orden.
 
 **Decisiones mías por confirmar**
 - Tope por turno sin internet: L 50,000.

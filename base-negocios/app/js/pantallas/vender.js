@@ -615,6 +615,8 @@ export async function armarCarrito(vista, ctx, { modo, alTerminar = null }) {
     if (!sinRed) {
       try { await si.subir(perfil.empresa.id); } catch { /* queda en la cola: sube sola */ }
       const ahora = (await si.cola(perfil.empresa.id)).find((x) => x.id_operacion === reg.id_operacion);
+      // (2a vuelta, F) si no subió ahora (ocupado o sin red), se reintenta enseguida: con internet debe llegar en minutos.
+      if (!ahora || ahora.estado === 'en_equipo') si.programarSubida(true);
       return ahora || reg;
     }
     si.programarSubida(true);

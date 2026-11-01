@@ -345,7 +345,9 @@ function programarRefresco() {
     try {
       if (!(await si.equipoLocal(p.empresa.id)) || !(await si.catalogoLocal(p.empresa.id, p.usuario.id))) return;
       const c = await si.cajaConBloque(p);
-      const pocos = !c || c.bloque.hasta - c.bloque.siguiente + 1 <= Math.max(5, (c.bloque.hasta - c.bloque.desde + 1) / 5);
+      // También si venció el CAI de esos números (revisión 0.20.0): el servidor renueva con el CAI nuevo.
+      const pocos = !c || c.bloque.hasta - c.bloque.siguiente + 1 <= Math.max(5, (c.bloque.hasta - c.bloque.desde + 1) / 5)
+        || si.caiVencido(c.bloque, c.cat);
       await si.preparar(p, { reservar: pocos });
     } catch { /* se intenta en la próxima vuelta */ }
   }, 15 * 60 * 1000);

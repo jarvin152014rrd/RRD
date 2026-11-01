@@ -21,6 +21,13 @@ en 0.20.0). Para quien ya tiene 0.20.0 en Supabase: `dist/actualizar_supabase_0.
 
 ## 0.20.0 (2026-10-29) — Vender sin internet (etapa 1), transferencias por confirmar y talonario de emergencia
 
+**Revisión antes de entregar (2026-11-01), dentro de la misma 056:** el revisor encontró 14 puntos y se corrigieron
+(ver `docs/PENDIENTES.md`, "REVISIÓN DE 0.20.0"): renovar el bloque sin trabar el cierre, ventas con datos dañados que
+igual gastan su número, tope por turno, CAI vencido en el equipo, negativo solo sin internet, foto del catálogo
+entregada a ese equipo, "con internet" solo si llega pronto, quién devuelve los números, efectivo al turno correcto al
+resolver, precio de la copia en el talonario (dueño o admin, con motivo), "ya estaba" sin datos ajenos, RLS por
+sucursal, deuda de la transferencia al vendedor y limpieza del equipo. Prueba nueva 161; la 158 ampliada.
+
 Migración nueva 056 (las 001-055 no se tocaron). 158 pruebas (nuevas 152 a 158; la 150 queda fija en 0.19.0). Todas
 pasan también con `probar.sh --paquete`. Para quien ya tiene 0.19.0 en Supabase: `dist/actualizar_supabase_0.20.0.sql`
 (168 KB, una sola pegada; ver `docs/SUPABASE.md`, "Actualizar de 0.19.0 a 0.20.0"). Diseño: `docs/SIN_INTERNET.md`

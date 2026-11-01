@@ -6,37 +6,27 @@ migración 039 (núcleo 0.9.2), cada una con su prueba (falla contra la versión
 anterior y pasa con la nueva). Falta que el revisor las confirme antes de la
 etapa 3.
 
-## REVISIÓN DE 0.20.0 (2026-10-31): corregir ANTES de pegar la 0.20.0 en Supabase
+## REVISIÓN DE 0.20.0 (2026-10-31): HECHO (2026-11-01), dentro de la misma 056
 
-El revisor revisó la 056 y la cola de la app. Lo de base está bien (el servidor recalcula, no duplica, RLS y bitácora).
-Hay que corregir dentro de la MISMA 056 (todavía no se entregó). Orden sugerido:
-
-- [ROMPE] (8) Después de renovar el bloque no se puede vender ni cerrar el turno: reservar el siguiente bloque cuando
-  quedan pocos números (056:1328-1333); en el equipo, marcar no activos los bloques que el servidor ya no devuelve
-  (`sin_internet.js` `guardarBloques` 184-193; `bloqueDe`/`guardarVenta` 226, 263; `devolverBloques` 405-410); la
-  devolución automática también debe revisar huecos (`FALTAN_VENTAS_POR_SUBIR`).
-- [ROMPE] (9) Una venta "rechazada" en el equipo queda para siempre y bloquea el cierre: mostrarla con su razón y poder
-  subirla como "por resolver" (`sin_internet.js` 347, 397-401).
-- [DINERO] (1) El tope por turno se suma por bloque y usuario: sumar por el turno del bloque (056:1071-1075; app
-  `vender.js` 603-605).
-- [DINERO/SAR] (2) El equipo puede facturar con el CAI vencido (24 h de gracia del equipo): no facturar pasada la fecha
-  límite del CAI del bloque (`sin_internet.js` `estadoVenta`/`guardarVenta`).
-- [DINERO] (3) Una venta CON internet por la cola permite existencias negativas: marcar `app.sin_internet` solo si no
-  es `en_linea` (056:1000, 581-586).
-- [DINERO, decisión del dueño] (4) "Registrar como se hizo" mete el efectivo en el turno abierto HOY del cajero: elegir
-  "al turno de quien resuelve" (`a_mi_turno`) y avisar a qué turno entra (`vender_por_resolver.js` 66; 056:1035).
-- [SEGURIDAD] (5) El equipo puede mandar cualquier foto vieja del catálogo (precios viejos): exigir que se haya
-  entregado a ESE equipo, de su sucursal y dentro de las horas permitidas (056:1097).
-- [SEGURIDAD] (6) La marca `en_linea` la pone el equipo y salta topes y permisos: tratar como sin internet si
-  `hora_equipo` está lejos de `recibido_en` (056:1062-1088).
-- [SEGURIDAD/SAR] (7) Otro usuario puede devolver los números de un equipo y repetir números CAI: exigir que devuelva
-  quien reservó o el cajero del turno (o el dueño con motivo), o un token secreto del equipo (056:1434).
-- [DINERO, decisión del dueño] (10) Talonario de emergencia: la factura toma precios de hoy y el turno de hoy; permitir
-  el precio de la copia (con permiso y motivo) y elegir a qué turno o cuenta entra (`talonario.js` 157, 186).
-- Menores: (11) "ya estaba" contesta antes de revisar permisos (056:1580-1589); (12) falta la política `por_sucursal`
-  en `numero_emitido`, `catalogo_foto` y `catalogo_entrega` (056:329-335); (13) la deuda de transferencia "no llegó"
-  debe ir al vendedor (`vendedor_id`), no a quien resolvió (056:2227); (14) limpiar en el equipo las ventas ya subidas
-  después de N días.
+El revisor encontró 14 puntos; todos se corrigieron dentro de la 056 (todavía no entregada), con pruebas (161 nueva, 158
+ampliada) y las decisiones del dueño:
+- HECHO (8) renovar el bloque: el equipo sube lo guardado y manda su siguiente; el servidor revisa que no falte nada y
+  entrega uno nuevo que empieza ahí cuando quedan pocos (`interno.cerrar_bloque_hasta`); el equipo deja de usar los
+  bloques que el servidor ya no tiene activos.
+- HECHO (9) una venta con datos dañados gasta su número y queda "por resolver" (`interno.vsi_guardar_rechazada`); en el
+  equipo, después de 3 intentos queda "rechazada" (no traba la cola) y se puede reintentar.
+- HECHO (1) tope por turno; (2) no se factura con el CAI vencido; (3) negativo solo sin internet; (5) foto entregada a
+  ESE equipo, de su sucursal y vigente; (6) "con internet" solo si llega a los 15 minutos; (7) devuelve los números
+  quien los reservó, el cajero del turno o el dueño; (11) "ya estaba" no muestra ventas ajenas; (12) RLS por sucursal;
+  (13) la deuda de una transferencia que no llegó es de quien hizo la venta; (14) se borran del equipo las ventas
+  subidas hace más de 30 días.
+- DECIDIDO por el dueño y HECHO (4): al resolver, el efectivo entra al turno abierto de esos números o, si se cerró, al
+  turno de quien resuelve (la pantalla lo dice). Además, quien recibe el efectivo es el cajero de ese turno abierto
+  (aunque otro usuario haya hecho la venta en su caja).
+- DECIDIDO por el dueño y HECHO (10): en el talonario de emergencia el dueño o el administrador pueden escribir el
+  precio de la copia (por unidad, con ISV), con motivo en la bitácora; sin promociones ni mayorista encima. En
+  efectivo, el dinero entra al turno de quien pasa la factura (la pantalla lo dice).
+- FALTA: que el revisor revise las correcciones (segunda vuelta).
 
 ## Vender sin internet, etapa 1 (HECHO en 0.20.0, migración 056, pruebas 152-158; app 0.14.0)
 
@@ -54,7 +44,7 @@ Diseño y diferencias: `docs/SIN_INTERNET.md` (punto 17). Guía: `docs/SIN_INTER
   normal); hoja imprimible de arqueo sin internet (M4); catálogo por partes (hoy entero, con "sin cambios" por versión).
 - FALTA (dueño): pegar `dist/actualizar_supabase_0.20.0.sql` en su Supabase (después de 0.19.0). **NO PROBADO en un
   Supabase real** (solo en el mini Supabase de la prueba 157).
-- HECHO: el revisor revisó 0.20.0 (ver arriba: REVISIÓN DE 0.20.0). FALTA corregir.
+- HECHO: el revisor revisó 0.20.0 (ver arriba: REVISIÓN DE 0.20.0). Corregido (2026-11-01).
 
 ## Decisiones del dueño 0.19.0 (HECHO en 0.19.0, migración 055, pruebas 147-150; app 0.13.0)
 

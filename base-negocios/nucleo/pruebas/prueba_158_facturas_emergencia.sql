@@ -146,11 +146,26 @@ BEGIN
   PERFORM pruebas.afirmar((SELECT precio_unitario_centavos FROM public.venta_linea WHERE venta_id = (r->>'venta_id')::uuid) = 1400
     AND (SELECT precio_venta_centavos FROM public.producto WHERE id = pruebas.id('P1')) = 1500, 'la venta con L 14.00; el producto sigue en L 15.00');
   PERFORM pruebas.afirmar(EXISTS (SELECT 1 FROM public.bitacora b WHERE b.empresa_id = e AND b.motivo LIKE 'Precio de la copia en papel%'), 'el motivo queda en la bitácora');
+  -- (2a vuelta) Un producto con precio SIN ISV incluido: 3 a L 10.00 en la copia dan L 30.00 exactos; y el mismo producto
+  -- con dos precios distintos no se acepta.
+  PERFORM pruebas.como('dueno_a');
+  PERFORM public.editar_producto(e, pruebas.id('P1'), '{"precio_incluye_isv": false}', 'Prueba: precio sin ISV');
+  r := public.registrar_factura_talonario(e, jsonb_build_object('talonario_id', t1, 'numero', 9, 'fecha', hoy, 'caja_id', pruebas.id('CAJA001'),
+      'motivo_precio', 'Así dice la copia del cliente',
+      'lineas', jsonb_build_array(jsonb_build_object('producto_id', pruebas.id('P1'), 'cantidad', 3, 'precio_copia_centavos', 1000)),
+      'pagos', '[{"forma":"transferencia","referencia":"TRF-COPIA2"}]'::jsonb), gen_random_uuid());
+  PERFORM pruebas.afirmar((r->>'total_centavos')::bigint = 3000, 'sin ISV incluido, el total es el de la copia: ' || r::text);
+  PERFORM pruebas.debe_fallar(format('SELECT public.registrar_factura_talonario(%L, %L, gen_random_uuid())', e,
+    jsonb_build_object('talonario_id', t1, 'numero', 10, 'fecha', hoy, 'caja_id', pruebas.id('CAJA001'), 'motivo_precio', 'Así dice la copia',
+      'lineas', jsonb_build_array(jsonb_build_object('producto_id', pruebas.id('P1'), 'cantidad', 1, 'precio_copia_centavos', 1000),
+                                  jsonb_build_object('producto_id', pruebas.id('P1'), 'cantidad', 1, 'precio_copia_centavos', 1200)),
+      'pagos', '[{"forma":"transferencia","referencia":"TRF-COPIA3"}]'::jsonb)), 'dos precios distintos', 'mismo producto con dos precios');
+  PERFORM pruebas.como('superusuario');
 
   -- 7) Libros y bitácora.
   PERFORM pruebas.como('superusuario');
   PERFORM pruebas.afirmar(NOT EXISTS (SELECT 1 FROM public.asiento_linea x JOIN public.asiento s ON s.id = x.asiento_id WHERE s.empresa_id = e
                                       GROUP BY x.asiento_id HAVING sum(x.debe_centavos) <> sum(x.haber_centavos)), 'cada asiento cuadra');
-  PERFORM pruebas.afirmar((SELECT count(*) FROM public.talonario_numero WHERE empresa_id = e) = 4, 'solo el 5, el 7 y el 8 (y el 1 del viejo) quedaron');
+  PERFORM pruebas.afirmar((SELECT count(*) FROM public.talonario_numero WHERE empresa_id = e) = 5, 'solo el 5, el 7, el 8 y el 9 (y el 1 del viejo) quedaron');
   PERFORM pruebas.afirmar((SELECT count(*) FROM public.verificar_bitacora(e)) = 0, 'bitácora íntegra');
 END $$;

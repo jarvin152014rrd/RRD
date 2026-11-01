@@ -161,8 +161,7 @@ Queda la carpeta `dist/app-<cliente>/`. Si por error pega la llave secreta, la h
 
 ## Actualizar de 0.20.0 a 0.21.0 (si YA lo tenía instalado) — ¿Qué comprar? y capital muerto
 
-> **Todavía no.** Primero hay que corregir lo que encontró el revisor en la 0.20.0 (ver `docs/PENDIENTES.md`). Cuando
-> esté corregida, se pega la 0.20.0 y después esta.
+Primero debe tener la 0.20.0 (pegue antes `actualizar_supabase_0.20.0.sql`).
 
 Solo se pega **un archivo** (pequeño). No cambia nada guardado: agrega dos reportes en Inventario.
 

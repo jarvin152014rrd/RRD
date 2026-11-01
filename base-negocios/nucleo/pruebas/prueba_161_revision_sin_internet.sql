@@ -4,6 +4,8 @@
 -- el dueño; el bloque se renueva cuando quedan pocos (sin huecos) y el nuevo empieza donde quedó el equipo; una venta con
 -- datos dañados gasta su número y queda "por resolver"; "ya estaba" no muestra ventas de otro usuario; resolver con el
 -- turno abierto mete el efectivo en ese turno y la deuda de una transferencia que no llegó es de quien hizo la venta.
+-- Segunda vuelta: efectivo al turno de quien resuelve (sin turno: lo dice; con turno en otra caja: entra ahí), solo quien
+-- puede renueva el bloque, y con el CAI vencido se renueva con el CAI nuevo aunque queden números.
 CREATE FUNCTION pruebas.vsi(p_bloque jsonb, p_numero bigint, p_foto integer, p_lineas jsonb, p_total bigint,
                             p_pagos jsonb DEFAULT NULL, p_hora timestamptz DEFAULT now(), p_usuario text DEFAULT 'cajero_a',
                             p_en_linea boolean DEFAULT false, p_id uuid DEFAULT gen_random_uuid()) RETURNS jsonb
@@ -150,6 +152,48 @@ BEGIN
   vp := (SELECT id FROM public.venta_pago WHERE venta_id = (r->>'venta_id')::uuid AND forma = 'transferencia');
   r := public.marcar_transferencia_no_llego(vp, 'No apareció en el banco', gen_random_uuid());
   PERFORM pruebas.afirmar(r->>'deuda_de' = 'cajero' AND (r->>'deudor_id')::uuid = pruebas.usuario('cajero_a'), 'la debe el cajero, no el dueño: ' || r::text);
+
+  -- 11) (2a vuelta) Efectivo "al turno de quien resuelve": sin turno abierto, lo dice claro; con su turno en OTRA caja, entra ahí.
+  PERFORM pruebas.como('cajero_a');
+  b2 := public.reservar_bloque_numeros(e, eq, gen_random_uuid())->'bloques'->0;
+  r := public.subir_ventas_sin_internet(e, eq, jsonb_build_array(
+    pruebas.vsi(b2, (b2->>'siguiente')::bigint, v2, jsonb_build_array(pruebas.linea('P1', 1, 1600, 1600)), 1600)));
+  PERFORM pruebas.afirmar(r->'resultados'->0->>'problema' = 'foto', 'venta en efectivo por resolver: ' || r::text);
+  PERFORM pruebas.como('superusuario');
+  vsi5 := (SELECT id FROM public.venta_sin_internet WHERE id_operacion = (r->'resultados'->0->>'id_operacion')::uuid);
+  PERFORM pruebas.como('dueno_a');
+  PERFORM pruebas.debe_fallar(format('SELECT public.resolver_venta_sin_internet(%L, ''registrar'', ''Precio de antes'', gen_random_uuid(), ''{"a_mi_turno": true}'')', vsi5),
+    'SIN_TURNO_ABIERTO', 'al turno de quien resuelve sin turno abierto');
+  PERFORM pruebas.guardar('CAJA002', (public.crear_caja(e, (SELECT id FROM public.sucursal WHERE empresa_id = e AND codigo = '001'), 'Caja 2', '002')->>'caja_id')::uuid);
+  PERFORM pruebas.guardar('CAJA2', (public.crear_cuenta_dinero(e, jsonb_build_object('tipo', 'efectivo_caja', 'nombre', 'Caja 2',
+    'caja_id', pruebas.id('CAJA002')))->>'cuenta_dinero_id')::uuid);
+  PERFORM public.abrir_turno(e, pruebas.id('CAJA002'), 0, gen_random_uuid());
+  r := public.resolver_venta_sin_internet(vsi5, 'registrar', 'Precio de antes', gen_random_uuid(), '{"a_mi_turno": true}');
+  PERFORM pruebas.afirmar(r->>'estado' = 'resuelta' AND (r->>'a_mi_turno')::boolean, 'resuelta a su turno: ' || r::text);
+  PERFORM pruebas.afirmar((SELECT p.cuenta_dinero_id FROM public.venta_pago p WHERE p.venta_id = (r->>'venta_id')::uuid) = pruebas.id('CAJA2'),
+    'el efectivo entró a la caja de quien resolvió (Caja 2)');
+
+  -- 12) (2a vuelta) Renovar: el admin (ni reservó ni es el cajero) no puede cerrar el bloque del cajero (con turnos no
+  --     obligatorios; con turnos obligatorios ni siquiera llega: SIN_TURNO_ABIERTO).
+  PERFORM public.configurar_empresa(e, '{"turnos_obligatorios": false}', 'Prueba: turnos no obligatorios');
+  PERFORM pruebas.como('admin_a');
+  PERFORM pruebas.debe_fallar(format('SELECT public.reservar_bloque_numeros(%L, %L, gen_random_uuid(), %L)', e, eq,
+    jsonb_build_object('caja_id', pruebas.id('CAJA001'), 'siguientes', jsonb_build_object(b2->>'bloque_id', (b2->>'hasta')::bigint + 1))),
+    'SIN_PERMISO', 'otro usuario renueva el bloque');
+
+  -- 13) (2a vuelta) CAI vencido: aunque queden muchos números, se renueva con el CAI nuevo.
+  PERFORM pruebas.como('superusuario');
+  PERFORM set_config('session_replication_role', 'replica', true);
+  UPDATE public.cai_rango SET fecha_limite_emision = public.hoy_local(e) - 1 WHERE id = pruebas.id('CAI1');
+  PERFORM set_config('session_replication_role', 'origin', true);
+  PERFORM pruebas.como('dueno_a');
+  PERFORM pruebas.guardar('CAI2', (public.registrar_cai(e, jsonb_build_object('caja_id', pruebas.id('CAJA001'), 'tipo_documento', 'factura',
+      'cai', 'A1B2C3-D4E5F6-A7B8C9-D0E1F2-A3B4C5-D7', 'rango_desde', '001-001-01-00002001', 'rango_hasta', '001-001-01-00003000',
+      'fecha_limite_emision', to_char(public.hoy_local(e) + 180, 'YYYY-MM-DD')))->>'cai_rango_id')::uuid);
+  PERFORM pruebas.como('cajero_a');
+  x := public.reservar_bloque_numeros(e, eq, gen_random_uuid(),
+    jsonb_build_object('siguientes', jsonb_build_object(b2->>'bloque_id', (b2->>'siguiente')::bigint + 1)))->'bloques'->0;
+  PERFORM pruebas.afirmar(x->>'bloque_id' <> b2->>'bloque_id' AND (x->>'desde')::bigint = 2001 AND x->'cai'->>'cai' LIKE '%D7', 'renovado con el CAI nuevo: ' || x::text);
 
   -- Todo cuadra.
   PERFORM pruebas.como('superusuario');

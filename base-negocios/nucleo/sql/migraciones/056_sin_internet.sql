@@ -912,6 +912,7 @@ DECLARE
   d       public.cuenta_dinero;
   v_rec   bigint;
   v_mon   bigint;
+  v_caja_mi uuid;
 BEGIN
   SELECT * INTO e FROM public.empresa x WHERE x.id = p_vsi.empresa_id;
   SELECT x.* INTO v_caja FROM public.caja x JOIN public.sucursal s ON s.id = x.sucursal_id
@@ -990,7 +991,17 @@ BEGIN
     v_mon := interno.json_centavos(pj->'monto_centavos', 'monto_centavos');
     v_rec := NULL;
     IF pj->>'forma' = 'efectivo' THEN
-      d := interno.cuenta_efectivo_cobro(e.id, v_caja.id);
+      -- Revisión 0.20.0 (2a vuelta, C): "al turno de quien resuelve" = el turno abierto de quien resuelve, en SU caja
+      -- (puede ser otra caja). Sin turno abierto: que lo abra (o que resuelva el cajero de esa caja).
+      IF coalesce(current_setting('app.vsi_a_mi_turno', true), '') = '1' THEN
+        SELECT x.caja_id INTO v_caja_mi FROM public.turno_caja x WHERE x.empresa_id = e.id AND x.cajero_id = auth.uid() AND x.estado = 'abierto';
+        IF v_caja_mi IS NULL THEN
+          RAISE EXCEPTION 'SIN_TURNO_ABIERTO: abra su turno de caja para recibir el efectivo de esta venta (entra a su turno).';
+        END IF;
+        d := interno.cuenta_efectivo_cobro(e.id, v_caja_mi);
+      ELSE
+        d := interno.cuenta_efectivo_cobro(e.id, v_caja.id);
+      END IF;
       v_rec := greatest(CASE WHEN coalesce(pj->'recibido_centavos', 'null'::jsonb) <> 'null'::jsonb
                               THEN interno.json_centavos(pj->'recibido_centavos', 'recibido_centavos') END, v_mon);
     ELSE
@@ -1182,7 +1193,9 @@ BEGIN
     END IF;
     IF v_prob IS NULL THEN
       BEGIN
+        PERFORM set_config('app.vsi_a_mi_turno', CASE WHEN p_a_mi_turno THEN '1' ELSE '' END, true);
         v := interno.vsi_registrar(p_vsi, v_calc, v_fv);
+        PERFORM set_config('app.vsi_a_mi_turno', '', true);
         v_neg := EXISTS (SELECT 1 FROM public.venta_linea vl JOIN public.inventario_saldo s
                            ON s.bodega_id = v.bodega_id AND s.producto_id = vl.producto_id
                           WHERE vl.venta_id = v.id AND NOT vl.es_servicio AND s.cantidad < 0);
@@ -1396,7 +1409,15 @@ BEGIN
     IF ya.id IS NOT NULL THEN
       v_sig := coalesce(interno.json_entero(v_datos->'siguientes'->(ya.id::text), 'siguientes'),
                         CASE WHEN ya.siguiente > ya.hasta THEN ya.hasta + 1 END);
-      IF v_sig IS NOT NULL AND ya.hasta - v_sig + 1 <= greatest(5, (ya.hasta - ya.desde + 1) / 5) THEN
+      -- (2a vuelta, B) también si el CAI de esos números ya venció (las facturas no pueden salir con él).
+      IF v_sig IS NOT NULL AND (ya.hasta - v_sig + 1 <= greatest(5, (ya.hasta - ya.desde + 1) / 5)
+          OR (ya.tipo = 'factura' AND (SELECT r0.fecha_limite_emision FROM public.cai_rango r0 WHERE r0.id = ya.cai_rango_id) < v_hoy)) THEN
+        -- (2a vuelta, G) la misma regla que devolver_bloque: quien reservó, el cajero de ese turno o el dueño.
+        IF auth.uid() IS DISTINCT FROM ya.reservado_por
+           AND auth.uid() IS DISTINCT FROM (SELECT t0.cajero_id FROM public.turno_caja t0 WHERE t0.id = ya.turno_id)
+           AND NOT public.tiene_permiso('ventas.subir_ajenas', p_empresa_id) THEN
+          RAISE EXCEPTION 'SIN_PERMISO: los números los renueva quien los reservó, el cajero de ese turno o el dueño.';
+        END IF;
         PERFORM interno.cerrar_bloque_hasta(ya, v_sig);
         ya := NULL;
       END IF;
@@ -2742,10 +2763,14 @@ BEGIN
       IF pr IS NULL OR v_con IS NULL OR v_con <= 0 THEN
         RAISE EXCEPTION 'DATO_INVALIDO: el precio de la copia va por unidad, mayor que cero, y de un producto de la factura.';
       END IF;
-      v_pct := coalesce((v_fv->'impuestos'->(pr->>'tipo_impuesto')->>'porcentaje')::numeric, 0);
+      -- (2a vuelta, D) el precio de la copia ya trae el ISV: se guarda tal cual, "con ISV incluido" (si no, al volver a
+      -- calcular el ISV, el total no daría el de la copia). El mismo producto con dos precios distintos no se acepta.
+      IF EXISTS (SELECT 1 FROM jsonb_array_elements(v_lin) y2 WHERE y2->>'producto_id' = l->>'producto_id'
+                  AND y2 ? 'precio_copia_centavos' AND (y2->>'precio_copia_centavos')::numeric <> v_con) THEN
+        RAISE EXCEPTION 'DATO_INVALIDO: el mismo producto va con dos precios distintos; póngalo en una sola línea.';
+      END IF;
       v_fv := jsonb_set(v_fv, ARRAY['productos', l->>'producto_id'], pr
-        || jsonb_build_object('precio_venta_centavos', CASE WHEN coalesce((pr->>'precio_incluye_isv')::boolean, true) THEN v_con
-                                                            ELSE round(v_con * 100 / (100 + v_pct))::bigint END,
+        || jsonb_build_object('precio_venta_centavos', v_con, 'precio_incluye_isv', true,
                               'precio_mayorista_centavos', NULL, 'cantidad_mayorista', NULL, 'promos', '[]'::jsonb));
     END LOOP;
     v_lin := (SELECT jsonb_agg(y - 'precio_copia_centavos') FROM jsonb_array_elements(v_lin) y);
