@@ -8,7 +8,7 @@ import * as si from '../sin_internet.js';
 import { vistaComprobanteLocal } from '../comprobante.js';
 import { fechaLocal } from '../calculo_local.js';
 import { dinero, fechaHora } from '../formato.js';
-import { h, cajaError, titulo, filaIcono, chipEstado, chip, monto, estadoVacio, filtrosRapidos, tarjetaCifra } from '../ui.js';
+import { h, cajaError, titulo, filaIcono, chipEstado, chip, monto, estadoVacio, filtrosRapidos, tarjetaCifra, mensaje } from '../ui.js';
 import { hayEnMenu } from '../menu.js';
 import { vistaComprobante } from '../comprobante.js';
 import { prepararDevolucion } from './devoluciones.js';
@@ -90,6 +90,8 @@ function tarjetaEquipo(vista, locales, volverAPintar) {
   const tarjeta = h('section', { class: 'tarjeta', 'aria-labelledby': 't-equipo', id: 'ventas-equipo' },
     titulo('h2', 'subir', 'Guardadas en este equipo', { id: 't-equipo' }),
     pend ? h('p', { class: 'ayuda' }, `${pend} por subir: se suben solas cuando hay internet.`) : null,
+    locales.some((x) => x.estado === 'rechazada') ? mensaje('error', 'Hay ventas que el servidor no aceptó.',
+      'Vea la razón en cada una. Puede volver a intentar; si sigue igual, el dueño las sube desde Ajustes > Sin internet (respaldo).') : null,
     h('div', { class: 'lista-filas' }, locales.map((x) => filaIcono({
       icono: 'recibo', color: x.estado === 'subida' ? 'verde' : x.estado === 'en_equipo' ? 'neutro' : 'rojo',
       titulo: h('strong', {}, x.numero_documento),
@@ -100,7 +102,11 @@ function tarjetaEquipo(vista, locales, volverAPintar) {
         onclick: () => {
           const volver = h('button', { type: 'button', class: 'boton', onclick: () => volverAPintar() }, 'Volver');
           vista.replaceChildren(vistaComprobanteLocal(x, { extra: [volver] }));
-        } }, 'Comprobante')),
+        } }, 'Comprobante'),
+      // Revisión 0.20.0 (9): una rechazada (3 intentos) se puede volver a intentar.
+      x.estado === 'rechazada' ? h('button', { type: 'button', class: 'boton', dataset: { accion: 'reintentar' },
+        'aria-label': `Volver a subir ${x.numero_documento}`,
+        onclick: async () => { await si.reintentar(empresaId(), x.id_operacion); volverAPintar(); } }, 'Volver a intentar') : null),
       props: { class: 'venta-fila-icono', dataset: { local: x.id_operacion, estado: x.estado } },
     }))));
   return tarjeta;

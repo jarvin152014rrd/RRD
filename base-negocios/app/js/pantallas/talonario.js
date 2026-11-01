@@ -8,7 +8,7 @@
 //   - Lista: usados, anulados, libres y huecos (números saltados antes del último usado).
 import { rpc, escribir, nuevoId } from '../api.js';
 import { empresaId, puede } from '../sesion.js';
-import { dinero, fecha, aCantidad } from '../formato.js';
+import { dinero, fecha, aCantidad, aCentavos } from '../formato.js';
 import { productos, clientes, filtrar } from '../datos.js';
 import { h, aviso, cajaError, campo, titulo, chip, filaIcono, estadoVacio, pedirMotivo, errorSimple, mensaje } from '../ui.js';
 
@@ -125,6 +125,13 @@ export async function mostrar(vista, ctx) {
     const totales = h('div', { id: 'tal-total', 'aria-live': 'polite' });
     const zonaError = h('div', { 'aria-live': 'assertive' });
     const guardar = h('button', { type: 'submit', class: 'boton boton-principal boton-ancho', id: 'tal-guardar' }, 'Pasar la factura');
+    // Revisión 0.20.0 (10, decisión del dueño): el dueño o el administrador pueden escribir el precio que dice la copia
+    // (por unidad, con ISV), con motivo. El total lo calcula el servidor con ese precio.
+    const conPrecio = puede('talonario.administrar');
+    const motivoPrecio = h('input', { id: 'tal-motivo-precio', type: 'text', maxlength: 200, placeholder: 'Ej.: así dice la copia del cliente' });
+    const zonaMotivo = campo('Motivo del precio de la copia', motivoPrecio, 'Solo si escribió algún precio de la copia. Queda en la bitácora.');
+    zonaMotivo.hidden = true;
+    const hayPrecioCopia = () => lineas.some((l) => String(l.precio || '').trim() !== '');
 
     busca.addEventListener('input', () => {
       const q = busca.value.trim();
@@ -138,7 +145,10 @@ export async function mostrar(vista, ctx) {
       carrito.replaceChildren(...lineas.map((l, i) => {
         const c = h('input', { type: 'text', inputmode: 'decimal', value: l.cantidad, 'aria-label': `Cantidad de ${l.nombre}`, dataset: { cantidad: i } });
         c.addEventListener('change', () => { l.cantidad = c.value; calcular(); });
-        return h('div', { class: 'fila' }, h('span', {}, l.nombre), h('span', { class: 'campo' }, c,
+        const pc = conPrecio ? h('input', { type: 'text', inputmode: 'decimal', value: l.precio || '', placeholder: 'Precio de la copia (L)',
+          'aria-label': `Precio de la copia de ${l.nombre} (por unidad, con ISV)`, dataset: { precioCopia: i } }) : null;
+        if (pc) pc.addEventListener('change', () => { l.precio = pc.value; calcular(); });
+        return h('div', { class: 'fila' }, h('span', {}, l.nombre), h('span', { class: 'campo' }, c, pc,
           h('button', { type: 'button', class: 'boton', 'aria-label': `Quitar ${l.nombre}`, onclick: () => { lineas.splice(i, 1); pintar(); calcular(); } }, 'Quitar')));
       }));
     }
@@ -146,13 +156,20 @@ export async function mostrar(vista, ctx) {
       return lineas.map((l) => {
         const q = aCantidad(l.cantidad);
         if (q === null || q <= 0) throw errorSimple(`La cantidad de ${l.nombre} no es válida.`);
-        return { producto_id: l.producto_id, cantidad: q };
+        const pc = String(l.precio || '').trim();
+        if (pc && (aCentavos(pc) === null || aCentavos(pc) <= 0)) throw errorSimple(`El precio de la copia de ${l.nombre} no es válido.`, 'Escriba el precio por unidad, por ejemplo 150 o 150.50');
+        return { producto_id: l.producto_id, cantidad: q, ...(pc ? { precio_copia_centavos: aCentavos(pc) } : {}) };
       });
     }
     async function calcular() {
       previa = null;
       zonaError.replaceChildren();
+      zonaMotivo.hidden = !hayPrecioCopia();
       if (!lineas.length) { totales.replaceChildren(); return; }
+      if (hayPrecioCopia()) {
+        totales.replaceChildren(h('p', { class: 'ayuda' }, 'Con el precio de la copia, el total lo calcula el servidor al pasar la factura (debe ser el de la copia).'));
+        return;
+      }
       try {
         previa = await rpc('calcular_venta_previa', { p_empresa_id: E, p_datos: { lineas: lineasServidor(), ...(cli.value ? { cliente_id: cli.value } : {}) } });
         totales.replaceChildren(h('p', {}, 'ISV ', dinero(previa.impuesto_centavos), ' · Total ', h('strong', { dataset: { dato: 'total' } }, dinero(previa.total_centavos))),
@@ -164,8 +181,8 @@ export async function mostrar(vista, ctx) {
     const form = h('form', { class: 'formulario tarjeta', novalidate: true },
       h('h2', {}, 'Pasar una factura del talonario'),
       campo('Talonario', tal), campo('Número de la factura (últimos 8 dígitos)', num), campo('Fecha de la copia', fec),
-      campo('Cliente', cli), campo('Productos', busca), resultados, carrito, totales,
-      campo('Forma de pago', forma), campo('Referencia (transferencia o tarjeta)', ref),
+      campo('Cliente', cli), campo('Productos', busca), resultados, carrito, zonaMotivo, totales,
+      campo('Forma de pago', forma, 'En efectivo, el dinero entra a SU turno de caja: póngalo en su caja.'), campo('Referencia (transferencia o tarjeta)', ref),
       zonaError, guardar, h('button', { type: 'button', class: 'boton boton-ancho', onclick: () => recargar() }, 'Cancelar'));
     form.addEventListener('submit', async (ev) => {
       ev.preventDefault();
@@ -177,14 +194,18 @@ export async function mostrar(vista, ctx) {
         if (!fec.value) throw errorSimple('Escriba la fecha de la copia.');
         if (!lineas.length) throw errorSimple('Agregue los productos de la factura.');
         if (forma.value === 'credito' && !cli.value) throw errorSimple('Para el crédito elija el cliente.');
-        if (!previa) await calcular();
-        if (!previa) throw errorSimple('Revise los productos antes de seguir.');
-        const t = previa.total_centavos;
-        const pago = { forma: forma.value, monto_centavos: t, ...(forma.value === 'efectivo' ? { recibido_centavos: t } : {}),
+        const copia = hayPrecioCopia();
+        if (copia && motivoPrecio.value.trim().length < 5) throw errorSimple('Escriba el motivo del precio de la copia (mínimo 5 letras).');
+        if (!copia && !previa) await calcular();
+        if (!copia && !previa) throw errorSimple('Revise los productos antes de seguir.');
+        // Con el precio de la copia, el pago va sin monto: es el total que calcula el servidor.
+        const t = copia ? null : previa.total_centavos;
+        const pago = { forma: forma.value, ...(t !== null ? { monto_centavos: t } : {}), ...(forma.value === 'efectivo' && t !== null ? { recibido_centavos: t } : {}),
           ...(ref.value.trim() && forma.value !== 'efectivo' && forma.value !== 'credito' ? { referencia: ref.value.trim() } : {}) };
         guardar.disabled = true;
         const r = await rpc('registrar_factura_talonario', { p_empresa_id: E, p_id_operacion: id, p_datos: { talonario_id: tal.value, numero: n,
-          fecha: fec.value, lineas: lineasServidor(), pagos: [pago], ...(cli.value ? { cliente_id: cli.value } : {}) } });
+          fecha: fec.value, lineas: lineasServidor(), pagos: [pago], ...(cli.value ? { cliente_id: cli.value } : {}),
+          ...(copia ? { motivo_precio: motivoPrecio.value.trim() } : {}) } });
         aviso(`Factura ${r.numero_documento} pasada · ${dinero(r.total_centavos)}`, 'ok', 6000);
         recargar();
       } catch (err) {

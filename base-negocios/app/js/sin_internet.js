@@ -150,10 +150,25 @@ export async function preparar(perfil, { nombre = null, cajaId = null, reservar 
   }
   let avisos = [];
   if (reservar) {
-    const r = await api.escribir('reservar_bloque_numeros', { p_empresa_id: empresa, p_equipo_id: eq.equipo_id,
-      p_datos: cajaId ? { caja_id: cajaId } : {} });
-    avisos = r.avisos || [];
-    await guardarBloques(empresa, r.bloques || []);
+    // Revisión 0.20.0 (8): para renovar los números, primero se sube lo guardado y se dice al servidor hasta dónde llegó
+    // cada bloque (él revisa que no falte nada y entrega uno nuevo que empieza ahí cuando quedan pocos).
+    let siguientes = null;
+    try {
+      const sub = await subir(empresa);
+      if (!sub.sin_conexion && !(await pendientes(empresa)).length) {
+        siguientes = {};
+        for (const b of await bloquesLocales(empresa)) if (b.estado === 'activo') siguientes[b.bloque_id] = Number(b.siguiente);
+      }
+    } catch { /* sin subir no se renueva: se reserva como antes */ }
+    try {
+      const r = await api.escribir('reservar_bloque_numeros', { p_empresa_id: empresa, p_equipo_id: eq.equipo_id,
+        p_datos: { ...(cajaId ? { caja_id: cajaId } : {}), ...(siguientes && Object.keys(siguientes).length ? { siguientes } : {}) } });
+      avisos = r.avisos || [];
+      await guardarBloques(empresa, r.bloques || [], { completa: true });
+    } catch (e) {
+      if (e.clave !== 'FALTAN_VENTAS_POR_SUBIR') throw e;
+      avisos = ['Hay ventas de este equipo sin subir: cuando suban se pueden renovar los números.'];
+    }
   }
   const anterior = await catalogoLocal(empresa, usuario);
   const t0 = Date.now();
@@ -169,7 +184,8 @@ export async function preparar(perfil, { nombre = null, cajaId = null, reservar 
   await poner(bu, 'datos', cat, 'catalogo');
   // G1: el perfil sin internet (lo necesario para abrir la app sin conexión).
   await poner(bu, 'datos', { perfil, sin_internet: p.perfil, guardado_en: new Date().toISOString() }, 'perfil');
-  if (reservar || !(await bloquesLocales(empresa)).length) await guardarBloques(empresa, p.bloques || []);
+  // La lista del servidor es la de TODOS los bloques activos de este equipo: los que ya no vienen dejan de usarse aquí.
+  await guardarBloques(empresa, p.bloques || [], { completa: true });
   try { localStorage.setItem(LLAVE_ULTIMO, JSON.stringify({ empresa_id: empresa, usuario_id: usuario })); } catch { /* nada */ }
   avisar();
   return { equipo: eq, catalogo: cat, soporte: sop, avisos };
@@ -181,10 +197,16 @@ function nombreSugerido() {
 }
 
 // Guarda los bloques del servidor sin bajar nunca el contador local (el equipo puede ir adelante: ventas sin subir).
-async function guardarBloques(empresa, lista) {
+// completa: la lista es TODA la de bloques activos de este equipo (revisión 0.20.0, 8): los que ya no vienen (el servidor
+// los devolvió al renovar o pasaron a "por conciliar") quedan como no activos aquí y no se vuelven a usar.
+async function guardarBloques(empresa, lista, { completa = false } = {}) {
   const db = await baseEquipo(empresa);
   const tx = db.transaction('bloques', 'readwrite');
   const st = tx.objectStore('bloques');
+  const ids = new Set(lista.map((b) => b.bloque_id));
+  if (completa) {
+    for (const b of await prom(st.getAll())) if (b.estado === 'activo' && !ids.has(b.bloque_id)) st.put({ ...b, estado: 'devuelto' });
+  }
   for (const b of lista) {
     const ya = await prom(st.get(b.bloque_id));
     st.put({ ...b, siguiente: Math.max(Number(b.siguiente), ya ? Number(ya.siguiente) : 0), estado: 'activo' });
@@ -209,8 +231,16 @@ export async function estadoVenta(perfil, tipo = null) {
   const b = await bloqueDe(empresa, cat, tipo);
   if (!b) return { puede: false, razon: 'Este equipo no tiene números reservados para esta caja.', cat };
   if (b.siguiente > b.hasta) return { puede: false, razon: 'Se acabaron los números reservados en este equipo. Conéctese para reservar más.', cat };
+  if (caiVencido(b, cat)) return { puede: false, razon: `El CAI de estas facturas venció el ${fechaCorta(b.cai.fecha_limite_emision)}. Conéctese y use el CAI nuevo.`, cat };
   return { puede: true, cat, bloque: b, quedan: b.hasta - b.siguiente + 1 };
 }
+
+// Revisión 0.20.0 (2): una factura no sale con el CAI vencido (la fecha de HOY en el negocio, con la hora corregida).
+function caiVencido(b, cat) {
+  return Boolean(b && b.cai && b.cai.fecha_limite_emision)
+    && fechaLocal(horaCorregida(cat), cat.reglas.zona_horaria) > b.cai.fecha_limite_emision;
+}
+const fechaCorta = (iso) => { const [a, m, d] = String(iso).split('-'); return `${d}/${m}/${a}`; };
 
 // Tipo de documento de una venta sin internet según la regla de la empresa.
 export function tipoDocumento(cat, pedido = null) {
@@ -261,10 +291,12 @@ export async function guardarVenta(perfil, datos, { fallar = false } = {}) {
   const bloques = tx.objectStore('bloques');
   const lista = await prom(bloques.getAll());
   const b = lista.find((x) => x.estado === 'activo' && x.tipo === t && x.caja_id === cat.caja.caja_id);
-  if (!b || b.siguiente > b.hasta) {
+  if (!b || b.siguiente > b.hasta || caiVencido(b, cat)) {
     tx.abort();
     await resultado.catch(() => {});
-    throw new Error(!b ? 'Este equipo no tiene números reservados para esta caja.' : 'Se acabaron los números reservados en este equipo.');
+    throw new Error(!b ? 'Este equipo no tiene números reservados para esta caja.'
+      : b.siguiente > b.hasta ? 'Se acabaron los números reservados en este equipo.'
+        : `El CAI de estas facturas venció el ${fechaCorta(b.cai.fecha_limite_emision)}.`);
   }
   const numero = Number(b.siguiente);
   const numeroDocumento = `${b.prefijo}-${String(numero).padStart(8, '0')}`;
@@ -309,7 +341,7 @@ let ultimoEstado = { pendientes: 0, subiendo: null, error: null };
 export function escuchar(fn) { oyentes.add(fn); fn(ultimoEstado); return () => oyentes.delete(fn); }
 let empresaActiva = null;
 let usuarioActivo = null;
-export function activar(empresa, usuario) { empresaActiva = empresa; usuarioActivo = usuario; avisar(); }
+export function activar(empresa, usuario) { empresaActiva = empresa; usuarioActivo = usuario; avisar(); limpiarCola(empresa); }
 async function avisar(extra = {}) {
   if (!empresaActiva) { ultimoEstado = { pendientes: 0, subiendo: null, error: null }; }
   else {
@@ -344,7 +376,12 @@ export async function subir(empresa, { usuarioId = usuarioActivo, motivo = null,
         const reg = tanda.find((y) => y.id_operacion === x.id_operacion);
         if (!reg) continue;
         res.resultados.push(x);
-        if (x.estado === 'rechazada') { res.rechazadas++; reg.ultimo_error = x.error; }
+        if (x.estado === 'rechazada') {
+          // Revisión 0.20.0 (9): después de 3 intentos queda "rechazada": no traba la cola ni el cierre, sale en Ventas del
+          // día con su razón y se puede volver a intentar (o la sube el dueño con el respaldo).
+          res.rechazadas++; reg.ultimo_error = x.error; reg.intentos = (reg.intentos || 0) + 1;
+          if (reg.intentos >= INTENTOS_MAX) reg.estado = 'rechazada';
+        }
         else {
           const est = x.estado === 'ya_estaba' ? (x.estado_venta === 'registrada' || x.estado_venta === 'resuelta' ? 'subida' : 'por_resolver')
             : x.estado === 'registrada' ? 'subida' : 'por_resolver';
@@ -370,6 +407,32 @@ export async function subir(empresa, { usuarioId = usuarioActivo, motivo = null,
     });
   }
   return tarea();
+}
+
+const INTENTOS_MAX = 3;
+// Volver a intentar una venta rechazada (Ventas del día).
+export async function reintentar(empresa, idOperacion) {
+  const db = await baseEquipo(empresa);
+  const reg = await leerDe(db, 'cola', idOperacion);
+  if (!reg || reg.estado !== 'rechazada') return false;
+  await poner(db, 'cola', { ...reg, estado: 'en_equipo', intentos: 0 });
+  avisar();
+  programarSubida(true);
+  return true;
+}
+// Revisión 0.20.0 (14): las ventas ya subidas se borran del equipo después de 30 días (la base no crece sin fin).
+const DIAS_GUARDAR_SUBIDAS = 30;
+export async function limpiarCola(empresa) {
+  try {
+    const db = await baseEquipo(empresa);
+    const limite = Date.now() - DIAS_GUARDAR_SUBIDAS * 86400000;
+    const viejas = (await todos(db, 'cola')).filter((x) => x.estado === 'subida' && Date.parse(x.subida_en || x.creada_en) < limite);
+    if (!viejas.length) return 0;
+    const tx = db.transaction('cola', 'readwrite');
+    for (const x of viejas) tx.objectStore('cola').delete(x.id_operacion);
+    await new Promise((ok) => { tx.oncomplete = ok; tx.onerror = ok; });
+    return viejas.length;
+  } catch { return 0; }
 }
 
 // Reintentos: a los 5 s, 30 s, 2 min y luego cada 5 min mientras haya ventas; también al volver la conexión.

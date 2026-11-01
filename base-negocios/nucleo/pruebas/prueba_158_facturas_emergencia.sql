@@ -125,10 +125,32 @@ BEGIN
     AND EXISTS (SELECT 1 FROM jsonb_array_elements(l) y WHERE y->>'numero_documento' = '001-901-01-00000007' AND y->>'estado' = 'ANULADA'
                   AND (y->>'total_centavos')::bigint = 0), 'libro de ventas: ' || l::text);
 
+  -- 6b) (revisión) El precio que dice la COPIA: el cajero no puede; sin motivo no; el dueño con motivo sí: 2 tornillos a L 14.00
+  --     (hoy valen L 15.00) = L 28.00, como en la copia, sin promociones ni mayorista encima.
+  PERFORM pruebas.como('cajero_a');
+  PERFORM pruebas.debe_fallar(format('SELECT public.registrar_factura_talonario(%L, %L, gen_random_uuid())', e,
+    jsonb_build_object('talonario_id', t1, 'numero', 8, 'fecha', hoy, 'motivo_precio', 'Así dice la copia',
+      'lineas', jsonb_build_array(jsonb_build_object('producto_id', pruebas.id('P1'), 'cantidad', 2, 'precio_copia_centavos', 1400)),
+      'pagos', '[{"forma":"efectivo"}]'::jsonb)), 'SIN_PERMISO', 'el cajero no escribe el precio de la copia');
+  PERFORM pruebas.como('dueno_a');
+  PERFORM pruebas.debe_fallar(format('SELECT public.registrar_factura_talonario(%L, %L, gen_random_uuid())', e,
+    jsonb_build_object('talonario_id', t1, 'numero', 8, 'fecha', hoy, 'caja_id', pruebas.id('CAJA001'),
+      'lineas', jsonb_build_array(jsonb_build_object('producto_id', pruebas.id('P1'), 'cantidad', 2, 'precio_copia_centavos', 1400)),
+      'pagos', '[{"forma":"transferencia","referencia":"TRF-COPIA"}]'::jsonb)), 'FALTA_MOTIVO', 'precio de la copia sin motivo');
+  r := public.registrar_factura_talonario(e, jsonb_build_object('talonario_id', t1, 'numero', 8, 'fecha', hoy, 'caja_id', pruebas.id('CAJA001'),
+      'motivo_precio', 'Así dice la copia del cliente',
+      'lineas', jsonb_build_array(jsonb_build_object('producto_id', pruebas.id('P1'), 'cantidad', 2, 'precio_copia_centavos', 1400)),
+      'pagos', '[{"forma":"transferencia","referencia":"TRF-COPIA"}]'::jsonb), gen_random_uuid());
+  PERFORM pruebas.afirmar((r->>'total_centavos')::bigint = 2800 AND r->>'numero_documento' = '001-901-01-00000008', 'precio de la copia: ' || r::text);
+  PERFORM pruebas.como('superusuario');
+  PERFORM pruebas.afirmar((SELECT precio_unitario_centavos FROM public.venta_linea WHERE venta_id = (r->>'venta_id')::uuid) = 1400
+    AND (SELECT precio_venta_centavos FROM public.producto WHERE id = pruebas.id('P1')) = 1500, 'la venta con L 14.00; el producto sigue en L 15.00');
+  PERFORM pruebas.afirmar(EXISTS (SELECT 1 FROM public.bitacora b WHERE b.empresa_id = e AND b.motivo LIKE 'Precio de la copia en papel%'), 'el motivo queda en la bitácora');
+
   -- 7) Libros y bitácora.
   PERFORM pruebas.como('superusuario');
   PERFORM pruebas.afirmar(NOT EXISTS (SELECT 1 FROM public.asiento_linea x JOIN public.asiento s ON s.id = x.asiento_id WHERE s.empresa_id = e
                                       GROUP BY x.asiento_id HAVING sum(x.debe_centavos) <> sum(x.haber_centavos)), 'cada asiento cuadra');
-  PERFORM pruebas.afirmar((SELECT count(*) FROM public.talonario_numero WHERE empresa_id = e) = 3, 'solo el 5 y el 7 (y el 1 del viejo) quedaron');
+  PERFORM pruebas.afirmar((SELECT count(*) FROM public.talonario_numero WHERE empresa_id = e) = 4, 'solo el 5, el 7 y el 8 (y el 1 del viejo) quedaron');
   PERFORM pruebas.afirmar((SELECT count(*) FROM public.verificar_bitacora(e)) = 0, 'bitácora íntegra');
 END $$;

@@ -600,8 +600,11 @@ export async function armarCarrito(vista, ctx, { modo, alTerminar = null }) {
       if (!est.puede) throw errorSimple(est.razon);
       const reglas = est.cat.reglas;
       if (t > reglas.tope_venta_centavos) throw errorSimple(`Sin internet una venta no puede pasar de ${dinero(reglas.tope_venta_centavos)}.`, 'Divida la venta o espere el internet.');
-      const vendido = (await si.cola(perfil.empresa.id)).filter((x) => x.usuario_id === perfil.usuario.id && !x.payload.en_linea
-        && x.payload.bloque_id === est.bloque.bloque_id).reduce((s2, x) => s2 + x.total_centavos, 0);
+      // Revisión 0.20.0 (1): el tope es del TURNO (todos los usuarios y bloques de ese turno en este equipo), como en el servidor.
+      const bloquesTurno = new Set((await si.bloquesLocales(perfil.empresa.id))
+        .filter((x) => x.bloque_id === est.bloque.bloque_id || (est.bloque.turno_id && x.turno_id === est.bloque.turno_id)).map((x) => x.bloque_id));
+      const vendido = (await si.cola(perfil.empresa.id)).filter((x) => !x.payload.en_linea && x.estado !== 'anulada'
+        && bloquesTurno.has(x.payload.bloque_id)).reduce((s2, x) => s2 + x.total_centavos, 0);
       if (vendido + t > reglas.tope_turno_centavos) throw errorSimple(`Lo vendido sin internet en este turno pasaría de ${dinero(reglas.tope_turno_centavos)}.`, 'Espere el internet para seguir vendiendo.');
     } else if (!est.bloque && !(conBloque && conBloque.bloque)) {
       throw errorSimple('Este equipo no tiene números reservados para esta caja.');

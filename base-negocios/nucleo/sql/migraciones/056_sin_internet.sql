@@ -2699,6 +2699,12 @@ DECLARE
   r      jsonb;
   v_num  bigint;
   v_fec  date;
+  v_fv   jsonb;
+  v_lin  jsonb;
+  l      jsonb;
+  pr     jsonb;
+  v_pct  numeric;
+  v_con  bigint;
 BEGIN
   PERFORM interno.exigir_escritura(p_empresa_id, 'talonario.registrar', 'facturas_emergencia');
   PERFORM interno.exigir_escritura(p_empresa_id, 'ventas.vender', 'ventas');
@@ -2711,18 +2717,49 @@ BEGIN
     RETURN interno.venta_respuesta(v, true);
   END IF;
   PERFORM interno.exigir_claves(p_datos, ARRAY['talonario_id', 'numero', 'fecha', 'cliente_id', 'lineas', 'pagos', 'caja_id',
-                                               'descuento_factura', 'nota', 'equipo']);
+                                               'descuento_factura', 'nota', 'equipo', 'motivo_precio']);
   v_num := interno.json_entero(p_datos->'numero', 'numero');
   v_fec := interno.json_fecha(p_datos->'fecha', 'fecha');
   PERFORM interno.reservar_operacion(p_empresa_id, p_id_operacion, 'venta');
   t := interno.numero_talonario(p_empresa_id, interno.json_uuid(p_datos->'talonario_id', 'talonario_id'), v_num, v_fec);
   PERFORM interno.exigir_periodo_abierto(p_empresa_id, v_fec);
+  -- Revisión 0.20.0 (10, decisión del dueño): el precio que dice la COPIA en papel ("precio_copia_centavos" por línea, por
+  -- unidad y con ISV, como se cobró). Solo el dueño o el administrador (talonario.administrar), con motivo (bitácora). Se
+  -- calcula con ese precio (sin mayorista ni promociones encima): el libro de ventas queda igual a la factura del cliente.
+  v_lin := p_datos->'lineas';
+  IF jsonb_typeof(v_lin) = 'array' AND EXISTS (SELECT 1 FROM jsonb_array_elements(v_lin) y WHERE y ? 'precio_copia_centavos') THEN
+    IF NOT public.tiene_permiso('talonario.administrar', p_empresa_id) THEN
+      RAISE EXCEPTION 'SIN_PERMISO: escribir el precio de la copia lo hace el dueño o el administrador.';
+    END IF;
+    IF length(trim(coalesce(p_datos->>'motivo_precio', ''))) < 5 THEN
+      RAISE EXCEPTION 'FALTA_MOTIVO: escriba por qué se usa el precio de la copia (mínimo 5 letras).';
+    END IF;
+    v_fv := interno.foto_de_venta(interno.armar_catalogo(p_empresa_id, t.sucursal_id), v_lin) || '{"promociones": {}}'::jsonb;
+    FOR l IN SELECT * FROM jsonb_array_elements(v_lin) LOOP
+      CONTINUE WHEN NOT l ? 'precio_copia_centavos';
+      v_con := interno.json_centavos(l->'precio_copia_centavos', 'precio_copia_centavos');
+      pr := v_fv->'productos'->(l->>'producto_id');
+      IF pr IS NULL OR v_con IS NULL OR v_con <= 0 THEN
+        RAISE EXCEPTION 'DATO_INVALIDO: el precio de la copia va por unidad, mayor que cero, y de un producto de la factura.';
+      END IF;
+      v_pct := coalesce((v_fv->'impuestos'->(pr->>'tipo_impuesto')->>'porcentaje')::numeric, 0);
+      v_fv := jsonb_set(v_fv, ARRAY['productos', l->>'producto_id'], pr
+        || jsonb_build_object('precio_venta_centavos', CASE WHEN coalesce((pr->>'precio_incluye_isv')::boolean, true) THEN v_con
+                                                            ELSE round(v_con * 100 / (100 + v_pct))::bigint END,
+                              'precio_mayorista_centavos', NULL, 'cantidad_mayorista', NULL, 'promos', '[]'::jsonb));
+    END LOOP;
+    v_lin := (SELECT jsonb_agg(y - 'precio_copia_centavos') FROM jsonb_array_elements(v_lin) y);
+    PERFORM set_config('app.foto_venta', v_fv::text, true);
+    PERFORM set_config('app.motivo', 'Precio de la copia en papel: ' || trim(p_datos->>'motivo_precio'), true);
+  END IF;
   PERFORM set_config('app.numero_talonario', jsonb_build_object('talonario_id', t.id, 'numero', v_num)::text, true);
   r := interno.registrar_venta_base(p_empresa_id,
-         (p_datos - 'talonario_id' - 'numero') || jsonb_build_object('tipo_documento', 'factura',
-           'nota', concat_ws(' · ', 'Factura de talonario (emergencia)', p_datos->>'nota')),
+         (p_datos - 'talonario_id' - 'numero' - 'motivo_precio') || jsonb_build_object('lineas', v_lin, 'tipo_documento', 'factura',
+           'nota', concat_ws(' · ', 'Factura de talonario (emergencia)', CASE WHEN v_fv IS NOT NULL THEN 'precio de la copia' END, p_datos->>'nota')),
          p_id_operacion);
   PERFORM set_config('app.numero_talonario', '', true);
+  PERFORM set_config('app.foto_venta', '', true);
+  PERFORM set_config('app.motivo', '', true);
   IF r->>'estado' <> 'emitida' THEN
     RAISE EXCEPTION 'APROBACION_REQUERIDA: esa factura pide aprobación (%); que la pase quien aprueba.', r->'requiere_aprobacion';
   END IF;

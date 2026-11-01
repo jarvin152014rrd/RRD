@@ -56,15 +56,23 @@ export async function mostrar(vista, ctx) {
   }
 
   async function resolver(v, accion) {
+    const efectivo = (v.pagos || []).some((p) => p.forma === 'efectivo');
+    let res = null;
     const ok = await pedirMotivo({
       titulo: accion === 'registrar' ? `Registrar ${v.numero_documento}` : `Anular ${v.numero_documento}`,
       peligro: accion === 'anular',
       textoBoton: accion === 'registrar' ? 'Registrar' : 'Anular',
+      // Revisión 0.20.0 (4, decisión del dueño): a qué turno entra el efectivo.
       explicacion: accion === 'registrar'
-        ? 'Se registra con su fecha y precios reales, en el turno en que se hizo. Si ese mes ya está cerrado, primero hay que reabrirlo.'
+        ? 'Se registra con su fecha y precios reales. Si ese mes ya está cerrado, primero hay que reabrirlo.'
+          + (efectivo ? ' El efectivo entra al turno de esa caja si sigue abierto; si ya se cerró, entra a SU turno: ponga ese dinero en su caja (o tómelo del sobrante del turno cerrado).' : '')
         : 'El número queda ANULADO y el dinero cobrado queda como sobrante de caja hasta devolvérselo al cliente.',
-      accion: (motivo) => escribir('resolver_venta_sin_internet', { p_id: v.venta_sin_internet_id, p_accion: accion, p_motivo: motivo }),
+      accion: async (motivo) => { res = await escribir('resolver_venta_sin_internet', { p_id: v.venta_sin_internet_id, p_accion: accion, p_motivo: motivo }); },
     });
-    if (ok) { aviso(accion === 'registrar' ? 'Venta registrada.' : 'Venta anulada.'); cargar(); }
+    if (!ok) return;
+    if (accion === 'anular') aviso('Venta anulada.');
+    else if (efectivo && res && res.a_mi_turno) aviso('Venta registrada. El efectivo entró a SU turno: póngalo en su caja.', 'info', 8000);
+    else aviso('Venta registrada.');
+    cargar();
   }
 }
