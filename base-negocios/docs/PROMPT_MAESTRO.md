@@ -108,51 +108,80 @@ va cada lempira, control, operación legal (SAR, CAI, ISV, NIIF PYMES) y crecimi
   por caja y equipo, lista "por resolver", facturas de emergencia (talonario de imprenta).
 - **Sucursales:** cada empleado solo ve y toca lo de su sucursal.
 
-## 6. Dónde estamos con la instalación real
+## 6. Dónde estamos con la instalación real (2 de noviembre de 2026)
 
-- Supabase de pruebas instalado en **0.15.0** con la "Tienda de Ropa Prueba" (dueño:
-  jarvin152014@gmail.com). Registro abierto de usuarios **apagado**.
-- App publicada en Netlify: `https://dapper-tarsier-fbd098.netlify.app` (versión vieja).
-- **Falta pegar en orden** las actualizaciones 0.16.0, 0.17.0, 0.18.0, 0.19.0, 0.20.0 y 0.21.0, luego
-  `verificar` (debe decir TODO BIEN | 0.21.0 | 57 | 57) y subir la app 0.15.0 a Netlify (incluye todo lo de la 0.14.0).
-  Nada de 0.16 a 0.20 se ha probado todavía en un Supabase real.
+- **Supabase de pruebas (SistemaAdmin-Pruebas) ya está en 0.21.0.** Se pegaron en orden las
+  actualizaciones 0.16.0 a 0.21.0 y `verificar_instalacion` dijo **TODO BIEN | 0.21.0 | 57 | 57 | LISTO**.
+  Empresa de prueba: "Tienda de Ropa Prueba" (dueño: jarvin152014@gmail.com). Registro abierto de usuarios **apagado**.
+- **App 0.15.0 publicada en Netlify** (2 de noviembre, "Published", 77 archivos):
+  `https://dapper-tarsier-fbd098.netlify.app`. Se armó con `herramientas/armar_app.sh tienda-ropa-prueba
+  https://xkdmkejujqoayjyvrqcs.supabase.co <llave pública>` y se subió un .zip con los archivos en la raíz
+  (arrastrar a Deploys > "Need to update your project?").
+- **Ojo:** como 0.16.0 a 0.21.0 ya están en un Supabase real, **ya no se editan** (056 y 057 incluidas): todo
+  cambio nuevo va en una migración nueva (058 en adelante) con su `actualizar_supabase_<versión>.sql`.
+- Falta confirmar que la app nueva abre bien y probarla (ver 7, "Siguiente paso").
 
 ## 7. Lo que está pendiente
 
-**Revisión**
-- La **0.20.0 (vender sin internet)** ya se revisó y se corrigieron sus 14 puntos dentro de la misma 056 (ver
-  `docs/PENDIENTES.md`, "REVISIÓN DE 0.20.0"; decisiones del dueño: efectivo al turno abierto o al de quien resuelve;
-  precio de la copia en el talonario por dueño o admin con motivo). Ya se puede pegar en orden.
+**Siguiente paso (empezar por aquí)**
+1. Abrir la app nueva (Ctrl + Shift + R si se ve la vieja; en el celular cerrarla y abrirla) y entrar.
+   Se reconoce por la lupa "Buscar… Ctrl K", el punto "Al día" y la luna del modo oscuro.
+2. Prueba guiada corta: vender (F2, F9), cobrar, cerrar el turno, modo oscuro, buscador, Inventario >
+   ¿Qué comprar? y Capital muerto, Cotizaciones con WhatsApp.
+3. Publicar las 2 Edge Functions (crear usuarios y cerrar sesión a distancia): `docs/SUPABASE.md`, paso 9.
+4. Probar vender sin internet: preparar el equipo (Ajustes > Sin internet), cortar el internet, vender y volver.
+5. Respaldo semanal (`docs/SUPABASE.md`, "Respaldos"; el plan gratis no los deja descargar).
 
-**Decisiones mías por confirmar**
+**Seguridad de mis cuentas (lo más importante, lo hago yo)**
+- Activar la verificación en dos pasos en Gmail, Supabase, Netlify y GitHub.
+
+**Decisiones mías ya tomadas en la revisión de 0.20.0** (hechas)
+- Al resolver una venta sin internet, el efectivo entra al turno abierto de esa caja; si ya se cerró, al turno
+  de quien la resuelve, en su caja (la pantalla lo avisa).
+- Talonario de emergencia: el dueño o el administrador pueden escribir el precio de la copia en papel, con motivo.
+
+**Decisiones mías por confirmar (tienen respuesta razonable; se ajustan al probar)**
 - Tope por turno sin internet: L 50,000.
 - Transferencia sin internet marcada "no llegó": queda como deuda y ya no se anula.
 - Mientras un equipo tiene números apartados de una caja, esa caja solo vende de contado.
 - En garantía no se cobra el ajuste mayorista; el precio normal del ajuste es el de la venta.
-- Unas 20 decisiones menores ya tienen respuesta razonable (ver "Decisiones del dueño
-  pendientes de confirmar" en `docs/PENDIENTES.md`); se ajustan al probar.
+- Unas 20 menores: "Decisiones del dueño pendientes de confirmar" en `docs/PENDIENTES.md`.
 
 **Para el contador**
 - Revisar SAR, CAI, ISV, libros y NIIF; cuentas de aportes de socios.
 - Cómo pedir el CAI del talonario de emergencia y cómo reportar números no usados o anulados.
 
-**Por programar**
-- Tanda de seguridad (gratis): verificación en dos pasos en la app para dueño y admin, claves
-  fuertes, "no soy un robot" (Cloudflare Turnstile), bloqueo por inactividad con PIN del cajero,
-  avisos de entrada desde equipo nuevo, respaldo automático semanal con prueba de recuperación.
-- Sin internet, etapa 2: pantalla para pasar ventas desde copias en papel de un equipo perdido,
-  hoja de arqueo sin internet, catálogo por partes, cifrar datos del equipo.
-- Pequeños: bodega de "dañados" para garantías, separar cheques en el resumen de hoy, quitar
-  precio mayorista desde Excel, columna "tiene foto" en Excel, limpieza de fotos sueltas.
-- Más adelante, solo si los clientes lo piden: rutas de vendedores, mapa de clientes, pedidos a
-  bodega, preparación y despacho.
-
-**Para mí (paso a paso)**
-- Activar la verificación en dos pasos en Gmail, Supabase, Netlify y GitHub (lo más importante).
-- Pegar las actualizaciones y subir la app; publicar las 2 Edge Functions (crear usuarios y
-  cerrar sesión a distancia); hacer el respaldo semanal.
+**Por programar (cuando yo diga)**
+- Pequeño: los datos de demostración de "cuadrar con el banco" hacen fallar una prueba los primeros días del mes
+  (no es de la app). "¿Gané o perdí?" falla el último día del mes por lo mismo.
+- Tanda de seguridad (gratis): verificación en dos pasos en la app para dueño y admin, claves fuertes, "no soy un
+  robot" (Cloudflare Turnstile), bloqueo por inactividad con PIN del cajero, aviso de entrada desde equipo nuevo,
+  respaldo automático semanal con prueba de recuperación.
+- Sin internet, etapa 2: pasar ventas desde las copias en papel de un equipo perdido, hoja de arqueo sin internet,
+  catálogo por partes, cifrar los datos del equipo.
+- Mejoras propuestas (ideas de RRD): meta de ventas del mes con barra de avance; clientes que dejaron de comprar
+  (para volver a llamarlos, con WhatsApp); botón "revisar que todo cuadra"; precio sugerido al crear un producto
+  (costo + margen); cotización en PDF; vista para tableta.
+- Detalles: bodega de "dañados" para garantías, separar cheques en el resumen de hoy, quitar precio mayorista
+  desde Excel, columna "tiene foto" en Excel, limpieza de fotos sueltas.
+- Más adelante, solo si los clientes lo piden: rutas de vendedores, mapa de clientes, pedidos a bodega, despacho.
 
 **Después**
 - Prueba con muchos datos.
 - Prueba real con Repuestos Ruta Directa, en paralelo con mi index, 2 a 4 semanas.
 - Para vender: dirección propia, Supabase Pro (respaldos diarios), contrato, soporte y precio.
+
+## 8. Cómo seguir en una conversación nueva
+
+- Pegue este texto completo. El código está en la rama `claude/hopeful-maxwell-bctd4o` del repositorio
+  `jarvin152014rrd/RRD`, carpeta `base-negocios/`.
+- Lo primero que debe leer Claude: este archivo, `docs/PENDIENTES.md`, `CHANGELOG.md` (núcleo) y `app/CHANGELOG.md`.
+- Pruebas antes de entregar algo: `bash herramientas/probar.sh` (núcleo), `bash herramientas/probar.sh --paquete`
+  (como en Supabase real), `bash herramientas/probar_app.sh` (app; incluye `probar_0150.cjs` de la 0.15.0).
+  `SOLO_PRUEBAS='prueba_(158|161)'` corre solo algunas.
+- Paquete para el dueño: `herramientas/armar_instalacion.sh` (instalación y la actualización de la última versión en
+  `dist/`); `herramientas/armar_app.sh` (app para Netlify; subir un .zip con los archivos en la raíz).
+- En esta rama no están `CLAUDE.md` ni `.claude/agents/` (sí en `claude/awesome-albattani-co033f`): las reglas de
+  este prompt los reemplazan; el "revisor" se puede lanzar como un agente general con las instrucciones de revisión.
+- Historial de esta etapa: app 0.15.0 (lo mejor de RRD en lo visual, modo oscuro, buscador, filtros, cotizaciones,
+  teclas rápidas), núcleo 0.21.0 (¿Qué comprar? y capital muerto) y la revisión de 0.20.0 en tres vueltas.
