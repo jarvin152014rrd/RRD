@@ -52,7 +52,9 @@ BEGIN
   e := public.crear_empresa_inicial(jsonb_build_object(
     'nombre', d->>'nombre', 'rubro', d->>'rubro', 'fecha_inicio', inicio, 'perfil', coalesce(d->>'perfil', 'pequeno'),
     'modulos', d->'modulos',
-    'dueno', jsonb_build_object('user_id', (SELECT id FROM auth.users WHERE email = 'dueno@' || dom), 'nombre', 'Dueño de la demo')));
+    'dueno', jsonb_build_object('user_id', (SELECT id FROM auth.users WHERE email = 'dueno@' || dom), 'nombre', 'Dueño de la demo'))
+    -- Núcleo 0.22.0+: sin la "Tienda principal" automática (la demo crea sus bodegas abajo); núcleos viejos no la conocen.
+    || CASE WHEN to_regprocedure('public.guardar_bodega(uuid,jsonb,text)') IS NULL THEN '{}'::jsonb ELSE '{"bodega_inicial": false}'::jsonb END);
   INSERT INTO public.licencia (empresa_id, vence_el) VALUES (e, public.hoy_local() + 90);
   RESET ROLE;
   hoy := public.hoy_local(e);

@@ -232,9 +232,10 @@ export async function formularioCompra(vista, ctx, { proveedorId = null } = {}) 
     vista.replaceChildren(h('section', { class: 'tarjeta tarjeta-angosta' }, titulo('h1', 'compras', 'Nueva compra'),
       estadoVacio({ icono: !provs.length ? 'proveedor' : 'etiqueta', titulo: !provs.length ? 'Primero agregue un proveedor' : !bods.length ? 'Primero cree una bodega' : 'Primero cree sus productos',
         texto: !provs.length ? 'Cada compra es de un proveedor. Agréguelo una vez y luego solo lo elige.'
-          : !bods.length ? 'Las compras entran a una bodega. Pídale al dueño que cree una.' : 'Las compras son de productos que se guardan en inventario.',
+          : !bods.length ? 'Las compras entran a una tienda o bodega. Créela en Ajustes > Sucursales y bodegas.' : 'Las compras son de productos que se guardan en inventario.',
         botones: [!provs.length && hayEnMenu(ctx.menu || [], 'compras', 'proveedores') ? { texto: 'Agregar proveedor', href: '#/compras/proveedores', icono: 'mas' } : null,
-          provs.length && !prods.length && hayEnMenu(ctx.menu || [], 'inventario', 'productos') ? { texto: 'Crear productos', href: '#/inventario/productos', icono: 'mas' } : null,
+          provs.length && !bods.length && hayEnMenu(ctx.menu || [], 'ajustes', 'bodegas') ? { texto: 'Crear tienda o bodega', href: '#/ajustes/bodegas', icono: 'mas' } : null,
+          provs.length && bods.length && !prods.length && hayEnMenu(ctx.menu || [], 'inventario', 'productos') ? { texto: 'Crear productos', href: '#/inventario/productos', icono: 'mas' } : null,
           { texto: 'Volver', onclick: volver }] })));
     return;
   }

@@ -4,6 +4,24 @@ Formato: versión (fecha) y lista de cambios. La versión vive en `VERSION_NUCLE
 y queda guardada en cada base al migrar (vista `version_esquema`).
 Números: MAYOR.MENOR.ARREGLO (ver `docs/CONVENCIONES.md`).
 
+## 0.22.0 (2026-11-06) — Tienda y bodegas, datos fiscales editables por el dueño
+
+Migración nueva 058. 163 pruebas (nuevas 162 y 163; la 160 queda fija en 0.21.0). Para quien ya tiene 0.21.0 en
+Supabase: `dist/actualizar_supabase_0.22.0.sql` (ver `docs/SUPABASE.md`).
+
+- **Tienda o bodega:** cada bodega dice si se vende desde ahí (`bodega.vende`) o solo guarda. Una sola tienda activa
+  por sucursal; las ventas, apartados y ventas sin internet salen de la tienda (antes: de la primera bodega por código,
+  que es la que queda marcada como tienda al actualizar). La primera bodega de una sucursal es tienda sola; si se
+  desactiva la tienda, vende la siguiente bodega de la sucursal.
+- **Nadie se queda sin bodega:** toda empresa nueva nace con su "Tienda principal" (`crear_empresa_inicial`; la ficha
+  puede traer `"bodega_inicial": false`) y la actualización le crea su tienda a cada sucursal activa que no tenía
+  bodega (era la causa de "Agotado" y de "Primero cree una bodega").
+- **`guardar_bodega(empresa, datos, motivo)`:** crear una tienda o bodega (el código se pone solo) y cambiarle el
+  nombre o si vende (con motivo). No deja sin tienda a una sucursal que tiene cajas.
+- **`configurar_datos_fiscales(empresa, datos, motivo)`:** el dueño cambia el nombre legal y el RTN (con o sin
+  guiones), con motivo y en la bitácora. Las facturas ya emitidas no cambian. Si cambia el RTN y hay rangos de CAI
+  activos, pide confirmarlo (`CAI_ACTIVO`) y los desactiva: el CAI es para un RTN y hay que pedir uno nuevo al SAR.
+
 ## 0.21.0 (2026-10-31) — ¿Qué comprar? y capital muerto (ideas de RRD)
 
 Migración nueva 057 (solo agrega dos lecturas; no cambia nada guardado). 161 pruebas (nuevas 159, 160 y 161; la 157 queda

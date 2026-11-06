@@ -57,13 +57,21 @@ export const alcance = () => guardado('alcance', () => rpc('mi_estado_sesion', {
 // App 0.15.0: existencias por producto (suma de bodegas) para Vender y Productos. Se lee por páginas de 1000 (el servidor
 // corta ahí sin avisar). Un usuario limitado a unas sucursales solo suma las bodegas de ESAS sucursales (v_existencia
 // trae las de toda la empresa). Sin guardar en memoria: después de cada venta cambian.
-export async function existenciasPorProducto() {
+// App 0.16.0 (núcleo 0.22.0): soloTiendas = true (Vender) suma solo las tiendas (bodegas que venden), que es de donde
+// sale la venta; lo que está en bodegas de atrás no se puede vender sin trasladarlo.
+export async function existenciasPorProducto({ soloTiendas = false } = {}) {
   const a = await alcance().catch(() => ({ limitado: false, sucursales: [] }));
+  let tiendas = null;
+  if (soloTiendas) {
+    const bs = await bodegas().catch(() => []);
+    if (bs.some((b) => 'vende' in b)) tiendas = new Set(bs.filter((b) => b.vende).map((b) => b.id));
+  }
   const m = new Map();
   for (let pagina = 0; pagina < 30; pagina++) {
     const filas = await leer('v_existencia', { empresa_id: empresaId() }, { orden: 'producto_id.asc,bodega_id.asc', limite: 1000, desde: pagina * 1000 });
     for (const f of filas) {
       if (a.limitado && !a.sucursales.includes(f.sucursal_id)) continue;
+      if (tiendas && !tiendas.has(f.bodega_id)) continue;
       m.set(f.producto_id, (m.get(f.producto_id) || 0) + Number(f.cantidad || 0));
     }
     if (filas.length < 1000) break;

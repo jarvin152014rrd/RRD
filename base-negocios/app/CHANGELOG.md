@@ -1,5 +1,20 @@
 # Cambios de la app
 
+## app 0.16.0 (núcleo 0.22.0) — PV 3.0, parte 1: tienda y bodegas, CAI y datos fiscales
+
+- **Ajustes > Sucursales y bodegas** (nuevo): cada sucursal con su tienda (de ahí salen las ventas) y sus bodegas (solo
+  guardan). Agregar tienda o bodega (solo nombre y para qué es; el código se pone solo), "Vender desde aquí", cambiar
+  el nombre, desactivar o activar; nueva sucursal lista para vender (con su tienda y su caja); avisa si una sucursal
+  con cajas no tiene tienda y deja agregar la caja que falte. Antes no había ninguna pantalla para crear bodegas.
+- **Ajustes > Facturas (CAI)** (nuevo): los rangos del SAR por caja (cuántos números quedan, cuándo vencen, avisos),
+  registrar un CAI, desactivar o activar. Avisa qué cajas no tienen CAI vigente para facturas.
+- **Mi negocio > Datos fiscales:** el dueño cambia el nombre legal y el RTN (con o sin guiones, con motivo). Si cambia
+  el RTN y hay CAI activos, avisa antes que se desactivan. Los demás solo los ven.
+- **Vender:** el buscador cuenta solo lo que hay en la tienda (lo que está en bodegas de atrás no se puede vender sin
+  trasladarlo). Productos sigue mostrando todo.
+- **Compras sin bodega:** lleva a crear la tienda o bodega en vez de "pídale al dueño".
+- El buscador general encuentra las pantallas nuevas ("crear bodega", "cai", "sucursal").
+
 ## app 0.15.0 — también: correcciones de "vender sin internet" (revisión de 0.20.0, ver CHANGELOG del núcleo)
 
 - Renovar los números: sube lo guardado, manda hasta dónde llegó cada bloque y nunca a la vez que una venta (candado);

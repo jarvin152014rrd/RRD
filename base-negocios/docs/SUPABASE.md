@@ -159,6 +159,28 @@ Queda la carpeta `dist/app-<cliente>/`. Si por error pega la llave secreta, la h
 
 ---
 
+## Actualizar de 0.21.0 a 0.22.0 (si YA lo tenía instalado) — tienda y bodegas, datos fiscales
+
+Primero debe tener la 0.21.0. Solo se pega **un archivo**.
+
+Qué cambia en sus datos (nada se borra): cada bodega queda marcada como **tienda** (de ahí salen las ventas) o
+**bodega** (solo guarda); en cada sucursal la tienda es la que ya usaban las ventas. Las sucursales que no tenían
+ninguna bodega reciben su **"Tienda principal"** (por eso antes todo salía "Agotado").
+
+1. **Haga un respaldo primero.**
+2. En la carpeta `base-negocios`: `bash herramientas/armar_instalacion.sh`. En `dist/` aparece
+   **`actualizar_supabase_0.22.0.sql`**.
+3. Supabase > **SQL Editor** > **New query** (rol **postgres**), pegue el archivo y toque **Run**.
+4. Abajo debe salir: **ACTUALIZADO A 0.22.0**, **version = 0.22.0** y **migraciones = 58**.
+5. Suba la app **0.16.0** a Netlify. En Ajustes aparecen **Sucursales y bodegas** y **Facturas (CAI)**, y en
+   **Mi negocio** el dueño ya puede cambiar el nombre legal y el RTN.
+
+| Lo que sale | Qué hacer |
+|---|---|
+| `FALTA_VERSION_ANTERIOR ... 057 (núcleo 0.21.0)` | Su base no tiene la 0.21.0. Pegue primero esa. |
+| `ACTUALIZACION_INCOMPLETA` | No se cambió nada. Avise: la base no tiene lo que la actualización espera. |
+| `ROL_EQUIVOCADO` | Elija el rol **postgres** arriba a la derecha y vuelva a correr. |
+
 ## Actualizar de 0.20.0 a 0.21.0 (si YA lo tenía instalado) — ¿Qué comprar? y capital muerto
 
 Primero debe tener la 0.20.0 (pegue antes `actualizar_supabase_0.20.0.sql`).

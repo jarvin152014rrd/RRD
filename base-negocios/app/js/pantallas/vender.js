@@ -33,7 +33,7 @@ const FORMAS_VISTA = {
 // Sin permiso o sin módulo de inventario no se muestran (null).
 async function existenciasVisibles() {
   if (!tieneModulo('inventario') || !puede('inventario.ver')) return null;
-  return existenciasPorProducto();
+  return existenciasPorProducto({ soloTiendas: true });
 }
 
 // Computadora: el ticket mide lo que queda de pantalla desde donde empieza (y al bajar, la pantalla entera),

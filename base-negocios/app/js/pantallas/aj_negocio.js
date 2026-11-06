@@ -1,11 +1,13 @@
 // Ajustes · Mi negocio: nombre comercial, logo y colores con vista previa y "Volver al anterior"
 // (marca_empresa / configurar_marca, permiso empresa.marca: dueño y admin). Los datos fiscales
-// (nombre legal y RTN) solo los ve el dueño y se cambian con el proveedor (ficha del cliente).
+// (nombre legal y RTN): app 0.16.0 con núcleo 0.22.0, el dueño los cambia aquí (configurar_datos_fiscales, con motivo);
+// si cambia el RTN y hay CAI activos, se le avisa antes que esos CAI se desactivan. Antes: solo con el proveedor.
 // App 0.11.0: interruptor "Fotos de productos" (solo el dueño: activar_fotos_productos, con motivo y bitácora).
-import { rpc, rpcSiExiste } from '../api.js';
-import { empresaId, puede, cargarPerfil } from '../sesion.js';
+import { rpc, rpcSiExiste, leer } from '../api.js';
+import { empresaId, puede, cargarPerfil, perfilActual } from '../sesion.js';
+import { versionAlMenos } from '../datos.js';
 import { fotosActivas, nucleoConFotos } from '../fotos.js';
-import { h, icono, aviso, errorSimple, campo, pedirMotivo, titulo, burbuja, chip, mensaje } from '../ui.js';
+import { h, icono, aviso, errorSimple, campo, pedirMotivo, confirmar, titulo, burbuja, chip, mensaje } from '../ui.js';
 import { guardarMarcaLocal, aplicarMarca, textoSobre, iniciales } from '../marca.js';
 
 const BASE = { color_principal: '#0f1f3d', color_acento: '#c8972a' }; // los del tema
@@ -98,11 +100,7 @@ export async function mostrar(vista, ctx) {
   vista.append(...[
     h('section', { class: 'tarjeta tarjeta-angosta', 'aria-labelledby': 't-neg' }, titulo('h1', 'tienda', 'Mi negocio', { id: 't-neg' }), form),
     await seccionFotos(vista, ctx),
-    puede('empresa.configurar') ? h('section', { class: 'tarjeta tarjeta-angosta', 'aria-labelledby': 't-fis' },
-      titulo('h2', 'documento', 'Datos fiscales', { id: 't-fis' }),
-      h('div', { class: 'fila' }, h('span', {}, 'Nombre legal'), h('span', {}, m.nombre)),
-      h('div', { class: 'fila' }, h('span', {}, 'RTN'), h('span', { dataset: { dato: 'rtn' } }, m.rtn || '—')),
-      h('p', { class: 'ayuda' }, 'Salen en las facturas. Para cambiarlos hable con su proveedor (quedan en la ficha del negocio).')) : null].filter(Boolean));
+    puede('empresa.configurar') ? seccionFiscal(m, vista, ctx) : null].filter(Boolean));
   // Al salir de esta pantalla sin guardar, el programa sigue con la marca guardada.
   aplicarMarca(marca);
 }
@@ -139,4 +137,52 @@ async function seccionFotos(vista, ctx) {
     h('label', { class: 'opcion-check' }, interruptor, ' Usar fotos de productos ', chip(activas ? 'Encendidas' : 'Apagadas', activas ? 'verde' : 'neutro', { dataset: { dato: 'fotos-estado' } })),
     h('p', { class: 'ayuda', id: 'fotos-ayuda' }, 'Fotos livianas (la app las achica antes de subirlas) en Productos, Vender, Inicio e Inventario. No salen en lo impreso ni en el Excel. Subir una foto necesita internet.'),
     zona);
+}
+
+// Datos fiscales (nombre legal y RTN). El dueño los edita (núcleo 0.22.0); los demás solo los ven.
+function seccionFiscal(m, vista, ctx) {
+  const rol = perfilActual().rol;
+  const dueno = Boolean(rol && rol.codigo === 'dueno') && versionAlMenos(perfilActual().version_nucleo || '', '0.22.0');
+  const caja = h('section', { class: 'tarjeta tarjeta-angosta', 'aria-labelledby': 't-fis' }, titulo('h2', 'documento', 'Datos fiscales', { id: 't-fis' }));
+  if (!dueno) {
+    caja.append(h('div', { class: 'fila' }, h('span', {}, 'Nombre legal'), h('span', {}, m.nombre)),
+      h('div', { class: 'fila' }, h('span', {}, 'RTN'), h('span', { dataset: { dato: 'rtn' } }, m.rtn || '—')),
+      h('p', { class: 'ayuda' }, 'Salen en las facturas. Solo el dueño los puede cambiar.'));
+    return caja;
+  }
+  const conGuiones = (r) => (r && r.length === 14 ? `${r.slice(0, 4)}-${r.slice(4, 8)}-${r.slice(8)}` : r || '');
+  const nombre = h('input', { id: 'fiscal-nombre', type: 'text', maxlength: 120, value: m.nombre || '' });
+  const rtn = h('input', { id: 'fiscal-rtn', type: 'text', maxlength: 16, inputmode: 'numeric', value: conGuiones(m.rtn), placeholder: '0801-1999-000001' });
+  const zona = h('div', { 'aria-live': 'assertive' });
+  const form = h('form', { class: 'formulario', novalidate: true },
+    campo('Nombre legal (razón social)', nombre),
+    campo('RTN', rtn, '14 números, con o sin guiones. Vacío = sin RTN.'),
+    zona,
+    h('p', { class: 'ayuda' }, 'Salen en las facturas nuevas; las facturas ya hechas no cambian. El CAI que da el SAR es para un RTN: si cambia el RTN, tendrá que pedir un CAI nuevo.'),
+    h('div', { class: 'botones' }, h('button', { type: 'submit', class: 'boton boton-principal', id: 'fiscal-guardar' }, 'Guardar datos fiscales')));
+  form.addEventListener('submit', async (ev) => {
+    ev.preventDefault();
+    zona.replaceChildren();
+    const nuevoRtn = rtn.value.replace(/[\s-]/g, '');
+    if (nuevoRtn && !/^\d{14}$/.test(nuevoRtn)) { zona.append(errorSimple('El RTN son 14 números.', 'Ej. 0801-1999-000001.')); rtn.focus(); return; }
+    if (nombre.value.trim().length < 2) { zona.append(errorSimple('Escriba el nombre legal.')); nombre.focus(); return; }
+    const datos = { nombre: nombre.value.trim(), rtn: nuevoRtn || null };
+    if ((nuevoRtn || null) !== (m.rtn || null)) {
+      const activos = await leer('v_cai_rango', { empresa_id: empresaId(), activo: true }).catch(() => []);
+      if (activos.length) {
+        const si = await confirmar({ titulo: 'Cambiar el RTN', peligro: true, textoBoton: 'Sí, cambiar el RTN',
+          texto: `Tiene ${activos.length} rango(s) de CAI activos para el RTN de ahora. Al cambiar el RTN se desactivan y no podrá hacer facturas con CAI hasta registrar el CAI nuevo que le dé el SAR.` });
+        if (!si) return;
+        datos.desactivar_cai = true;
+      }
+    }
+    let r = null;
+    const ok = await pedirMotivo({ titulo: 'Guardar datos fiscales', textoBoton: 'Guardar',
+      accion: async (motivo) => { r = await rpc('configurar_datos_fiscales', { p_empresa_id: empresaId(), p_datos: datos, p_motivo: motivo }); } });
+    if (!ok || !r) return;
+    aviso(r.cai_desactivados ? `Datos fiscales guardados · ${r.cai_desactivados} CAI desactivado(s)` : 'Datos fiscales guardados');
+    vista.replaceChildren(); await mostrar(vista, ctx);
+  });
+  caja.append(form);
+  return caja;
 }

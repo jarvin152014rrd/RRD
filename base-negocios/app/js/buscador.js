@@ -48,6 +48,8 @@ const CLAVES = {
   'reportes/valorizado': 'valor del inventario costo',
   'reportes/empleados': 'comisiones vendedores',
   'reportes/antiguedad': 'saldos vencidos morosidad',
+  'ajustes/bodegas': 'bodega tienda sucursal caja almacen crear bodega donde se vende',
+  'ajustes/cai': 'cai sar factura rango numeros fiscal autorizacion',
   'reportes/bitacora': 'auditoria quien hizo que historial de cambios',
   'reportes/cierre': 'cierre de mes contabilidad',
   'ajustes/negocio': 'logo colores nombre comercial marca',

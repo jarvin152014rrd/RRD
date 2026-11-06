@@ -324,6 +324,14 @@ END $$;
 
 GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA pruebas TO anon, authenticated, service_role;
 
+-- Núcleo 0.22.0+: la empresa nueva trae su "Tienda principal"; los datos de prueba crean
+-- sus bodegas B1 y B2 a mano, así que la piden sin ella (en núcleos viejos, nada).
+CREATE FUNCTION pruebas.sin_tienda_inicial() RETURNS jsonb LANGUAGE sql STABLE AS $$
+  SELECT CASE WHEN to_regprocedure('public.guardar_bodega(uuid,jsonb,text)') IS NULL THEN '{}'::jsonb
+              ELSE '{"bodega_inicial": false}'::jsonb END
+$$;
+GRANT EXECUTE ON FUNCTION pruebas.sin_tienda_inicial() TO service_role;
+
 -- ---------------------------------------------------------------------
 -- Empresas (con la llave del proveedor: service_role)
 -- ---------------------------------------------------------------------
@@ -334,11 +342,11 @@ SELECT set_config('pruebas.emp_a', public.crear_empresa_inicial('{
   "fecha_inicio": "2026-01-01",
   "dueno":     {"user_id": "a0000000-0000-0000-0000-000000000001", "nombre": "Dueño A"},
   "proveedor": {"user_id": "a0000000-0000-0000-0000-000000000005"}
-}')::text, false);
+}'::jsonb || pruebas.sin_tienda_inicial())::text, false);
 SELECT set_config('pruebas.emp_b', public.crear_empresa_inicial('{
   "nombre": "Pulpería La Esquina", "rtn": "08011999000002", "fecha_inicio": "2026-01-01",
   "dueno": {"correo": "dueno_b@prueba.hn"}
-}')::text, false);
+}'::jsonb || pruebas.sin_tienda_inicial())::text, false);
 -- Licencias vigentes por 30 días.
 INSERT INTO public.licencia (empresa_id, vence_el)
 VALUES (current_setting('pruebas.emp_a')::uuid, public.hoy_local() + 30),

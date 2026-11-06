@@ -17,7 +17,7 @@ BEGIN
   INSERT INTO pruebas.usuario (apodo, id) VALUES (p_emp, u);
   PERFORM pruebas.como('service_role');
   e := public.crear_empresa_inicial(jsonb_build_object('nombre', 'Combinación ' || p_emp, 'fecha_inicio', '2026-01-01',
-         'modulos', to_jsonb(p_modulos), 'dueno', jsonb_build_object('user_id', u)));
+         'modulos', to_jsonb(p_modulos), 'dueno', jsonb_build_object('user_id', u), 'bodega_inicial', false));  -- crea su bodega abajo
   PERFORM pruebas.como('superusuario');
   INSERT INTO public.licencia (empresa_id, vence_el) VALUES (e, public.hoy_local() + 30);
   PERFORM pruebas.guardar(p_emp, e);

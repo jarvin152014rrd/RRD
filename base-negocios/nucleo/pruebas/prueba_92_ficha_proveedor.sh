@@ -125,7 +125,7 @@ json.dump(f, open(sys.argv[2], "w", encoding="utf-8"), ensure_ascii=False)
 PY
 DIR_CLIENTES="$C" bash "$H/lista_clientes.sh" >"$TMP/s.txt" 2>&1 < /dev/null || { cat "$TMP/s.txt"; falla "lista_clientes"; }
 V="$(tr -d '[:space:]' < "$RAIZ/VERSION_NUCLEO")"
-grep -E "^\(!\) salon +esencial +contabilidad,fiscal_hn,inventario,ventas +2027-01-31 +$V +usu 1/1, caj 1/2, suc 1/1, bod 0/- +base" "$TMP/s.txt" >/dev/null \
+grep -E "^\(!\) salon +esencial +contabilidad,fiscal_hn,inventario,ventas +2027-01-31 +$V +usu 1/1, caj 1/2, suc 1/1, bod 1/- +base" "$TMP/s.txt" >/dev/null \
   || { cat "$TMP/s.txt"; falla "fila de salon (base, al 100 % de usuarios)"; }
 grep -E "^sinbase .*ficha \(sin acceso a la base\)" "$TMP/s.txt" >/dev/null || { cat "$TMP/s.txt"; falla "fila sin conexión"; }
 grep -E "^caida .*ficha \(sin acceso a la base\)" "$TMP/s.txt" >/dev/null || { cat "$TMP/s.txt"; falla "fila con base caída"; }

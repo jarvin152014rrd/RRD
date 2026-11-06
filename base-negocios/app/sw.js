@@ -4,7 +4,7 @@
 // "fotos-<empresa>", que se borra al salir; al activar una versión nueva solo se borran cascarones viejos.
 // Al cambiar cualquier archivo del cascarón, suba VERSION. La lista debe tener TODOS los archivos de la app (app 0.14.0:
 // sin internet la app abre solo con lo guardado aquí); la prueba app-pruebas/probar_cascaron.mjs la compara con la carpeta.
-const VERSION = 'cascaron-0.15.0';
+const VERSION = 'cascaron-0.16.0';
 const CASCARON = [
   './', 'index.html', 'manifest.webmanifest', 'config.js',
   'css/tema.css', 'css/base.css', 'css/controles.css',
@@ -22,7 +22,7 @@ const CASCARON = [
   'js/pantallas/compras.js', 'js/pantallas/compras_proveedores.js', 'js/pantallas/compras_pagos.js',
   'js/pantallas/inv_productos.js', 'js/pantallas/inv_existencias.js', 'js/pantallas/inv_conteo.js', 'js/pantallas/inv_movimientos.js',
   'js/pantallas/inv_traslados.js', 'js/pantallas/inv_excel.js', 'js/pantallas/inv_que_comprar.js', 'js/pantallas/inv_capital_muerto.js',
-  'js/pantallas/aj_negocio.js', 'js/pantallas/aj_usuarios.js', 'js/pantallas/aj_cajas.js', 'js/pantallas/aj_impuestos.js',
+  'js/pantallas/aj_negocio.js', 'js/pantallas/aj_bodegas.js', 'js/pantallas/aj_cai.js', 'js/pantallas/aj_usuarios.js', 'js/pantallas/aj_cajas.js', 'js/pantallas/aj_impuestos.js',
   'js/pantallas/aj_reglas.js', 'js/pantallas/aj_datos.js',
   'js/pantallas/rep_gane.js', 'js/pantallas/rep_ventas.js', 'js/pantallas/rep_valorizado.js', 'js/pantallas/rep_empleados.js',
   'js/pantallas/rep_bitacora.js', 'js/pantallas/rep_cierre.js', 'js/pantallas/rep_antiguedad.js', 'js/pantallas/garantias.js',

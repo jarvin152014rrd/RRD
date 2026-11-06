@@ -64,7 +64,9 @@ BEGIN
   e := public.crear_empresa_inicial(jsonb_build_object(
     'nombre', 'Ferretería El Roble', 'rtn', '08011999123456', 'rubro', 'Ferretería',
     'fecha_inicio', inicio,
-    'dueno', jsonb_build_object('user_id', (SELECT id FROM auth.users WHERE email = 'dueno@demo.hn'), 'nombre', 'María López')));
+    'dueno', jsonb_build_object('user_id', (SELECT id FROM auth.users WHERE email = 'dueno@demo.hn'), 'nombre', 'María López'))
+    -- Núcleo 0.22.0+: sin la "Tienda principal" automática (la demo crea sus bodegas abajo); núcleos viejos no la conocen.
+    || CASE WHEN to_regprocedure('public.guardar_bodega(uuid,jsonb,text)') IS NULL THEN '{}'::jsonb ELSE '{"bodega_inicial": false}'::jsonb END);
   INSERT INTO public.licencia (empresa_id, vence_el) VALUES (e, public.hoy_local() + 90);
   RESET ROLE;
   PERFORM set_config('request.jwt.claims', '', true);

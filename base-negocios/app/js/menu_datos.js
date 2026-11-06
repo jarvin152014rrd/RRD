@@ -93,6 +93,9 @@ export const MENU = [
   // Siempre la última.
   { id: 'ajustes', titulo: 'Ajustes', icono: 'ajustes', final: true, subs: [
     { id: 'negocio', titulo: 'Mi negocio', icono: 'tienda', permisos: ['empresa.marca', 'empresa.configurar'], pantalla: 'aj_negocio' },
+    // App 0.16.0 (núcleo 0.22.0): tiendas, bodegas, sucursales y cajas; y los CAI de cada caja.
+    { id: 'bodegas', titulo: 'Sucursales y bodegas', icono: 'existencias', permisos: ['bodegas.administrar', 'sucursales.administrar'], nucleo: '0.22.0', pantalla: 'aj_bodegas' },
+    { id: 'cai', titulo: 'Facturas (CAI)', icono: 'documento', modulos: ['fiscal_hn'], permisos: ['cai.administrar'], pantalla: 'aj_cai' },
     { id: 'usuarios', titulo: 'Usuarios y permisos', icono: 'usuarios', permisos: ['usuarios.administrar'], pantalla: 'aj_usuarios' },
     { id: 'cajas', titulo: 'Cajas y bancos', icono: 'banco', modulos: ['dinero'], permisos: ['dinero.administrar'], pantalla: 'aj_cajas' },
     { id: 'impuestos', titulo: 'Impuestos', icono: 'impuestos', permisos: ['impuestos.configurar', 'productos.editar'], pantalla: 'aj_impuestos' },
